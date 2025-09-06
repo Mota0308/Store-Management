@@ -22,6 +22,9 @@ router.post('/', async (req, res) => {
     const product = await Product.create({ name, productCode, productType, sizes, price: productPrice, imageUrl, inventories });
     console.log('商品創建成功:', product._id, product.name);
     
+    // 強制刷新連接
+    await mongoose.connection.db?.admin().ping();
+    
     // 驗證商品是否真的保存到數據庫
     const savedProduct = await Product.findById(product._id);
     console.log('驗證保存的商品:', savedProduct ? '存在' : '不存在');
@@ -104,20 +107,25 @@ router.delete('/:id', async (req, res) => {
     
     console.log('找到商品:', existingProduct.name, existingProduct.productCode);
     
-    // 執行刪除
-    const deletedProduct = await Product.findByIdAndDelete(id);
-    if (!deletedProduct) {
-      console.log('刪除失敗，商品不存在:', id);
+    // 使用 deleteOne 而不是 findByIdAndDelete，並強制刷新
+    const deleteResult = await Product.deleteOne({ _id: id });
+    console.log('刪除結果:', deleteResult);
+    
+    if (deleteResult.deletedCount === 0) {
+      console.log('刪除失敗，沒有文檔被刪除');
       return res.status(404).json({ message: 'Product not found' });
     }
     
-    console.log('成功刪除商品:', deletedProduct.name, deletedProduct.productCode);
+    console.log('成功刪除商品:', existingProduct.name, existingProduct.productCode);
+    
+    // 強制刷新連接
+    await mongoose.connection.db?.admin().ping();
     
     // 驗證商品是否真的被刪除
     const verifyDeleted = await Product.findById(id);
     console.log('驗證刪除結果:', verifyDeleted ? '仍然存在' : '已刪除');
     
-    res.json({ message: 'Product deleted successfully', deletedProduct: { name: deletedProduct.name, productCode: deletedProduct.productCode } });
+    res.json({ message: 'Product deleted successfully', deletedProduct: { name: existingProduct.name, productCode: existingProduct.productCode } });
   } catch (e) {
     console.error('刪除商品時發生錯誤:', e);
     res.status(500).json({ message: 'Failed to delete product', error: String(e) });
