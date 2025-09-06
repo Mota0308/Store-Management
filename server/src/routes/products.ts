@@ -14,9 +14,21 @@ router.post('/', async (req, res) => {
     const inventories = (locationIds || []).map((id: string) => ({ locationId: new mongoose.Types.ObjectId(id), quantity: 0 }));
     // 設置默認價格為0，如果沒有提供價格
     const productPrice = typeof price === 'number' ? price : 0;
+    
+    console.log('創建商品 - 數據:', { name, productCode, productType, sizes, price: productPrice, inventories });
+    console.log('MongoDB 連接狀態:', mongoose.connection.readyState);
+    console.log('數據庫名稱:', mongoose.connection.db?.databaseName);
+    
     const product = await Product.create({ name, productCode, productType, sizes, price: productPrice, imageUrl, inventories });
+    console.log('商品創建成功:', product._id, product.name);
+    
+    // 驗證商品是否真的保存到數據庫
+    const savedProduct = await Product.findById(product._id);
+    console.log('驗證保存的商品:', savedProduct ? '存在' : '不存在');
+    
     res.status(201).json(product);
   } catch (e) {
+    console.error('創建商品失敗:', e);
     res.status(500).json({ message: 'Failed to create', error: String(e) });
   }
 });
@@ -37,9 +49,16 @@ router.get('/', async (req, res) => {
     if (sortBy === 'price') sort.price = sortOrder === 'asc' ? 1 : -1;
     if (sortBy === 'quantity') sort['inventories.quantity'] = sortOrder === 'asc' ? 1 : -1;
 
+    console.log('查詢商品 - 過濾條件:', filter);
+    console.log('MongoDB 連接狀態:', mongoose.connection.readyState);
+    console.log('數據庫名稱:', mongoose.connection.db?.databaseName);
+    
     const products = await Product.find(filter).sort(sort);
+    console.log(`找到 ${products.length} 個商品`);
+    
     res.json(products);
   } catch (e) {
+    console.error('查詢商品失敗:', e);
     res.status(500).json({ message: 'Failed to list', error: String(e) });
   }
 });
@@ -73,6 +92,8 @@ router.delete('/:id', async (req, res) => {
   try {
     const { id } = req.params;
     console.log('收到刪除請求，商品ID:', id);
+    console.log('MongoDB 連接狀態:', mongoose.connection.readyState);
+    console.log('數據庫名稱:', mongoose.connection.db?.databaseName);
     
     // 先檢查商品是否存在
     const existingProduct = await Product.findById(id);
@@ -91,6 +112,11 @@ router.delete('/:id', async (req, res) => {
     }
     
     console.log('成功刪除商品:', deletedProduct.name, deletedProduct.productCode);
+    
+    // 驗證商品是否真的被刪除
+    const verifyDeleted = await Product.findById(id);
+    console.log('驗證刪除結果:', verifyDeleted ? '仍然存在' : '已刪除');
+    
     res.json({ message: 'Product deleted successfully', deletedProduct: { name: deletedProduct.name, productCode: deletedProduct.productCode } });
   } catch (e) {
     console.error('刪除商品時發生錯誤:', e);

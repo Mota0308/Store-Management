@@ -73,8 +73,26 @@ async function boot(port: number, attempts = 5) {
 
 async function start() {
   try {
+    console.log('正在連接 MongoDB...');
+    console.log('MongoDB URI:', MONGODB_URI.replace(/\/\/.*@/, '//***:***@')); // 隱藏密碼
+    
     await mongoose.connect(MONGODB_URI, { dbName: 'Storage' });
-    console.log('MongoDB connected');
+    console.log('MongoDB 連接成功');
+    console.log('數據庫名稱:', mongoose.connection.db?.databaseName);
+    console.log('MongoDB 連接狀態:', mongoose.connection.readyState);
+    
+    // 監聽連接事件
+    mongoose.connection.on('connected', () => {
+      console.log('MongoDB 連接已建立');
+    });
+    
+    mongoose.connection.on('error', (err) => {
+      console.error('MongoDB 連接錯誤:', err);
+    });
+    
+    mongoose.connection.on('disconnected', () => {
+      console.log('MongoDB 連接已斷開');
+    });
 
     await seedLocations();
     await migrateAtoProductsIfNeeded();
