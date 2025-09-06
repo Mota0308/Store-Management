@@ -72,10 +72,28 @@ router.put('/:id', async (req, res) => {
 router.delete('/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const product = await Product.findByIdAndDelete(id);
-    if (!product) return res.status(404).json({ message: 'Product not found' });
-    res.json({ message: 'Product deleted successfully' });
+    console.log('收到刪除請求，商品ID:', id);
+    
+    // 先檢查商品是否存在
+    const existingProduct = await Product.findById(id);
+    if (!existingProduct) {
+      console.log('商品不存在:', id);
+      return res.status(404).json({ message: 'Product not found' });
+    }
+    
+    console.log('找到商品:', existingProduct.name, existingProduct.productCode);
+    
+    // 執行刪除
+    const deletedProduct = await Product.findByIdAndDelete(id);
+    if (!deletedProduct) {
+      console.log('刪除失敗，商品不存在:', id);
+      return res.status(404).json({ message: 'Product not found' });
+    }
+    
+    console.log('成功刪除商品:', deletedProduct.name, deletedProduct.productCode);
+    res.json({ message: 'Product deleted successfully', deletedProduct: { name: deletedProduct.name, productCode: deletedProduct.productCode } });
   } catch (e) {
+    console.error('刪除商品時發生錯誤:', e);
     res.status(500).json({ message: 'Failed to delete product', error: String(e) });
   }
 });

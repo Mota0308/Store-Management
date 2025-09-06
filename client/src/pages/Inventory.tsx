@@ -65,13 +65,17 @@ export default function Inventory() {
 
   async function deleteProduct(product: Product) {
     try {
-      await api.delete(`/products/${product._id}`)
+      console.log('正在刪除商品:', product._id, product.name)
+      const response = await api.delete(`/products/${product._id}`)
+      console.log('刪除響應:', response.data)
+      
       setDeleteModal({ isOpen: false, product: null })
       await load()
       alert('商品已成功刪除')
-    } catch (error) {
+    } catch (error: any) {
       console.error('刪除商品失敗:', error)
-      alert('刪除商品失敗，請稍後再試')
+      console.error('錯誤詳情:', error.response?.data)
+      alert(`刪除商品失敗: ${error.response?.data?.message || error.message}`)
     }
   }
 
@@ -207,6 +211,7 @@ export default function Inventory() {
                 <p><strong>商品名稱：</strong>{deleteModal.product.name}</p>
                 <p><strong>商品編號：</strong>{deleteModal.product.productCode}</p>
                 <p><strong>商品類型：</strong>{deleteModal.product.productType}</p>
+                <p><strong>商品ID：</strong>{deleteModal.product._id}</p>
               </div>
               <p style={{ color: '#dc2626', fontWeight: 'bold' }}> 此操作無法撤銷，將永久刪除商品及其所有相關數據！</p>
             </div>
