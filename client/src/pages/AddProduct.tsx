@@ -7,7 +7,7 @@ type DraftProduct = {
   name: string
   productCode: string
   productType: string
-  sizes: string[]
+  size: string  // 改為單個尺寸
   imageUrl?: string
 }
 
@@ -16,14 +16,13 @@ export default function AddProduct() {
   const [productTypes, setProductTypes] = useState<ProductType[]>([])
   const [locationId, setLocationId] = useState('')
 
-  const [sizes, setSizes] = useState<string[]>([])
-  const [sizeInput, setSizeInput] = useState('')
   const [imageUrl, setImageUrl] = useState<string | undefined>(undefined)
   const [uploading, setUploading] = useState(false)
   const [form, setForm] = useState({
     name: '',
     productCode: '',
-    productType: ''
+    productType: '',
+    sizes: ''  // 改為字符串輸入
   })
   const [queue, setQueue] = useState<DraftProduct[]>([])
 
@@ -52,16 +51,6 @@ export default function AddProduct() {
     setForm(prev => ({ ...prev, [name]: value }))
   }
 
-  function addSize() {
-    const v = sizeInput.trim()
-    if (!v) return
-    if (!sizes.includes(v)) setSizes(prev => [...prev, v])
-    setSizeInput('')
-  }
-  function removeSize(v: string) {
-    setSizes(prev => prev.filter(s => s !== v))
-  }
-
   async function onUpload(e: any) {
     const file = e.target.files?.[0]
     if (!file) return
@@ -77,15 +66,35 @@ export default function AddProduct() {
   }
 
   function addToQueue() {
-    if (!form.name || !form.productCode || !form.productType || sizes.length === 0) {
-      alert('請完整填寫並至少添加一個尺寸')
+    if (!form.name || !form.productCode || !form.productType || !form.sizes.trim()) {
+      alert('請完整填寫所有欄位')
       return
     }
-    setQueue(prev => [...prev, { name: form.name, productCode: form.productCode, productType: form.productType, sizes: [...sizes], imageUrl }])
-    // reset current draft
-    setForm({ name: '', productCode: '', productType: '' })
-    setSizes([])
-    setSizeInput('')
+
+    // 解析尺寸字符串，支持逗號分隔
+    const sizesArray = form.sizes
+      .split(/[,，]/)
+      .map(s => s.trim())
+      .filter(s => s.length > 0)
+
+    if (sizesArray.length === 0) {
+      alert('請輸入至少一個尺寸')
+      return
+    }
+
+    // 為每個尺寸創建一個商品
+    const newProducts: DraftProduct[] = sizesArray.map(size => ({
+      name: form.name,
+      productCode: form.productCode,
+      productType: form.productType,
+      size: size,
+      imageUrl: imageUrl
+    }))
+
+    setQueue(prev => [...prev, ...newProducts])
+    
+    // 重置表單
+    setForm({ name: '', productCode: '', productType: '', sizes: '' })
     setImageUrl(undefined)
   }
 
@@ -96,8 +105,14 @@ export default function AddProduct() {
   async function submitAll() {
     if (!locationId) { alert('請先選擇門市地點'); return }
     if (queue.length === 0) { alert('清單為空'); return }
+    
     for (const p of queue) {
-      await api.post('/products', { ...p, locationIds: [locationId] })
+      // 將單個尺寸轉換為數組格式
+      await api.post('/products', { 
+        ...p, 
+        sizes: [p.size],  // 轉換為數組格式
+        locationIds: [locationId] 
+      })
     }
     alert(`已添加 ${queue.length} 項產品至所選門市`)
     setQueue([])
@@ -259,26 +274,23 @@ export default function AddProduct() {
           </div>
 
           <div className="label">
-            尺寸（可添加多個）
-            <div style={{ display: 'flex', gap: 8 }}>
-              <input className="input" value={sizeInput} onChange={e => setSizeInput(e.target.value)} placeholder="輸入尺寸，如 S / M / 42 / 100cm" />
-              <button type="button" className="btn" onClick={addSize}>添加尺寸</button>
+            尺寸（用逗號分隔多個尺寸）
+            <input 
+              className="input" 
+              name="sizes"
+              value={form.sizes} 
+              onChange={onChange} 
+              placeholder="例如：S, M, L, XL 或 36, 38, 40, 42" 
+              required
+            />
+            <div style={{ fontSize: 12, color: '#6b7280', marginTop: 4 }}>
+              提示：輸入多個尺寸時請用逗號分隔，每個尺寸將創建為獨立的商品
             </div>
-            {sizes.length > 0 && (
-              <div className="chips" style={{ marginTop: 8 }}>
-                {sizes.map(s => (
-                  <span key={s} className="chip">
-                    {s}
-                    <button type="button" className="btn ghost" onClick={() => removeSize(s)} style={{ height: 24, padding: '0 8px' }}>移除</button>
-                  </span>
-                ))}
-              </div>
-            )}
           </div>
 
           <div className="actions">
             <button className="btn" type="submit" disabled={uploading}>加入清單</button>
-            <button type="button" className="btn secondary" onClick={() => { setForm({ name: '', productCode: '', productType: '' }); setSizes([]); setSizeInput(''); setImageUrl(undefined) }}>重置當前</button>
+            <button type="button" className="btn secondary" onClick={() => { setForm({ name: '', productCode: '', productType: '', sizes: '' }); setImageUrl(undefined) }}>重置當前</button>
           </div>
         </form>
       </div>
@@ -301,7 +313,7 @@ export default function AddProduct() {
                 <td>{p.name}</td>
                 <td>{p.productCode}</td>
                 <td>{p.productType}</td>
-                <td>{p.sizes.join(', ')}</td>
+                <td>{p.size}</td>
                 <td>{p.imageUrl ? <img src={p.imageUrl} alt="" style={{ height: 40, borderRadius: 6 }} /> : '-'}</td>
                 <td className="right"><button className="btn secondary" onClick={() => removeFromQueue(idx)}>移除</button></td>
               </tr>
