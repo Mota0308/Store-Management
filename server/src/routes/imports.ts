@@ -1,4 +1,4 @@
-import { Router } from 'express';
+﻿import { Router } from 'express';
 import multer from 'multer';
 import pdf from 'pdf-parse';
 import Product from '../models/Product';
@@ -8,227 +8,269 @@ const pdfjsLib = require('pdfjs-dist/legacy/build/pdf.js');
 const { getDocument } = pdfjsLib;
 
 const router = Router();
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
-function normalizeCode(s: string) {
-  return (s || '').replace(/[—–‑–−]/g, '-').replace(/[^A-Za-z0-9_\/-]/g, '').toUpperCase();
-}
+const upload = multer({ dest: 'uploads/' });
 
-function codeVariants(raw: string): string[] {
-  const n = normalizeCode(raw);
+// 生成產品代碼的各種變體
+function codeVariants(code: string): string[] {
   const variants = new Set<string>();
-  if (n) variants.add(n);
+  variants.add(code);
   
-  // 提取基礎型號（如 WS-409PBK/LB → WS-409）
-  const baseMatch = n.match(/^([A-Z]+[\-—–‑–−]?\d+)/);
-  if (baseMatch) {
-    variants.add(baseMatch[1]);
+  // 移除斜杠後的變體
+  if (code.includes('/')) {
+    variants.add(code.replace('/', ''));
   }
   
-  // 新增：處理去掉最後一個字符的情況（WS-409PBK/LB → WS-409PBK/L）
-  if (n.length > 1) {
-    variants.add(n.slice(0, -1));
+  // 移除連字符的變體
+  if (code.includes('-')) {
+    variants.add(code.replace(/-/g, ''));
   }
   
-  // 新增：處理去掉最後兩個字符的情況（WS-409PBK/LB → WS-409PBK/）
-  if (n.length > 2) {
-    variants.add(n.slice(0, -2));
+  // 部分匹配變體
+  const parts = code.split(/[-/]/);
+  if (parts.length > 1) {
+    variants.add(parts[0]);
+    variants.add(parts.slice(0, 2).join(''));
   }
-  
-  // 新增：處理去掉斜線後面的部分（WS-409PBK/LB → WS-409PBK）
-  const slashIndex = n.lastIndexOf('/');
-  if (slashIndex > 0) {
-    variants.add(n.substring(0, slashIndex));
-  }
-  
-  // 原有邏輯
-  const m = n.match(/^([A-Z]+)_?(\d+)$/);
-  if (m) variants.add(`${m[1]}-${m[2]}`);
-  if (n) variants.add(n.replace(/-/g, ''));
   
   return Array.from(variants).filter(Boolean);
 }
 
-const codePattern = /(?:[A-Z]{1,8}[\-—–‑–−]?\d{2,8}[A-Za-z\/]*)|(?:\b\d{8,14}\b)/;
-
-function byY(a: any, b: any) { return a.transform[5] - b.transform[5]; }
-function byX(a: any, b: any) { return a.transform[4] - b.transform[4]; }
-
-async function extractByPdfjs(buffer: Buffer): Promise<{ name: string; code: string; qty: number }[]> {
-  const loadingTask = getDocument({
-    data: buffer,
-    disableWorker: true,
-    disableFontFace: true,
-    isEvalSupported: false,
-    useSystemFonts: true,
-  });
-  const doc = await loadingTask.promise;
-  const rows: { name: string; code: string; qty: number }[] = [];
-
-  for (let p = 1; p <= doc.numPages; p++) {
-    const page = await doc.getPage(p);
-    const content = await page.getTextContent();
-    const items = content.items as any[];
-    items.sort(byY);
-
-    const lines: any[][] = [];
-    const yTolerance = 2.5;
-    for (const it of items) {
-      const y = it.transform[5];
-      const line = lines.find(L => Math.abs((L as any)._y - y) <= yTolerance);
-      if (line) { line.push(it); (line as any)._y = ((line as any)._y + y) / 2; }
-      else { const L: any[] = [it]; (L as any)._y = y; lines.push(L); }
-    }
-
-    let nameX: [number, number] | null = null;
-    let codeX: [number, number] | null = null;
-    let qtyX: [number, number] | null = null;
-
-    for (const L of lines) {
-      const text = L.map(t => t.str).join('');
-      // Expanded header synonyms based on provided PDF formats
-      const nameHeadRegex = /(商品詳情|產品描述|商品描述|商品名稱|品名)/;
-      const codeHeadRegex = /(型號|條碼號碼|條碼|條形碼|條碼編號|型號編號|貨號)/;
-      const qtyHeadRegex = /(數量|數目|總共數量|庫存數量)/;
-      const hasNameHead = nameHeadRegex.test(text);
-      const hasCodeHead = codeHeadRegex.test(text);
-      const hasQtyHead = qtyHeadRegex.test(text);
-      if ((hasNameHead && hasQtyHead) && (hasCodeHead || true)) {
-        L.sort(byX);
-        const parts = L.map(t => ({ x: t.transform[4], s: t.str }));
-        const nameHead = parts.find(p => nameHeadRegex.test(p.s));
-        const codeHead = parts.find(p => codeHeadRegex.test(p.s));
-        const qtyHead = parts.find(p => qtyHeadRegex.test(p.s));
-        if (nameHead && qtyHead) {
-          // If 型號列缺失，codeX 可為 null，稍後從 name 中提取
-          nameX = [nameHead.x - 2, (codeHead ? codeHead.x : qtyHead.x) - 2];
-          codeX = codeHead ? [codeHead.x - 2, qtyHead.x - 2] : null as any;
-          // 放寬數量欄寬，避免長數字被截斷
-          qtyX = [qtyHead.x - 2, qtyHead.x + 260];
-        }
-        break;
-      }
-    }
-
-    if (!nameX || !qtyX) continue;
-
-    const headerIndex = lines.findIndex(L => {
-      const t = L.map((t: any) => t.str).join('');
-      return /(商品詳情|產品描述|商品描述|商品名稱|品名)/.test(t) && /(數量|數目|總共數量|庫存數量)/.test(t);
-    });
-    for (let i = headerIndex + 1; i < lines.length; i++) {
-      const L = lines[i].slice().sort(byX);
-      const lineText = L.map((t: any) => t.str).join('').trim();
-      if (!lineText || /小計|合計|金額|備註|--END--/i.test(lineText)) break;
-
-      const inRange = (x: number, R: [number, number]) => x >= R[0] && x < R[1];
-      const pick = (R: [number, number]) => L.filter(t => inRange(t.transform[4], R)).map((t: any) => t.str).join('').trim();
-
-      const name = pick(nameX);
-      const codeText = codeX ? pick(codeX) : '';
-      const qtyText = pick(qtyX);
-
-      // 型號可出現在型號列或商品詳情列內文中
-      const codeSource = `${codeText} ${name}`.trim();
-      const codeMatch = codeSource.match(codePattern);
-      // 數量允許更大位數（最多5位），且優先取數量欄位的第一個整數
-      const qtyMatch = qtyText.match(/\b(\d{1,5})\b/);
-      const qty = qtyMatch ? parseInt(qtyMatch[1], 10) : 0;
-      if (codeMatch && qty > 0) rows.push({ name, code: codeMatch[0], qty });
-    }
-  }
-
-  try { await (doc as any).destroy(); } catch {}
-  return rows;
+// 標準化產品代碼
+function normalizeCode(code: string): string {
+  return code.toUpperCase().replace(/[^A-Z0-9]/g, '');
 }
 
-async function updateByCodeVariants(rawCode: string, qty: number, locationId: string, summary: any, direction: 'out' | 'in') {
-  console.log(`調試: 原始代碼 "${rawCode}" -> 變體:`, codeVariants(rawCode));
-  const variants = codeVariants(rawCode);
-  if (variants.length === 0) return;
-  const product = await Product.findOne({ productCode: { $in: variants } });
-  console.log(`調試: 查詢結果:`, product ? `找到產品 ${product.productCode}` : '未找到產品');
-  if (!product) { summary.notFound.push(normalizeCode(rawCode)); return; }
+// 更新庫存
+async function updateByCodeVariants(code: string, qty: number, locationId: string, summary: any, mode: 'in' | 'out') {
+  const variants = codeVariants(code);
+  console.log(`調試: 查找產品代碼 "${code}" 的變體:`, variants);
+  
+  for (const variant of variants) {
+    const products = await Product.find({ productCode: variant });
+    console.log(`調試: 找到 ${products.length} 個匹配產品 (變體: ${variant})`);
+    
+    for (const product of products) {
+      const inv = product.inventories.find(i => String(i.locationId) === String(locationId));
+      if (inv) {
+        const oldQty = inv.quantity;
+        if (mode === 'in') {
+          inv.quantity += qty;
+        } else {
+          inv.quantity = Math.max(0, inv.quantity - qty);
+        }
+        await product.save();
+        summary.updated++;
+        console.log(`調試: 更新產品 "${product.name}" (${product.productCode}) 庫存: ${oldQty} -> ${inv.quantity}`);
+      } else {
+        if (mode === 'in') {
+          product.inventories.push({ locationId: new mongoose.Types.ObjectId(locationId), quantity: qty });
+          await product.save();
+          summary.updated++;
+          console.log(`調試: 為產品 "${product.name}" (${product.productCode}) 添加新庫存: ${qty}`);
+        }
+      }
+    }
+  }
+}
 
+// 使用 pdfjs-dist 提取 PDF 文本
+async function extractByPdfjs(buffer: Buffer): Promise<string> {
+  try {
+    const doc = await getDocument({ data: buffer }).promise;
+    console.log(`調試: PDF 頁數: ${doc.numPages}`);
+    
+    let fullText = '';
+    for (let p = 1; p <= doc.numPages; p++) {
+      console.log(`調試: 處理第 ${p} 頁`);
+      const page = await doc.getPage(p);
+      const textContent = await page.getTextContent();
+      
+      const lines: string[] = [];
+      let currentLine = '';
+      let lastY = 0;
+      
+      for (const item of textContent.items) {
+        const textItem = item as any;
+        if (Math.abs(textItem.transform[5] - lastY) > 5) {
+          if (currentLine.trim()) {
+            lines.push(currentLine.trim());
+          }
+          currentLine = textItem.str;
+          lastY = textItem.transform[5];
+        } else {
+          currentLine += textItem.str;
+        }
+      }
+      
+      if (currentLine.trim()) {
+        lines.push(currentLine.trim());
+      }
+      
+      fullText += lines.join('\n') + '\n';
+    }
+    
+    return fullText;
+  } catch (error) {
+    console.log('調試: pdfjs-dist 提取失敗，使用 pdf-parse 備用方案:', error);
+    throw error;
+  }
+}
+
+// 出貨導入
 router.post('/outgoing', upload.array('files'), async (req, res) => {
   try {
-    const { locationId } = req.body as any;
-    if (!locationId) return res.status(400).json({ message: 'locationId required' });
-    const files = (req.files as Express.Multer.File[]) || [];
-
-    const summary = { files: files.length, matched: 0, updated: 0, notFound: [] as string[], parsed: [] as any[] };
-
-    for (const f of files) {
-      let rows: { name: string; code: string; qty: number }[] = [];
-      try { rows = await extractByPdfjs(f.buffer); } catch {}
-      if (rows.length === 0) {
-        const data = await pdf(f.buffer);
-        const text = data.text;
-        if (text) {
-          const lines = text.split(/\r?\n/).map((l: string) => l.trim()).filter(Boolean);
-          for (let i = 0; i < lines.length; i++) {
-            const m = lines[i].match(codePattern);
-            if (!m) continue;
-            for (let j = i; j <= i + 6 && j < lines.length; j++) {
-              const q = lines[j].match(/\b(\d{1,5})\b/);
-              if (q) { rows.push({ name: lines[i - 1] || '', code: m[0], qty: parseInt(q[1], 10) }); break; }
+    const { locationId } = req.body;
+    const files = req.files as Express.Multer.File[];
+    
+    if (!locationId || !files || files.length === 0) {
+      return res.status(400).json({ message: 'Missing locationId or files' });
+    }
+    
+    const summary = { files: files.length, matched: 0, updated: 0, notFound: [] as string[] };
+    
+    for (const file of files) {
+      console.log(`調試: 處理出貨文件: ${file.originalname}`);
+      
+      let text = '';
+      try {
+        text = await extractByPdfjs(file.buffer);
+        console.log(`調試: pdfjs-dist 提取成功，文本長度: ${text.length}`);
+      } catch (error) {
+        console.log('調試: 使用 pdf-parse 備用方案');
+        const data = await pdf(file.buffer);
+        text = data.text;
+        console.log(`調試: pdf-parse 提取成功，文本長度: ${text.length}`);
+      }
+      
+      if (text) {
+        const lines = text.split(/\r?\n/).map((l: string) => l.trim()).filter(Boolean);
+        console.log(`調試: pdf-parse 解析結果，總行數: ${lines.length}`);
+        console.log(`調試: 前10行內容:`, lines.slice(0, 10));
+        
+        const codePattern = /(?:[A-Z]{1,8}[\-]?\d{2,8}[A-Za-z\/]*)|(?:\b\d{8,14}\b)|(?:WS-\d+[A-Za-z\/]+)/;
+        const rows: { name: string; code: string; qty: number }[] = [];
+        
+        for (let i = 0; i < lines.length; i++) {
+          const m = lines[i].match(codePattern);
+          if (m) {
+            console.log(`調試: 找到產品代碼 "${m[0]}" 在第 ${i} 行: "${lines[i]}"`);
+            
+            let qty = 0;
+            for (let j = i; j < Math.min(i + 6, lines.length); j++) {
+              const qtyMatch = lines[j].match(/\b(\d{1,5})\b/);
+              if (qtyMatch) {
+                const num = parseInt(qtyMatch[1], 10);
+                if (num > 0 && num <= 1000) {
+                  qty = num;
+                  console.log(`調試: 在第 ${j} 行找到數量: ${qty}`);
+                  break;
+                }
+              }
+            }
+            
+            if (qty > 0) {
+              const productName = lines[i - 1] || '';
+              rows.push({ name: productName, code: m[0], qty });
+              console.log(`調試: 添加產品 "${m[0]}" 數量: ${qty}`);
+            } else {
+              console.log(`調試: 產品 "${m[0]}" 未找到有效數量`);
             }
           }
         }
+        
+        console.log(`調試: 從 PDF 提取到 ${rows.length} 行數據:`, rows);
+        summary.parsed.push(rows.map(r => ({ name: r.name, code: normalizeCode(r.code), qty: r.qty })));
+        
+        for (const r of rows) {
+          console.log(`調試: 處理行數據:`, r);
+          await updateByCodeVariants(r.code, r.qty, locationId, summary, 'out');
+        }
       }
-
-      summary.parsed.push(rows.map(r => ({ name: r.name, code: normalizeCode(r.code), qty: r.qty })));
-      for (const r of rows) await updateByCodeVariants(r.code, r.qty, locationId, summary, 'out');
     }
-
+    
     res.json(summary);
   } catch (e) {
     res.status(500).json({ message: 'Failed to import outgoing', error: String(e) });
   }
 });
 
+// 進貨導入
 router.post('/incoming', upload.array('files'), async (req, res) => {
   try {
-    console.log('調試: 收到進貨請求');
-    const { locationId } = req.body as any;
-    console.log('調試: locationId =', locationId);
-    if (!locationId) return res.status(400).json({ message: 'locationId required' });
-    const files = (req.files as Express.Multer.File[]) || [];
-    console.log('調試: 收到文件數量 =', files.length);
-
-    const summary = { files: files.length, matched: 0, updated: 0, notFound: [] as string[], parsed: [] as any[] };
-
-    for (const f of files) {
-      let rows: { name: string; code: string; qty: number }[] = [];
-      try { rows = await extractByPdfjs(f.buffer); } catch {}
-      if (rows.length === 0) {
-        const data = await pdf(f.buffer);
-        const text = data.text;
-        if (text) {
-          const lines = text.split(/\r?\n/).map((l: string) => l.trim()).filter(Boolean);
-          for (let i = 0; i < lines.length; i++) {
-            const m = lines[i].match(codePattern);
-            if (!m) continue;
-            for (let j = i; j <= i + 6 && j < lines.length; j++) {
-              const q = lines[j].match(/\b(\d{1,5})\b/);
-              if (q) { rows.push({ name: lines[i - 1] || '', code: m[0], qty: parseInt(q[1], 10) }); break; }
+    const { locationId } = req.body;
+    const files = req.files as Express.Multer.File[];
+    
+    if (!locationId || !files || files.length === 0) {
+      return res.status(400).json({ message: 'Missing locationId or files' });
+    }
+    
+    const summary = { files: files.length, matched: 0, updated: 0, notFound: [] as string[] };
+    
+    for (const file of files) {
+      console.log(`調試: 處理進貨文件: ${file.originalname}`);
+      
+      let text = '';
+      try {
+        text = await extractByPdfjs(file.buffer);
+        console.log(`調試: pdfjs-dist 提取成功，文本長度: ${text.length}`);
+      } catch (error) {
+        console.log('調試: 使用 pdf-parse 備用方案');
+        const data = await pdf(file.buffer);
+        text = data.text;
+        console.log(`調試: pdf-parse 提取成功，文本長度: ${text.length}`);
+      }
+      
+      if (text) {
+        const lines = text.split(/\r?\n/).map((l: string) => l.trim()).filter(Boolean);
+        console.log(`調試: pdf-parse 解析結果，總行數: ${lines.length}`);
+        console.log(`調試: 前10行內容:`, lines.slice(0, 10));
+        
+        const codePattern = /(?:[A-Z]{1,8}[\-]?\d{2,8}[A-Za-z\/]*)|(?:\b\d{8,14}\b)|(?:WS-\d+[A-Za-z\/]+)/;
+        const rows: { name: string; code: string; qty: number }[] = [];
+        
+        for (let i = 0; i < lines.length; i++) {
+          const m = lines[i].match(codePattern);
+          if (m) {
+            console.log(`調試: 找到產品代碼 "${m[0]}" 在第 ${i} 行: "${lines[i]}"`);
+            
+            let qty = 0;
+            for (let j = i; j < Math.min(i + 6, lines.length); j++) {
+              const qtyMatch = lines[j].match(/\b(\d{1,5})\b/);
+              if (qtyMatch) {
+                const num = parseInt(qtyMatch[1], 10);
+                if (num > 0 && num <= 1000) {
+                  qty = num;
+                  console.log(`調試: 在第 ${j} 行找到數量: ${qty}`);
+                  break;
+                }
+              }
+            }
+            
+            if (qty > 0) {
+              const productName = lines[i - 1] || '';
+              rows.push({ name: productName, code: m[0], qty });
+              console.log(`調試: 添加產品 "${m[0]}" 數量: ${qty}`);
+            } else {
+              console.log(`調試: 產品 "${m[0]}" 未找到有效數量`);
             }
           }
         }
+        
+        console.log(`調試: 從 PDF 提取到 ${rows.length} 行數據:`, rows);
+        summary.parsed.push(rows.map(r => ({ name: r.name, code: normalizeCode(r.code), qty: r.qty })));
+        
+        for (const r of rows) {
+          console.log(`調試: 處理行數據:`, r);
+          await updateByCodeVariants(r.code, r.qty, locationId, summary, 'in');
+        }
       }
-
-      console.log(`調試: 從 PDF 提取到 ${rows.length} 行數據:`, rows);
-summary.parsed.push(rows.map(r => ({ name: r.name, code: normalizeCode(r.code), qty: r.qty })));
-for (const r of rows) {
-  console.log(`調試: 處理行數據:`, r);
-  await updateByCodeVariants(r.code, r.qty, locationId, summary, 'in');
-}
     }
-
+    
     res.json(summary);
   } catch (e) {
     res.status(500).json({ message: 'Failed to import incoming', error: String(e) });
   }
 });
 
-export default router; }
+export default router;
