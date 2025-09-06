@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+﻿import { useEffect, useState } from 'react'
 import api from '../api'
 
 type Location = { _id: string; name: string }
@@ -55,8 +55,8 @@ export default function Inventory() {
   const [transferState, setTransferState] = useState<{
     fromLocationId: string
     toLocationId: string
-    products: { productId: string; quantity: number }[]
-  }>({ fromLocationId: '', toLocationId: '', products: [] })
+    files: File[]
+  }>({ fromLocationId: '', toLocationId: '', files: [] })
 
   useEffect(() => {
     api.get('/locations').then(r => setLocations(r.data))
@@ -267,14 +267,19 @@ export default function Inventory() {
 
   // 門市對調功能
   async function doTransfer() {
-    if (!transferState.fromLocationId || !transferState.toLocationId || transferState.products.length === 0) {
-      alert('請選擇來源門市、目標門市和產品')
+    if (!transferState.fromLocationId || !transferState.toLocationId || transferState.files.length === 0) {
+      alert('請選擇來源門市、目標門市和PDF檔案')
       return
     }
     
     try {
-      const response = await api.post('/inventory/transfer', transferState)
-      alert(`門市對調完成：${response.data.message}`)
+      const form = new FormData()
+      form.append('fromLocationId', transferState.fromLocationId)
+      form.append('toLocationId', transferState.toLocationId)
+      transferState.files.forEach(f => form.append('files', f))
+      
+      const response = await api.post('/inventory/transfer', form)
+      alert(`門市對調完成\n檔案:${response.data.files}  匹配:${response.data.matched}  轉移:${response.data.transferred}\n未找到: ${response.data.notFound?.join(', ') || '無'}`)
       setTransferOpen(false)
       await load()
     } catch (error: any) {
@@ -642,46 +647,8 @@ export default function Inventory() {
                 </select>
               </div>
               <div>
-                <p>選擇要轉移的產品：</p>
-                <div style={{ maxHeight: '200px', overflow: 'auto', border: '1px solid #e5e7eb', borderRadius: '4px', padding: '8px' }}>
-                  {products.map(product => (
-                    <div key={product._id} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-                      <input
-                        type="checkbox"
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            setTransferState(prev => ({
-                              ...prev,
-                              products: [...prev.products, { productId: product._id, quantity: 0 }]
-                            }))
-                          } else {
-                            setTransferState(prev => ({
-                              ...prev,
-                              products: prev.products.filter(p => p.productId !== product._id)
-                            }))
-                          }
-                        }}
-                      />
-                      <span>{product.name} ({product.productCode})</span>
-                      {transferState.products.find(p => p.productId === product._id) && (
-                        <input
-                          type="number"
-                          placeholder="數量"
-                          min="0"
-                          onChange={(e) => {
-                            const quantity = parseInt(e.target.value) || 0
-                            setTransferState(prev => ({
-                              ...prev,
-                              products: prev.products.map(p => 
-                                p.productId === product._id ? { ...p, quantity } : p
-                              )
-                            }))
-                          }}
-                        />
-                      )}
-                    </div>
-                  ))}
-                </div>
+                <p>選擇PDF檔案：</p>
+                <input multiple type="file" accept="application/pdf" onChange={e => setTransferState(s => ({ ...s, files: Array.from(e.target.files || []) }))} />
               </div>
             </div>
             <div className="footer">
