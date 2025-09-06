@@ -18,6 +18,7 @@ export default function Inventory() {
   const [products, setProducts] = useState<Product[]>([])
   const [editing, setEditing] = useState<Record<string, number>>({})
   const [filters, setFilters] = useState({ q: '', code: '', locationId: '', productType: '', size: '', sortBy: '', sortOrder: 'desc' })
+  const [deleteModal, setDeleteModal] = useState<{ isOpen: boolean; product: Product | null }>({ isOpen: false, product: null })
 
   useEffect(() => {
     api.get('/locations').then(r => setLocations(r.data))
@@ -60,6 +61,18 @@ export default function Inventory() {
       return copy
     })
     await load()
+  }
+
+  async function deleteProduct(product: Product) {
+    try {
+      await api.delete(`/products/${product._id}`)
+      setDeleteModal({ isOpen: false, product: null })
+      await load()
+      alert('商品已成功刪除')
+    } catch (error) {
+      console.error('刪除商品失敗:', error)
+      alert('刪除商品失敗，請稍後再試')
+    }
   }
 
   const [importOpen, setImportOpen] = useState(false)
@@ -158,21 +171,58 @@ export default function Inventory() {
                   </td>
                 ))}
                 <td className="right">
-                  {Object.keys(editing).some(k => k.startsWith(p._id + ':')) ? (
-                    <button className="btn" onClick={() => save(p)}>保存</button>
-                  ) : (
-                    <button className="btn secondary" onClick={() => setEditing(prev => {
-                      const next: Record<string, number> = { ...prev }
-                      locations.forEach(l => { next[`${p._id}:${l._id}`] = getQty(p, l._id) })
-                      return next
-                    })}>修改庫存</button>
-                  )}
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    {Object.keys(editing).some(k => k.startsWith(p._id + ':')) ? (
+                      <button className="btn" onClick={() => save(p)}>保存</button>
+                    ) : (
+                      <button className="btn secondary" onClick={() => setEditing(prev => {
+                        const next: Record<string, number> = { ...prev }
+                        locations.forEach(l => { next[`${p._id}:${l._id}`] = getQty(p, l._id) })
+                        return next
+                      })}>修改庫存</button>
+                    )}
+                    <button 
+                      className="btn" 
+                      style={{ backgroundColor: '#dc2626', color: 'white' }}
+                      onClick={() => setDeleteModal({ isOpen: true, product: p })}
+                    >
+                      刪除
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
+
+      {/* 刪除確認彈窗 */}
+      {deleteModal.isOpen && deleteModal.product && (
+        <div className="modal-backdrop">
+          <div className="modal">
+            <div className="header">確認刪除</div>
+            <div className="body">
+              <p>您確定要刪除以下商品嗎？</p>
+              <div style={{ padding: '12px', backgroundColor: '#f3f4f6', borderRadius: '8px', margin: '12px 0' }}>
+                <p><strong>商品名稱：</strong>{deleteModal.product.name}</p>
+                <p><strong>商品編號：</strong>{deleteModal.product.productCode}</p>
+                <p><strong>商品類型：</strong>{deleteModal.product.productType}</p>
+              </div>
+              <p style={{ color: '#dc2626', fontWeight: 'bold' }}> 此操作無法撤銷，將永久刪除商品及其所有相關數據！</p>
+            </div>
+            <div className="footer">
+              <button className="btn secondary" onClick={() => setDeleteModal({ isOpen: false, product: null })}>取消</button>
+              <button 
+                className="btn" 
+                style={{ backgroundColor: '#dc2626', color: 'white' }}
+                onClick={() => deleteProduct(deleteModal.product!)}
+              >
+                確認刪除
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {importOpen && (
         <div className="modal-backdrop">

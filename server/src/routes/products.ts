@@ -44,6 +44,42 @@ router.get('/', async (req, res) => {
   }
 });
 
+// Get single product
+router.get('/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const product = await Product.findById(id);
+    if (!product) return res.status(404).json({ message: 'Product not found' });
+    res.json(product);
+  } catch (e) {
+    res.status(500).json({ message: 'Failed to get product', error: String(e) });
+  }
+});
+
+// Update product
+router.put('/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const product = await Product.findByIdAndUpdate(id, req.body, { new: true });
+    if (!product) return res.status(404).json({ message: 'Product not found' });
+    res.json(product);
+  } catch (e) {
+    res.status(500).json({ message: 'Failed to update product', error: String(e) });
+  }
+});
+
+// Delete product
+router.delete('/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const product = await Product.findByIdAndDelete(id);
+    if (!product) return res.status(404).json({ message: 'Product not found' });
+    res.json({ message: 'Product deleted successfully' });
+  } catch (e) {
+    res.status(500).json({ message: 'Failed to delete product', error: String(e) });
+  }
+});
+
 // Update inventory quantities for a product per location
 router.patch('/:id/inventory', async (req, res) => {
   try {
