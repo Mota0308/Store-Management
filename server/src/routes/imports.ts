@@ -1,4 +1,4 @@
-ï»¿import { Router } from 'express';
+import { Router } from 'express';
 import multer from 'multer';
 import pdf from 'pdf-parse';
 import Product from '../models/Product';
@@ -11,22 +11,22 @@ const router = Router();
 
 const upload = multer({ dest: 'uploads/' });
 
-// ç”Ÿæˆç”¢å“ä»£ç¢¼çš„å„ç¨®è®Šé«”
+// ¥Í¦¨²£«~¥N½Xªº¦UºØÅÜÅé
 function codeVariants(code: string): string[] {
   const variants = new Set<string>();
   variants.add(code);
   
-  // ç§»é™¤æ–œæ å¾Œçš„è®Šé«”
+  // ²¾°£±×§ş«áªºÅÜÅé
   if (code.includes('/')) {
     variants.add(code.replace('/', ''));
   }
   
-  // ç§»é™¤é€£å­—ç¬¦çš„è®Šé«”
+  // ²¾°£³s¦r²ÅªºÅÜÅé
   if (code.includes('-')) {
     variants.add(code.replace(/-/g, ''));
   }
   
-  // éƒ¨åˆ†åŒ¹é…è®Šé«”
+  // ³¡¤À¤Ç°tÅÜÅé
   const parts = code.split(/[-/]/);
   if (parts.length > 1) {
     variants.add(parts[0]);
@@ -36,19 +36,19 @@ function codeVariants(code: string): string[] {
   return Array.from(variants).filter(Boolean);
 }
 
-// æ¨™æº–åŒ–ç”¢å“ä»£ç¢¼
+// ¼Ğ·Ç¤Æ²£«~¥N½X
 function normalizeCode(code: string): string {
   return code.toUpperCase().replace(/[^A-Z0-9]/g, '');
 }
 
-// æ›´æ–°åº«å­˜
+// §ó·s®w¦s
 async function updateByCodeVariants(code: string, qty: number, locationId: string, summary: any, mode: 'in' | 'out') {
   const variants = codeVariants(code);
-  console.log(`èª¿è©¦: æŸ¥æ‰¾ç”¢å“ä»£ç¢¼ "${code}" çš„è®Šé«”:`, variants);
+  console.log(`½Õ¸Õ: ¬d§ä²£«~¥N½X "${code}" ªºÅÜÅé:`, variants);
   
   for (const variant of variants) {
     const products = await Product.find({ productCode: variant });
-    console.log(`èª¿è©¦: æ‰¾åˆ° ${products.length} å€‹åŒ¹é…ç”¢å“ (è®Šé«”: ${variant})`);
+    console.log(`½Õ¸Õ: §ä¨ì ${products.length} ­Ó¤Ç°t²£«~ (ÅÜÅé: ${variant})`);
     
     for (const product of products) {
       const inv = product.inventories.find(i => String(i.locationId) === String(locationId));
@@ -61,28 +61,28 @@ async function updateByCodeVariants(code: string, qty: number, locationId: strin
         }
         await product.save();
         summary.updated++;
-        console.log(`èª¿è©¦: æ›´æ–°ç”¢å“ "${product.name}" (${product.productCode}) åº«å­˜: ${oldQty} -> ${inv.quantity}`);
+        console.log(`½Õ¸Õ: §ó·s²£«~ "${product.name}" (${product.productCode}) ®w¦s: ${oldQty} -> ${inv.quantity}`);
       } else {
         if (mode === 'in') {
           product.inventories.push({ locationId: new mongoose.Types.ObjectId(locationId), quantity: qty });
           await product.save();
           summary.updated++;
-          console.log(`èª¿è©¦: ç‚ºç”¢å“ "${product.name}" (${product.productCode}) æ·»åŠ æ–°åº«å­˜: ${qty}`);
+          console.log(`½Õ¸Õ: ¬°²£«~ "${product.name}" (${product.productCode}) ²K¥[·s®w¦s: ${qty}`);
         }
       }
     }
   }
 }
 
-// ä½¿ç”¨ pdfjs-dist æå– PDF æ–‡æœ¬
+// ¨Ï¥Î pdfjs-dist ´£¨ú PDF ¤å¥»
 async function extractByPdfjs(buffer: Buffer): Promise<string> {
   try {
     const doc = await getDocument({ data: buffer }).promise;
-    console.log(`èª¿è©¦: PDF é æ•¸: ${doc.numPages}`);
+    console.log(`½Õ¸Õ: PDF ­¶¼Æ: ${doc.numPages}`);
     
     let fullText = '';
     for (let p = 1; p <= doc.numPages; p++) {
-      console.log(`èª¿è©¦: è™•ç†ç¬¬ ${p} é `);
+      console.log(`½Õ¸Õ: ³B²z²Ä ${p} ­¶`);
       const page = await doc.getPage(p);
       const textContent = await page.getTextContent();
       
@@ -112,12 +112,12 @@ async function extractByPdfjs(buffer: Buffer): Promise<string> {
     
     return fullText;
   } catch (error) {
-    console.log('èª¿è©¦: pdfjs-dist æå–å¤±æ•—ï¼Œä½¿ç”¨ pdf-parse å‚™ç”¨æ–¹æ¡ˆ:', error);
+    console.log('½Õ¸Õ: pdfjs-dist ´£¨ú¥¢±Ñ¡A¨Ï¥Î pdf-parse ³Æ¥Î¤è®×:', error);
     throw error;
   }
 }
 
-// å‡ºè²¨å°å…¥
+// ¥X³f¾É¤J
 router.post('/outgoing', upload.array('files'), async (req, res) => {
   try {
     const { locationId } = req.body;
@@ -127,26 +127,26 @@ router.post('/outgoing', upload.array('files'), async (req, res) => {
       return res.status(400).json({ message: 'Missing locationId or files' });
     }
     
-    const summary = { files: files.length, matched: 0, updated: 0, notFound: [] as string[] };
+    const summary = { files: files.length, matched: 0, updated: 0, notFound: [] as string[], parsed: [] as any[] };
     
     for (const file of files) {
-      console.log(`èª¿è©¦: è™•ç†å‡ºè²¨æ–‡ä»¶: ${file.originalname}`);
+      console.log(`½Õ¸Õ: ³B²z¥X³f¤å¥ó: ${file.originalname}`);
       
       let text = '';
       try {
         text = await extractByPdfjs(file.buffer);
-        console.log(`èª¿è©¦: pdfjs-dist æå–æˆåŠŸï¼Œæ–‡æœ¬é•·åº¦: ${text.length}`);
+        console.log(`½Õ¸Õ: pdfjs-dist ´£¨ú¦¨¥\¡A¤å¥»ªø«×: ${text.length}`);
       } catch (error) {
-        console.log('èª¿è©¦: ä½¿ç”¨ pdf-parse å‚™ç”¨æ–¹æ¡ˆ');
+        console.log('½Õ¸Õ: ¨Ï¥Î pdf-parse ³Æ¥Î¤è®×');
         const data = await pdf(file.buffer);
         text = data.text;
-        console.log(`èª¿è©¦: pdf-parse æå–æˆåŠŸï¼Œæ–‡æœ¬é•·åº¦: ${text.length}`);
+        console.log(`½Õ¸Õ: pdf-parse ´£¨ú¦¨¥\¡A¤å¥»ªø«×: ${text.length}`);
       }
       
       if (text) {
         const lines = text.split(/\r?\n/).map((l: string) => l.trim()).filter(Boolean);
-        console.log(`èª¿è©¦: pdf-parse è§£æçµæœï¼Œç¸½è¡Œæ•¸: ${lines.length}`);
-        console.log(`èª¿è©¦: å‰10è¡Œå…§å®¹:`, lines.slice(0, 10));
+        console.log(`½Õ¸Õ: pdf-parse ¸ÑªRµ²ªG¡AÁ`¦æ¼Æ: ${lines.length}`);
+        console.log(`½Õ¸Õ: «e10¦æ¤º®e:`, lines.slice(0, 10));
         
         const codePattern = /(?:[A-Z]{1,8}[\-]?\d{2,8}[A-Za-z\/]*)|(?:\b\d{8,14}\b)|(?:WS-\d+[A-Za-z\/]+)/;
         const rows: { name: string; code: string; qty: number }[] = [];
@@ -154,7 +154,7 @@ router.post('/outgoing', upload.array('files'), async (req, res) => {
         for (let i = 0; i < lines.length; i++) {
           const m = lines[i].match(codePattern);
           if (m) {
-            console.log(`èª¿è©¦: æ‰¾åˆ°ç”¢å“ä»£ç¢¼ "${m[0]}" åœ¨ç¬¬ ${i} è¡Œ: "${lines[i]}"`);
+            console.log(`½Õ¸Õ: §ä¨ì²£«~¥N½X "${m[0]}" ¦b²Ä ${i} ¦æ: "${lines[i]}"`);
             
             let qty = 0;
             for (let j = i; j < Math.min(i + 6, lines.length); j++) {
@@ -163,7 +163,7 @@ router.post('/outgoing', upload.array('files'), async (req, res) => {
                 const num = parseInt(qtyMatch[1], 10);
                 if (num > 0 && num <= 1000) {
                   qty = num;
-                  console.log(`èª¿è©¦: åœ¨ç¬¬ ${j} è¡Œæ‰¾åˆ°æ•¸é‡: ${qty}`);
+                  console.log(`½Õ¸Õ: ¦b²Ä ${j} ¦æ§ä¨ì¼Æ¶q: ${qty}`);
                   break;
                 }
               }
@@ -172,18 +172,18 @@ router.post('/outgoing', upload.array('files'), async (req, res) => {
             if (qty > 0) {
               const productName = lines[i - 1] || '';
               rows.push({ name: productName, code: m[0], qty });
-              console.log(`èª¿è©¦: æ·»åŠ ç”¢å“ "${m[0]}" æ•¸é‡: ${qty}`);
+              console.log(`½Õ¸Õ: ²K¥[²£«~ "${m[0]}" ¼Æ¶q: ${qty}`);
             } else {
-              console.log(`èª¿è©¦: ç”¢å“ "${m[0]}" æœªæ‰¾åˆ°æœ‰æ•ˆæ•¸é‡`);
+              console.log(`½Õ¸Õ: ²£«~ "${m[0]}" ¥¼§ä¨ì¦³®Ä¼Æ¶q`);
             }
           }
         }
         
-        console.log(`èª¿è©¦: å¾ PDF æå–åˆ° ${rows.length} è¡Œæ•¸æ“š:`, rows);
+        console.log(`½Õ¸Õ: ±q PDF ´£¨ú¨ì ${rows.length} ¦æ¼Æ¾Ú:`, rows);
         summary.parsed.push(rows.map(r => ({ name: r.name, code: normalizeCode(r.code), qty: r.qty })));
         
         for (const r of rows) {
-          console.log(`èª¿è©¦: è™•ç†è¡Œæ•¸æ“š:`, r);
+          console.log(`½Õ¸Õ: ³B²z¦æ¼Æ¾Ú:`, r);
           await updateByCodeVariants(r.code, r.qty, locationId, summary, 'out');
         }
       }
@@ -195,7 +195,7 @@ router.post('/outgoing', upload.array('files'), async (req, res) => {
   }
 });
 
-// é€²è²¨å°å…¥
+// ¶i³f¾É¤J
 router.post('/incoming', upload.array('files'), async (req, res) => {
   try {
     const { locationId } = req.body;
@@ -205,26 +205,26 @@ router.post('/incoming', upload.array('files'), async (req, res) => {
       return res.status(400).json({ message: 'Missing locationId or files' });
     }
     
-    const summary = { files: files.length, matched: 0, updated: 0, notFound: [] as string[] };
+    const summary = { files: files.length, matched: 0, updated: 0, notFound: [] as string[], parsed: [] as any[] };
     
     for (const file of files) {
-      console.log(`èª¿è©¦: è™•ç†é€²è²¨æ–‡ä»¶: ${file.originalname}`);
+      console.log(`½Õ¸Õ: ³B²z¶i³f¤å¥ó: ${file.originalname}`);
       
       let text = '';
       try {
         text = await extractByPdfjs(file.buffer);
-        console.log(`èª¿è©¦: pdfjs-dist æå–æˆåŠŸï¼Œæ–‡æœ¬é•·åº¦: ${text.length}`);
+        console.log(`½Õ¸Õ: pdfjs-dist ´£¨ú¦¨¥\¡A¤å¥»ªø«×: ${text.length}`);
       } catch (error) {
-        console.log('èª¿è©¦: ä½¿ç”¨ pdf-parse å‚™ç”¨æ–¹æ¡ˆ');
+        console.log('½Õ¸Õ: ¨Ï¥Î pdf-parse ³Æ¥Î¤è®×');
         const data = await pdf(file.buffer);
         text = data.text;
-        console.log(`èª¿è©¦: pdf-parse æå–æˆåŠŸï¼Œæ–‡æœ¬é•·åº¦: ${text.length}`);
+        console.log(`½Õ¸Õ: pdf-parse ´£¨ú¦¨¥\¡A¤å¥»ªø«×: ${text.length}`);
       }
       
       if (text) {
         const lines = text.split(/\r?\n/).map((l: string) => l.trim()).filter(Boolean);
-        console.log(`èª¿è©¦: pdf-parse è§£æçµæœï¼Œç¸½è¡Œæ•¸: ${lines.length}`);
-        console.log(`èª¿è©¦: å‰10è¡Œå…§å®¹:`, lines.slice(0, 10));
+        console.log(`½Õ¸Õ: pdf-parse ¸ÑªRµ²ªG¡AÁ`¦æ¼Æ: ${lines.length}`);
+        console.log(`½Õ¸Õ: «e10¦æ¤º®e:`, lines.slice(0, 10));
         
         const codePattern = /(?:[A-Z]{1,8}[\-]?\d{2,8}[A-Za-z\/]*)|(?:\b\d{8,14}\b)|(?:WS-\d+[A-Za-z\/]+)/;
         const rows: { name: string; code: string; qty: number }[] = [];
@@ -232,7 +232,7 @@ router.post('/incoming', upload.array('files'), async (req, res) => {
         for (let i = 0; i < lines.length; i++) {
           const m = lines[i].match(codePattern);
           if (m) {
-            console.log(`èª¿è©¦: æ‰¾åˆ°ç”¢å“ä»£ç¢¼ "${m[0]}" åœ¨ç¬¬ ${i} è¡Œ: "${lines[i]}"`);
+            console.log(`½Õ¸Õ: §ä¨ì²£«~¥N½X "${m[0]}" ¦b²Ä ${i} ¦æ: "${lines[i]}"`);
             
             let qty = 0;
             for (let j = i; j < Math.min(i + 6, lines.length); j++) {
@@ -241,7 +241,7 @@ router.post('/incoming', upload.array('files'), async (req, res) => {
                 const num = parseInt(qtyMatch[1], 10);
                 if (num > 0 && num <= 1000) {
                   qty = num;
-                  console.log(`èª¿è©¦: åœ¨ç¬¬ ${j} è¡Œæ‰¾åˆ°æ•¸é‡: ${qty}`);
+                  console.log(`½Õ¸Õ: ¦b²Ä ${j} ¦æ§ä¨ì¼Æ¶q: ${qty}`);
                   break;
                 }
               }
@@ -250,18 +250,18 @@ router.post('/incoming', upload.array('files'), async (req, res) => {
             if (qty > 0) {
               const productName = lines[i - 1] || '';
               rows.push({ name: productName, code: m[0], qty });
-              console.log(`èª¿è©¦: æ·»åŠ ç”¢å“ "${m[0]}" æ•¸é‡: ${qty}`);
+              console.log(`½Õ¸Õ: ²K¥[²£«~ "${m[0]}" ¼Æ¶q: ${qty}`);
             } else {
-              console.log(`èª¿è©¦: ç”¢å“ "${m[0]}" æœªæ‰¾åˆ°æœ‰æ•ˆæ•¸é‡`);
+              console.log(`½Õ¸Õ: ²£«~ "${m[0]}" ¥¼§ä¨ì¦³®Ä¼Æ¶q`);
             }
           }
         }
         
-        console.log(`èª¿è©¦: å¾ PDF æå–åˆ° ${rows.length} è¡Œæ•¸æ“š:`, rows);
+        console.log(`½Õ¸Õ: ±q PDF ´£¨ú¨ì ${rows.length} ¦æ¼Æ¾Ú:`, rows);
         summary.parsed.push(rows.map(r => ({ name: r.name, code: normalizeCode(r.code), qty: r.qty })));
         
         for (const r of rows) {
-          console.log(`èª¿è©¦: è™•ç†è¡Œæ•¸æ“š:`, r);
+          console.log(`½Õ¸Õ: ³B²z¦æ¼Æ¾Ú:`, r);
           await updateByCodeVariants(r.code, r.qty, locationId, summary, 'in');
         }
       }
