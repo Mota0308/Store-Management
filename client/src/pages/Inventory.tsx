@@ -16,6 +16,16 @@ type Product = {
 
 type SortState = 'default' | 'asc' | 'desc'
 
+// 產品分組類型
+type ProductGroup = {
+  key: string // 產品名稱 + 產品編號的組合
+  name: string
+  productCode: string
+  productType: string
+  products: Product[]
+  totalQuantities: Record<string, number> // 各地點的總數量
+}
+
 export default function Inventory() {
   const [locations, setLocations] = useState<Location[]>([])
   const [products, setProducts] = useState<Product[]>([])
@@ -32,6 +42,9 @@ export default function Inventory() {
 
   // 每個地點的排序狀態
   const [locationSortStates, setLocationSortStates] = useState<Record<string, SortState>>({})
+
+  // 分組展開狀態
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
 
   useEffect(() => {
     api.get('/locations').then(r => setLocations(r.data))
@@ -99,6 +112,56 @@ export default function Inventory() {
     if (Array.isArray(p.sizes) && p.sizes.length) return p.sizes.join(', ')
     if (p.size) return p.size
     return '-'
+  }
+
+  // 產品分組邏輯
+  const groupProducts = (products: Product[]): ProductGroup[] => {
+    const groupMap = new Map<string, ProductGroup>()
+
+    products.forEach(product => {
+      const key = `${product.name}|${product.productCode}`
+      
+      if (!groupMap.has(key)) {
+        // 計算各地點的總數量
+        const totalQuantities: Record<string, number> = {}
+        locations.forEach(location => {
+          totalQuantities[location._id] = 0
+        })
+
+        groupMap.set(key, {
+          key,
+          name: product.name,
+          productCode: product.productCode,
+          productType: product.productType,
+          products: [],
+          totalQuantities
+        })
+      }
+
+      const group = groupMap.get(key)!
+      group.products.push(product)
+      
+      // 累加各地點的數量
+      locations.forEach(location => {
+        const qty = getQty(product, location._id)
+        group.totalQuantities[location._id] += qty
+      })
+    })
+
+    return Array.from(groupMap.values())
+  }
+
+  // 切換分組展開狀態
+  const toggleGroup = (groupKey: string) => {
+    setExpandedGroups(prev => {
+      const newSet = new Set(prev)
+      if (newSet.has(groupKey)) {
+        newSet.delete(groupKey)
+      } else {
+        newSet.add(groupKey)
+      }
+      return newSet
+    })
   }
 
   // 處理地點排序
@@ -192,6 +255,9 @@ export default function Inventory() {
     setImportOpen(false)
     await load()
   }
+
+  // 獲取分組後的產品列表
+  const productGroups = groupProducts(products)
 
   return (
     <div className="card" style={{ display: 'grid', gap: 14 }}>
@@ -384,48 +450,93 @@ export default function Inventory() {
             </tr>
           </thead>
           <tbody>
-            {products.map(p => (
-              <tr key={p._id}>
-                <td>{p.name}</td>
-                <td>{p.productCode}</td>
-                <td>{p.productType}</td>
-                <td>{renderSizes(p)}</td>
-                {locations.map(l => (
-                  <td key={l._id} className="right col-num">
-                    {editing[`${p._id}:${l._id}`] !== undefined ? (
-                      <input
-                        type="number"
-                        className="input"
-                        style={{ width: '100%', height: 34 }}
-                        value={editing[`${p._id}:${l._id}`]}
-                        onChange={e => setEditing(prev => ({ ...prev, [`${p._id}:${l._id}`]: parseInt(e.target.value || '0', 10) }))}
-                      />
-                    ) : (
-                      getQty(p, l._id)
-                    )}
+            {productGroups.map(group => (
+              <>
+                {/* 分組標題行 */}
+                <tr 
+                  key={group.key} 
+                  style={{ 
+                    backgroundColor: '#f8fafc', 
+                    cursor: 'pointer',
+                    borderBottom: '2px solid #e2e8f0'
+                  }}
+                  onClick={() => toggleGroup(group.key)}
+                >
+                  <td style={{ fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontSize: '16px' }}>
+                      {expandedGroups.has(group.key) ? '' : ''}
+                    </span>
+                    {group.name}
+                    <span style={{ fontSize: '12px', color: '#6b7280', fontWeight: 'normal' }}>
+                      ({group.products.length} 個尺寸)
+                    </span>
                   </td>
+                  <td style={{ fontWeight: 'bold' }}>{group.productCode}</td>
+                  <td style={{ fontWeight: 'bold' }}>{group.productType}</td>
+                  <td style={{ fontWeight: 'bold' }}>
+                    {group.products.map(p => renderSizes(p)).join(', ')}
+                  </td>
+                  {locations.map(l => (
+                    <td key={l._id} className="right col-num" style={{ fontWeight: 'bold' }}>
+                      {group.totalQuantities[l._id] || 0}
+                    </td>
+                  ))}
+                  <td></td>
+                </tr>
+                
+                {/* 展開的產品詳情行 */}
+                {expandedGroups.has(group.key) && group.products.map(p => (
+                  <tr key={p._id} style={{ backgroundColor: '#fefefe' }}>
+                    <td style={{ paddingLeft: '32px', color: '#6b7280' }}>
+                      {p.name}
+                    </td>
+                    <td style={{ color: '#6b7280' }}>
+                      {p.productCode}
+                    </td>
+                    <td style={{ color: '#6b7280' }}>
+                      {p.productType}
+                    </td>
+                    <td style={{ color: '#6b7280' }}>
+                      {renderSizes(p)}
+                    </td>
+                    {locations.map(l => (
+                      <td key={l._id} className="right col-num">
+                        {editing[`${p._id}:${l._id}`] !== undefined ? (
+                          <input
+                            type="number"
+                            className="input"
+                            style={{ width: '100%', height: 34 }}
+                            value={editing[`${p._id}:${l._id}`]}
+                            onChange={e => setEditing(prev => ({ ...prev, [`${p._id}:${l._id}`]: parseInt(e.target.value || '0', 10) }))}
+                          />
+                        ) : (
+                          getQty(p, l._id)
+                        )}
+                      </td>
+                    ))}
+                    <td className="right">
+                      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                        {Object.keys(editing).some(k => k.startsWith(p._id + ':')) ? (
+                          <button className="btn" onClick={() => save(p)}>保存</button>
+                        ) : (
+                          <button className="btn secondary" onClick={() => setEditing(prev => {
+                            const next: Record<string, number> = { ...prev }
+                            locations.forEach(l => { next[`${p._id}:${l._id}`] = getQty(p, l._id) })
+                            return next
+                          })}>修改庫存</button>
+                        )}
+                        <button 
+                          className="btn" 
+                          style={{ backgroundColor: '#dc2626', color: 'white' }}
+                          onClick={() => setDeleteModal({ isOpen: true, product: p })}
+                        >
+                          刪除
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
                 ))}
-                <td className="right">
-                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                    {Object.keys(editing).some(k => k.startsWith(p._id + ':')) ? (
-                      <button className="btn" onClick={() => save(p)}>保存</button>
-                    ) : (
-                      <button className="btn secondary" onClick={() => setEditing(prev => {
-                        const next: Record<string, number> = { ...prev }
-                        locations.forEach(l => { next[`${p._id}:${l._id}`] = getQty(p, l._id) })
-                        return next
-                      })}>修改庫存</button>
-                    )}
-                    <button 
-                      className="btn" 
-                      style={{ backgroundColor: '#dc2626', color: 'white' }}
-                      onClick={() => setDeleteModal({ isOpen: true, product: p })}
-                    >
-                      刪除
-                    </button>
-                  </div>
-                </td>
-              </tr>
+              </>
             ))}
           </tbody>
         </table>
