@@ -37,22 +37,22 @@ export default function App() {
             transition: 'all 0.2s'
           }}
         >
-          添加產品
+          庫存
         </Link>
         
         <Link 
-          to="/inventory" 
+          to="/add-product" 
           style={{
             padding: '12px 16px',
-            backgroundColor: location.pathname === '/inventory' ? 'white' : 'transparent',
-            color: location.pathname === '/inventory' ? '#3b82f6' : 'white',
+            backgroundColor: location.pathname === '/add-product' ? 'white' : 'transparent',
+            color: location.pathname === '/add-product' ? '#3b82f6' : 'white',
             textDecoration: 'none',
             borderRadius: '8px',
             fontWeight: '500',
             transition: 'all 0.2s'
           }}
         >
-          庫存
+          添加產品
         </Link>
       </div>
 
