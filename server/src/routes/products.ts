@@ -43,7 +43,10 @@ router.get('/', async (req, res) => {
 
     const filter: any = {};
     if (q) filter.$text = { $search: q };
-    if (productCode) filter.productCode = productCode;
+    if (productCode) {
+      // 使用正則表達式進行模糊匹配，支持子字符串搜索
+      filter.productCode = { $regex: productCode, $options: 'i' };
+    }
     if (productType) filter.productType = productType;
     if (size) filter.sizes = size;
     if (locationId) filter['inventories.locationId'] = locationId;
