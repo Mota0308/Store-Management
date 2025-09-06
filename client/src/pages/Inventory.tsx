@@ -358,7 +358,7 @@ export default function Inventory() {
                         border: 'none',
                         cursor: 'pointer',
                         fontSize: '14px',
-                        color: '#6b7280',
+                        color: '#dc2626',
                         padding: '2px',
                         borderRadius: '2px',
                         display: 'flex',
@@ -368,7 +368,7 @@ export default function Inventory() {
                         height: '20px'
                       }}
                       onMouseEnter={(e) => {
-                        e.currentTarget.style.backgroundColor = '#f3f4f6'
+                        e.currentTarget.style.backgroundColor = '#fef2f2'
                       }}
                       onMouseLeave={(e) => {
                         e.currentTarget.style.backgroundColor = 'transparent'
