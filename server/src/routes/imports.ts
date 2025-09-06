@@ -11,7 +11,7 @@ const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
 function normalizeCode(s: string) {
-  return (s || '').replace(/[]/g, '-').replace(/[^A-Za-z0-9_\/-]/g, '').toUpperCase();
+  return (s || '').replace(/[â€”â€“â€‘â€“âˆ’]/g, '-').replace(/[^A-Za-z0-9_\/-]/g, '').toUpperCase();
 }
 
 function codeVariants(raw: string): string[] {
@@ -19,29 +19,29 @@ function codeVariants(raw: string): string[] {
   const variants = new Set<string>();
   if (n) variants.add(n);
   
-  // ´£¨ú°òÂ¦«¬¸¹¡]¦p WS-409PBK/LB  WS-409¡^
-  const baseMatch = n.match(/^([A-Z]+[\-]?\d+)/);
+  // æå–åŸºç¤å‹è™Ÿï¼ˆå¦‚ WS-409PBK/LB â†’ WS-409ï¼‰
+  const baseMatch = n.match(/^([A-Z]+[\-â€”â€“â€‘â€“âˆ’]?\d+)/);
   if (baseMatch) {
     variants.add(baseMatch[1]);
   }
   
-  // ·s¼W¡G³B²z¥h±¼³Ì«á¤@­Ó¦r²Åªº±¡ªp¡]WS-409PBK/LB  WS-409PBK/L¡^
+  // æ–°å¢ï¼šè™•ç†å»æ‰æœ€å¾Œä¸€å€‹å­—ç¬¦çš„æƒ…æ³ï¼ˆWS-409PBK/LB â†’ WS-409PBK/Lï¼‰
   if (n.length > 1) {
     variants.add(n.slice(0, -1));
   }
   
-  // ·s¼W¡G³B²z¥h±¼³Ì«á¨â­Ó¦r²Åªº±¡ªp¡]WS-409PBK/LB  WS-409PBK/¡^
+  // æ–°å¢ï¼šè™•ç†å»æ‰æœ€å¾Œå…©å€‹å­—ç¬¦çš„æƒ…æ³ï¼ˆWS-409PBK/LB â†’ WS-409PBK/ï¼‰
   if (n.length > 2) {
     variants.add(n.slice(0, -2));
   }
   
-  // ·s¼W¡G³B²z¥h±¼±×½u«á­±ªº³¡¤À¡]WS-409PBK/LB  WS-409PBK¡^
+  // æ–°å¢ï¼šè™•ç†å»æ‰æ–œç·šå¾Œé¢çš„éƒ¨åˆ†ï¼ˆWS-409PBK/LB â†’ WS-409PBKï¼‰
   const slashIndex = n.lastIndexOf('/');
   if (slashIndex > 0) {
     variants.add(n.substring(0, slashIndex));
   }
   
-  // ­ì¦³ÅŞ¿è
+  // åŸæœ‰é‚è¼¯
   const m = n.match(/^([A-Z]+)_?(\d+)$/);
   if (m) variants.add(`${m[1]}-${m[2]}`);
   if (n) variants.add(n.replace(/-/g, ''));
@@ -49,66 +49,7 @@ function codeVariants(raw: string): string[] {
   return Array.from(variants).filter(Boolean);
 }
 
-// ­×´_ªº¤Ø¤o¤Ç°t¨ç¼Æ - ¤ä«ù§ó¦h®æ¦¡
-function extractSizeAndCode(text: string): { baseCode: string; size: string; quantity: number } | null {
-  try {
-    console.log(`½Õ¸Õ: ¹Á¸Õ¸ÑªR¤Ø¤o¦æ: "${text}"`);
-    
-    // ¤Ç°t®æ¦¡: WS-409PBK/LB3XL 3XL ©Î WS-409TBKLB3XL 3XL
-    const sizeMatch = text.match(/^(WS-\d+[A-Za-z\/]+)(\d*)(XL|L|M|S|XS|XXS)\s+\d+/);
-    if (sizeMatch) {
-      const quantityMatch = text.match(/\d+$/);
-      if (quantityMatch) {
-        return {
-          baseCode: sizeMatch[1],  // WS-409PBK/LB ©Î WS-409TBKLB
-          size: (sizeMatch[2] || '1') + sizeMatch[3],  // 3XL ©Î 1XL
-          quantity: parseInt(quantityMatch[0], 10)  // ³Ì«áªº¼Æ¦r
-        };
-      }
-    }
-    
-    // ·s¼W¡G¤Ç°t®æ¦¡ WS-409TBKLB3XL 3XL¡]¨S¦³±×½uªº±¡ªp¡^
-    const sizeMatch2 = text.match(/^(WS-\d+[A-Za-z]+)(\d*)(XL|L|M|S|XS|XXS)\s+\d+/);
-    if (sizeMatch2) {
-      const quantityMatch = text.match(/\d+$/);
-      if (quantityMatch) {
-        return {
-          baseCode: sizeMatch2[1],  // WS-409TBKLB
-          size: (sizeMatch2[2] || '1') + sizeMatch2[3],  // 3XL ©Î 1XL
-          quantity: parseInt(quantityMatch[0], 10)  // ³Ì«áªº¼Æ¦r
-        };
-      }
-    }
-    
-    return null;
-  } catch (error) {
-    console.log(`½Õ¸Õ: extractSizeAndCode ¿ù»~:`, error);
-    return null;
-  }
-}
-
-// ·s¼W¡G¥Í¦¨¥]§t¤Ø¤oªº²£«~¥N½XÅÜÅé
-function codeVariantsWithSize(baseCode: string, size: string): string[] {
-  const variants = new Set<string>();
-  
-  // ²K¥[­ì©l¥N½X
-  variants.add(baseCode);
-  
-  // ²K¥[±a¤Ø¤oªº¥N½X
-  variants.add(`${baseCode}${size}`);
-  
-  // ²K¥[°òÂ¦«¬¸¹ÅÜÅé
-  const baseVariants = codeVariants(baseCode);
-  baseVariants.forEach(variant => {
-    variants.add(variant);
-    variants.add(`${variant}${size}`);
-  });
-  
-  return Array.from(variants).filter(Boolean);
-}
-
-// §ï¶iªº¥¿«hªí¹F¦¡¡A¤ä«ù§ó¦h®æ¦¡ªº²£«~¥N½X
-const codePattern = /(?:[A-Z]{1,8}[\-]?\d{2,8}[A-Za-z\/]*)|(?:\b\d{8,14}\b)|(?:WS-\d+[A-Za-z\/]+)/;
+const codePattern = /(?:[A-Z]{1,8}[\-â€”â€“â€‘â€“âˆ’]?\d{2,8}[A-Za-z\/]*)|(?:\b\d{8,14}\b)/;
 
 function byY(a: any, b: any) { return a.transform[5] - b.transform[5]; }
 function byX(a: any, b: any) { return a.transform[4] - b.transform[4]; }
@@ -124,10 +65,7 @@ async function extractByPdfjs(buffer: Buffer): Promise<{ name: string; code: str
   const doc = await loadingTask.promise;
   const rows: { name: string; code: string; qty: number }[] = [];
 
-  console.log(`½Õ¸Õ: PDFÁ`­¶¼Æ: ${doc.numPages}`);
-
   for (let p = 1; p <= doc.numPages; p++) {
-    console.log(`½Õ¸Õ: ³B²z²Ä ${p} ­¶`);
     const page = await doc.getPage(p);
     const content = await page.getTextContent();
     const items = content.items as any[];
@@ -142,8 +80,6 @@ async function extractByPdfjs(buffer: Buffer): Promise<{ name: string; code: str
       else { const L: any[] = [it]; (L as any)._y = y; lines.push(L); }
     }
 
-    console.log(`½Õ¸Õ: ²Ä ${p} ­¶Á`¦æ¼Æ: ${lines.length}`);
-
     let nameX: [number, number] | null = null;
     let codeX: [number, number] | null = null;
     let qtyX: [number, number] | null = null;
@@ -151,9 +87,9 @@ async function extractByPdfjs(buffer: Buffer): Promise<{ name: string; code: str
     for (const L of lines) {
       const text = L.map(t => t.str).join('');
       // Expanded header synonyms based on provided PDF formats
-      const nameHeadRegex = /(°Ó«~¸Ô±¡|²£«~´y­z|°Ó«~´y­z|°Ó«~¦WºÙ|«~¦W)/;
-      const codeHeadRegex = /(«¬¸¹|±ø½X¸¹½X|±ø½X|±ø§Î½X|±ø½X½s¸¹|«¬¸¹½s¸¹|³f¸¹)/;
-      const qtyHeadRegex = /(¼Æ¶q|¼Æ¥Ø|Á`¦@¼Æ¶q|®w¦s¼Æ¶q)/;
+      const nameHeadRegex = /(å•†å“è©³æƒ…|ç”¢å“æè¿°|å•†å“æè¿°|å•†å“åç¨±|å“å)/;
+      const codeHeadRegex = /(å‹è™Ÿ|æ¢ç¢¼è™Ÿç¢¼|æ¢ç¢¼|æ¢å½¢ç¢¼|æ¢ç¢¼ç·¨è™Ÿ|å‹è™Ÿç·¨è™Ÿ|è²¨è™Ÿ)/;
+      const qtyHeadRegex = /(æ•¸é‡|æ•¸ç›®|ç¸½å…±æ•¸é‡|åº«å­˜æ•¸é‡)/;
       const hasNameHead = nameHeadRegex.test(text);
       const hasCodeHead = codeHeadRegex.test(text);
       const hasQtyHead = qtyHeadRegex.test(text);
@@ -164,33 +100,26 @@ async function extractByPdfjs(buffer: Buffer): Promise<{ name: string; code: str
         const codeHead = parts.find(p => codeHeadRegex.test(p.s));
         const qtyHead = parts.find(p => qtyHeadRegex.test(p.s));
         if (nameHead && qtyHead) {
-          // If «¬¸¹¦C¯Ê¥¢¡AcodeX ¥i¬° null¡Aµy«á±q name ¤¤´£¨ú
+          // If å‹è™Ÿåˆ—ç¼ºå¤±ï¼ŒcodeX å¯ç‚º nullï¼Œç¨å¾Œå¾ name ä¸­æå–
           nameX = [nameHead.x - 2, (codeHead ? codeHead.x : qtyHead.x) - 2];
           codeX = codeHead ? [codeHead.x - 2, qtyHead.x - 2] : null as any;
-          // ©ñ¼e¼Æ¶qÄæ¼e¡AÁ×§Kªø¼Æ¦r³QºIÂ_
+          // æ”¾å¯¬æ•¸é‡æ¬„å¯¬ï¼Œé¿å…é•·æ•¸å­—è¢«æˆªæ–·
           qtyX = [qtyHead.x - 2, qtyHead.x + 260];
         }
-        console.log(`½Õ¸Õ: §ä¨ìªíÀY¡AnameX: ${nameX}, codeX: ${codeX}, qtyX: ${qtyX}`);
         break;
       }
     }
 
-    if (!nameX || !qtyX) {
-      console.log(`½Õ¸Õ: ²Ä ${p} ­¶¥¼§ä¨ìªíÀY¡A¸õ¹L`);
-      continue;
-    }
+    if (!nameX || !qtyX) continue;
 
     const headerIndex = lines.findIndex(L => {
       const t = L.map((t: any) => t.str).join('');
-      return /(°Ó«~¸Ô±¡|²£«~´y­z|°Ó«~´y­z|°Ó«~¦WºÙ|«~¦W)/.test(t) && /(¼Æ¶q|¼Æ¥Ø|Á`¦@¼Æ¶q|®w¦s¼Æ¶q)/.test(t);
+      return /(å•†å“è©³æƒ…|ç”¢å“æè¿°|å•†å“æè¿°|å•†å“åç¨±|å“å)/.test(t) && /(æ•¸é‡|æ•¸ç›®|ç¸½å…±æ•¸é‡|åº«å­˜æ•¸é‡)/.test(t);
     });
-    
-    console.log(`½Õ¸Õ: ªíÀY¯Á¤Ş: ${headerIndex}`);
-    
     for (let i = headerIndex + 1; i < lines.length; i++) {
       const L = lines[i].slice().sort(byX);
       const lineText = L.map((t: any) => t.str).join('').trim();
-      if (!lineText || /¤p­p|¦X­p|ª÷ÃB|³Æµù|--END--/i.test(lineText)) break;
+      if (!lineText || /å°è¨ˆ|åˆè¨ˆ|é‡‘é¡|å‚™è¨»|--END--/i.test(lineText)) break;
 
       const inRange = (x: number, R: [number, number]) => x >= R[0] && x < R[1];
       const pick = (R: [number, number]) => L.filter(t => inRange(t.transform[4], R)).map((t: any) => t.str).join('').trim();
@@ -199,73 +128,27 @@ async function extractByPdfjs(buffer: Buffer): Promise<{ name: string; code: str
       const codeText = codeX ? pick(codeX) : '';
       const qtyText = pick(qtyX);
 
-      // «¬¸¹¥i¥X²{¦b«¬¸¹¦C©Î°Ó«~¸Ô±¡¦C¤º¤å¤¤
+      // å‹è™Ÿå¯å‡ºç¾åœ¨å‹è™Ÿåˆ—æˆ–å•†å“è©³æƒ…åˆ—å…§æ–‡ä¸­
       const codeSource = `${codeText} ${name}`.trim();
-      
-      // ²K¥[¸Ô²Óªº½Õ¸Õ«H®§
-      if (codeSource.includes('WS-409') || codeSource.includes('409')) {
-        console.log(`½Õ¸Õ: §ä¨ì¥]§t WS-409 ªº¦æ ${i}: "${lineText}"`);
-        console.log(`½Õ¸Õ: name: "${name}", codeText: "${codeText}", qtyText: "${qtyText}"`);
-        console.log(`½Õ¸Õ: codeSource: "${codeSource}"`);
-      }
-      
       const codeMatch = codeSource.match(codePattern);
-      // ¼Æ¶q¤¹³\§ó¤j¦ì¼Æ¡]³Ì¦h5¦ì¡^¡A¥BÀu¥ı¨ú¼Æ¶qÄæ¦ìªº²Ä¤@­Ó¾ã¼Æ
+      // æ•¸é‡å…è¨±æ›´å¤§ä½æ•¸ï¼ˆæœ€å¤š5ä½ï¼‰ï¼Œä¸”å„ªå…ˆå–æ•¸é‡æ¬„ä½çš„ç¬¬ä¸€å€‹æ•´æ•¸
       const qtyMatch = qtyText.match(/\b(\d{1,5})\b/);
       const qty = qtyMatch ? parseInt(qtyMatch[1], 10) : 0;
-      
-      if (codeMatch) {
-        console.log(`½Õ¸Õ: §ä¨ì²£«~¥N½X "${codeMatch[0]}" ¦b²Ä ${i} ¦æ¡A¼Æ¶q: ${qty}`);
-        if (qty > 0) {
-          rows.push({ name, code: codeMatch[0], qty });
-        }
-      }
+      if (codeMatch && qty > 0) rows.push({ name, code: codeMatch[0], qty });
     }
   }
-
-  console.log(`½Õ¸Õ: PDF¸ÑªR§¹¦¨¡AÁ`¦@´£¨ú¨ì ${rows.length} ­Ó²£«~`);
-  console.log(`½Õ¸Õ: ´£¨úªº²£«~¥N½X:`, rows.map(r => r.code));
 
   try { await (doc as any).destroy(); } catch {}
   return rows;
 }
 
 async function updateByCodeVariants(rawCode: string, qty: number, locationId: string, summary: any, direction: 'out' | 'in') {
+  console.log(`èª¿è©¦: åŸå§‹ä»£ç¢¼ "${rawCode}" -> è®Šé«”:`, codeVariants(rawCode));
   const variants = codeVariants(rawCode);
-  console.log(`½Õ¸Õ: ­ì©l¥N½X "${rawCode}" -> ÅÜÅé:`, variants);
   if (variants.length === 0) return;
   const product = await Product.findOne({ productCode: { $in: variants } });
-  console.log(`½Õ¸Õ: ¬d¸ßµ²ªG:`, product ? `§ä¨ì²£«~ ${product.productCode}` : '¥¼§ä¨ì²£«~');
-  if (!product) { 
-    summary.notFound.push(normalizeCode(rawCode)); 
-    return; 
-  }
-  summary.matched++;
-  const inv = product.inventories.find(i => String(i.locationId) === String(locationId));
-  if (inv) inv.quantity = direction === 'out' ? Math.max(0, inv.quantity - qty) : inv.quantity + qty;
-  else product.inventories.push({ locationId: new mongoose.Types.ObjectId(locationId), quantity: direction === 'out' ? 0 : qty });
-  await product.save();
-  summary.updated++;
-}
-
-// ·s¼W¡G±a¤Ø¤oªº²£«~§ó·s¨ç¼Æ
-async function updateByCodeVariantsWithSize(baseCode: string, size: string, qty: number, locationId: string, summary: any, direction: 'out' | 'in') {
-  const variants = codeVariantsWithSize(baseCode, size);
-  console.log(`½Õ¸Õ: °òÂ¦¥N½X "${baseCode}" ¤Ø¤o "${size}" -> ÅÜÅé:`, variants);
-  if (variants.length === 0) return;
-  const product = await Product.findOne({ productCode: { $in: variants } });
-  console.log(`½Õ¸Õ: ¬d¸ßµ²ªG:`, product ? `§ä¨ì²£«~ ${product.productCode}` : '¥¼§ä¨ì²£«~');
-  if (!product) { 
-    summary.notFound.push(normalizeCode(`${baseCode}${size}`)); 
-    return; 
-  }
-  summary.matched++;
-  const inv = product.inventories.find(i => String(i.locationId) === String(locationId));
-  if (inv) inv.quantity = direction === 'out' ? Math.max(0, inv.quantity - qty) : inv.quantity + qty;
-  else product.inventories.push({ locationId: new mongoose.Types.ObjectId(locationId), quantity: direction === 'out' ? 0 : qty });
-  await product.save();
-  summary.updated++;
-}
+  console.log(`èª¿è©¦: æŸ¥è©¢çµæœ:`, product ? `æ‰¾åˆ°ç”¢å“ ${product.productCode}` : 'æœªæ‰¾åˆ°ç”¢å“');
+  if (!product) { summary.notFound.push(normalizeCode(rawCode)); return; }
 
 router.post('/outgoing', upload.array('files'), async (req, res) => {
   try {
@@ -283,70 +166,12 @@ router.post('/outgoing', upload.array('files'), async (req, res) => {
         const text = data.text;
         if (text) {
           const lines = text.split(/\r?\n/).map((l: string) => l.trim()).filter(Boolean);
-          console.log(`½Õ¸Õ: pdf-parse ¸ÑªRµ²ªG¡AÁ`¦æ¼Æ: ${lines.length}`);
-          console.log(`½Õ¸Õ: «e10¦æ¤º®e:`, lines.slice(0, 10));
-          
-          // ¬d§ä¥]§t WS-409 ªº¦æ
-          const ws409Lines = lines.filter((line: string) => line.includes('WS-409'));
-          console.log(`½Õ¸Õ: ¥]§t WS-409 ªº¦æ:`, ws409Lines);
-          
-          // ­×´_ªº¼Æ¶q¤Ç°tÅŞ¿è - °ò©óPDF¹ê»Úµ²ºc¡A¥]§t¤Ø¤o¤Ç°t
           for (let i = 0; i < lines.length; i++) {
             const m = lines[i].match(codePattern);
-            if (m) {
-              console.log(`½Õ¸Õ: §ä¨ì²£«~¥N½X "${m[0]}" ¦b²Ä ${i} ¦æ: "${lines[i]}"`);
-              
-              // ÀË¬d¬O§_¬°¤Ø¤o¦æ¡]¦p "WS-409PBK/LB3XL 3XL"¡^
-              const sizeInfo = extractSizeAndCode(lines[i]);
-              if (sizeInfo) {
-                console.log(`½Õ¸Õ: §ä¨ì¤Ø¤o«H®§ - °òÂ¦¥N½X: ${sizeInfo.baseCode}, ¤Ø¤o: ${sizeInfo.size}, ¼Æ¶q: ${sizeInfo.quantity}`);
-                rows.push({ 
-                  name: lines[i - 1] || '', 
-                  code: sizeInfo.baseCode, 
-                  qty: sizeInfo.quantity 
-                });
-                console.log(`½Õ¸Õ: ²K¥[±a¤Ø¤oªº²£«~ "${sizeInfo.baseCode}" ¤Ø¤o "${sizeInfo.size}" ¼Æ¶q: ${sizeInfo.quantity}`);
-              } else {
-                // ­ì¦³ªº¼Æ¶q´£¨úÅŞ¿è
-                let qty = 0;
-                let productName = '';
-                
-                // ÀË¬d·í«e¦æ¬O§_¥]§t¤Ø¤o©M¼Æ¶q¡]¦p "WS-409PBK/LB3XL 3XL"¡^
-                const sizeQtyMatch = lines[i].match(/(\d+)(XL|L|M|S|XS|XXS|2XL|3XL)\s+\d+/);
-                if (sizeQtyMatch) {
-                  qty = parseInt(sizeQtyMatch[1], 10);
-                  productName = lines[i - 1] || '';
-                  console.log(`½Õ¸Õ: ±q¤Ø¤o¦æ§ä¨ì¼Æ¶q ${qty} (${sizeQtyMatch[0]})`);
-                } else {
-                  // ÀË¬d¤U¤@¦æ¬O§_¥]§t¤Ø¤o©M¼Æ¶q
-                  for (let j = i + 1; j <= i + 3 && j < lines.length; j++) {
-                    const nextLine = lines[j];
-                    const nextSizeQtyMatch = nextLine.match(/(\d+)(XL|L|M|S|XS|XXS|2XL|3XL)\s+\d+/);
-                    if (nextSizeQtyMatch) {
-                      qty = parseInt(nextSizeQtyMatch[1], 10);
-                      productName = lines[i - 1] || '';
-                      console.log(`½Õ¸Õ: ¦b²Ä ${j} ¦æ§ä¨ì¼Æ¶q ${qty} (${nextSizeQtyMatch[0]})`);
-                      break;
-                    }
-                    
-                    // ÀË¬d¬O§_¬°¯Â¼Æ¦r¦æ¡]¥i¯à¬O¼Æ¶q¡^
-                    const pureNumberMatch = nextLine.match(/^\d{1,3}$/);
-                    if (pureNumberMatch && parseInt(pureNumberMatch[0], 10) <= 100) {
-                      qty = parseInt(pureNumberMatch[0], 10);
-                      productName = lines[i - 1] || '';
-                      console.log(`½Õ¸Õ: ¦b²Ä ${j} ¦æ§ä¨ì¯Â¼Æ¦r¼Æ¶q ${qty}`);
-                      break;
-                    }
-                  }
-                }
-                
-                if (qty > 0) {
-                  rows.push({ name: productName, code: m[0], qty });
-                  console.log(`½Õ¸Õ: ²K¥[²£«~ "${m[0]}" ¼Æ¶q: ${qty}`);
-                } else {
-                  console.log(`½Õ¸Õ: ²£«~ "${m[0]}" ¥¼§ä¨ì¦³®Ä¼Æ¶q`);
-                }
-              }
+            if (!m) continue;
+            for (let j = i; j <= i + 6 && j < lines.length; j++) {
+              const q = lines[j].match(/\b(\d{1,5})\b/);
+              if (q) { rows.push({ name: lines[i - 1] || '', code: m[0], qty: parseInt(q[1], 10) }); break; }
             }
           }
         }
@@ -358,16 +183,18 @@ router.post('/outgoing', upload.array('files'), async (req, res) => {
 
     res.json(summary);
   } catch (e) {
-    console.error('½Õ¸Õ: outgoing ¿ù»~:', e);
     res.status(500).json({ message: 'Failed to import outgoing', error: String(e) });
   }
 });
 
 router.post('/incoming', upload.array('files'), async (req, res) => {
   try {
+    console.log('èª¿è©¦: æ”¶åˆ°é€²è²¨è«‹æ±‚');
     const { locationId } = req.body as any;
+    console.log('èª¿è©¦: locationId =', locationId);
     if (!locationId) return res.status(400).json({ message: 'locationId required' });
     const files = (req.files as Express.Multer.File[]) || [];
+    console.log('èª¿è©¦: æ”¶åˆ°æ–‡ä»¶æ•¸é‡ =', files.length);
 
     const summary = { files: files.length, matched: 0, updated: 0, notFound: [] as string[], parsed: [] as any[] };
 
@@ -379,123 +206,29 @@ router.post('/incoming', upload.array('files'), async (req, res) => {
         const text = data.text;
         if (text) {
           const lines = text.split(/\r?\n/).map((l: string) => l.trim()).filter(Boolean);
-          console.log(`½Õ¸Õ: pdf-parse ¸ÑªRµ²ªG¡AÁ`¦æ¼Æ: ${lines.length}`);
-          console.log(`½Õ¸Õ: «e10¦æ¤º®e:`, lines.slice(0, 10));
-          
-          // ¬d§ä¥]§t WS-409 ªº¦æ
-          const ws409Lines = lines.filter((line: string) => line.includes('WS-409'));
-          console.log(`½Õ¸Õ: ¥]§t WS-409 ªº¦æ:`, ws409Lines);
-          
-          // ·s¼W¡G¥h­«ÅŞ¿è - ¨Ï¥Î Map ¨Ó°lÂÜ¤w³B²zªº²£«~¡]°òÂ¦¥N½X + ¤Ø¤o¡^
-          const processedProducts = new Map<string, { baseCode: string; size: string; quantity: number }>();
-          
-          // ­×´_ªº¼Æ¶q¤Ç°tÅŞ¿è - °ò©óPDF¹ê»Úµ²ºc¡A¥]§t¤Ø¤o¤Ç°t
           for (let i = 0; i < lines.length; i++) {
             const m = lines[i].match(codePattern);
-            if (m) {
-              console.log(`½Õ¸Õ: §ä¨ì²£«~¥N½X "${m[0]}" ¦b²Ä ${i} ¦æ: "${lines[i]}"`);
-              
-              // ÀË¬d¬O§_¬°¤Ø¤o¦æ¡]¦p "WS-409PBK/LB3XL 3XL"¡^
-              const sizeInfo = extractSizeAndCode(lines[i]);
-              if (sizeInfo) {
-                console.log(`½Õ¸Õ: §ä¨ì¤Ø¤o«H®§ - °òÂ¦¥N½X: ${sizeInfo.baseCode}, ¤Ø¤o: ${sizeInfo.size}, ¼Æ¶q: ${sizeInfo.quantity}`);
-                
-                // ³Ğ«Ø°ß¤@ªº²£«~¼ĞÃÑ²Å¡]°òÂ¦¥N½X + ¤Ø¤o¡^
-                const productKey = `${sizeInfo.baseCode}_${sizeInfo.size}`;
-                
-                // ÀË¬d¬O§_¤w¸g³B²z¹L³o­Ó²£«~
-                if (processedProducts.has(productKey)) {
-                  console.log(`½Õ¸Õ: ¸õ¹L­«½Æªº²£«~ "${productKey}"`);
-                  continue;
-                }
-                
-                // °O¿ı¤w³B²zªº²£«~
-                processedProducts.set(productKey, {
-                  baseCode: sizeInfo.baseCode,
-                  size: sizeInfo.size,
-                  quantity: sizeInfo.quantity
-                });
-                
-                rows.push({ 
-                  name: lines[i - 1] || '', 
-                  code: sizeInfo.baseCode, 
-                  qty: sizeInfo.quantity 
-                });
-                console.log(`½Õ¸Õ: ²K¥[±a¤Ø¤oªº²£«~ "${sizeInfo.baseCode}" ¤Ø¤o "${sizeInfo.size}" ¼Æ¶q: ${sizeInfo.quantity}`);
-              } else {
-                // ­ì¦³ªº¼Æ¶q´£¨úÅŞ¿è
-                let qty = 0;
-                let productName = '';
-                
-                // ÀË¬d·í«e¦æ¬O§_¥]§t¤Ø¤o©M¼Æ¶q¡]¦p "WS-409PBK/LB3XL 3XL"¡^
-                const sizeQtyMatch = lines[i].match(/(\d+)(XL|L|M|S|XS|XXS|2XL|3XL)\s+\d+/);
-                if (sizeQtyMatch) {
-                  qty = parseInt(sizeQtyMatch[1], 10);
-                  productName = lines[i - 1] || '';
-                  console.log(`½Õ¸Õ: ±q¤Ø¤o¦æ§ä¨ì¼Æ¶q ${qty} (${sizeQtyMatch[0]})`);
-                } else {
-                  // ÀË¬d¤U¤@¦æ¬O§_¥]§t¤Ø¤o©M¼Æ¶q
-                  for (let j = i + 1; j <= i + 3 && j < lines.length; j++) {
-                    const nextLine = lines[j];
-                    const nextSizeQtyMatch = nextLine.match(/(\d+)(XL|L|M|S|XS|XXS|2XL|3XL)\s+\d+/);
-                    if (nextSizeQtyMatch) {
-                      qty = parseInt(nextSizeQtyMatch[1], 10);
-                      productName = lines[i - 1] || '';
-                      console.log(`½Õ¸Õ: ¦b²Ä ${j} ¦æ§ä¨ì¼Æ¶q ${qty} (${nextSizeQtyMatch[0]})`);
-                      break;
-                    }
-                    
-                    // ÀË¬d¬O§_¬°¯Â¼Æ¦r¦æ¡]¥i¯à¬O¼Æ¶q¡^
-                    const pureNumberMatch = nextLine.match(/^\d{1,3}$/);
-                    if (pureNumberMatch && parseInt(pureNumberMatch[0], 10) <= 100) {
-                      qty = parseInt(pureNumberMatch[0], 10);
-                      productName = lines[i - 1] || '';
-                      console.log(`½Õ¸Õ: ¦b²Ä ${j} ¦æ§ä¨ì¯Â¼Æ¦r¼Æ¶q ${qty}`);
-                      break;
-                    }
-                  }
-                }
-                
-                if (qty > 0) {
-                  // ³Ğ«Ø°ß¤@ªº²£«~¼ĞÃÑ²Å¡]²£«~¥N½X¡^
-                  const productKey = m[0];
-                  
-                  // ÀË¬d¬O§_¤w¸g³B²z¹L³o­Ó²£«~
-                  if (processedProducts.has(productKey)) {
-                    console.log(`½Õ¸Õ: ¸õ¹L­«½Æªº²£«~ "${productKey}"`);
-                    continue;
-                  }
-                  
-                  // °O¿ı¤w³B²zªº²£«~
-                  processedProducts.set(productKey, {
-                    baseCode: m[0],
-                    size: '',
-                    quantity: qty
-                  });
-                  
-                  rows.push({ name: productName, code: m[0], qty });
-                  console.log(`½Õ¸Õ: ²K¥[²£«~ "${m[0]}" ¼Æ¶q: ${qty}`);
-                } else {
-                  console.log(`½Õ¸Õ: ²£«~ "${m[0]}" ¥¼§ä¨ì¦³®Ä¼Æ¶q`);
-                }
-              }
+            if (!m) continue;
+            for (let j = i; j <= i + 6 && j < lines.length; j++) {
+              const q = lines[j].match(/\b(\d{1,5})\b/);
+              if (q) { rows.push({ name: lines[i - 1] || '', code: m[0], qty: parseInt(q[1], 10) }); break; }
             }
           }
-          
-          console.log(`½Õ¸Õ: ¥h­««áÁ`¦@³B²z¤F ${processedProducts.size} ­Ó°ß¤@²£«~`);
-          console.log(`½Õ¸Õ: ³B²zªº²£«~¦Cªí:`, Array.from(processedProducts.entries()));
         }
       }
 
-      summary.parsed.push(rows.map(r => ({ name: r.name, code: normalizeCode(r.code), qty: r.qty })));
-      for (const r of rows) await updateByCodeVariants(r.code, r.qty, locationId, summary, 'in');
+      console.log(`èª¿è©¦: å¾ PDF æå–åˆ° ${rows.length} è¡Œæ•¸æ“š:`, rows);
+summary.parsed.push(rows.map(r => ({ name: r.name, code: normalizeCode(r.code), qty: r.qty })));
+for (const r of rows) {
+  console.log(`èª¿è©¦: è™•ç†è¡Œæ•¸æ“š:`, r);
+  await updateByCodeVariants(r.code, r.qty, locationId, summary, 'in');
+}
     }
 
     res.json(summary);
   } catch (e) {
-    console.error('½Õ¸Õ: incoming ¿ù»~:', e);
     res.status(500).json({ message: 'Failed to import incoming', error: String(e) });
   }
 });
 
-export default router;
+export default router; }
