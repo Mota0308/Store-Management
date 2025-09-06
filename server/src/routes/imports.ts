@@ -5,7 +5,7 @@ import Product from '../models/Product';
 import mongoose from 'mongoose';
 
 const router = Router();
-const upload = multer({ dest: 'uploads/' });
+const upload = multer({ storage: multer.memoryStorage() });
 
 // Generate product code variants
 function codeVariants(code: string): string[] {
@@ -302,6 +302,7 @@ router.post('/transfer', upload.array('files'), async (req, res) => {
 
 
 export default router;
+
 
 
 
