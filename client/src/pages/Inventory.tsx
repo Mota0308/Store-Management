@@ -2,6 +2,7 @@
 import api from '../api'
 
 type Location = { _id: string; name: string }
+type ProductType = { _id: string; name: string; description?: string }
 type Product = {
   _id: string
   name: string
@@ -16,13 +17,30 @@ type Product = {
 export default function Inventory() {
   const [locations, setLocations] = useState<Location[]>([])
   const [products, setProducts] = useState<Product[]>([])
+  const [productTypes, setProductTypes] = useState<ProductType[]>([])
   const [editing, setEditing] = useState<Record<string, number>>({})
   const [filters, setFilters] = useState({ q: '', code: '', locationId: '', productType: '', size: '', sortBy: '', sortOrder: 'desc' })
   const [deleteModal, setDeleteModal] = useState<{ isOpen: boolean; product: Product | null }>({ isOpen: false, product: null })
 
+  // 下拉選項狀態
+  const [nameSuggestions, setNameSuggestions] = useState<string[]>([])
+  const [codeSuggestions, setCodeSuggestions] = useState<string[]>([])
+  const [showNameDropdown, setShowNameDropdown] = useState(false)
+  const [showCodeDropdown, setShowCodeDropdown] = useState(false)
+
   useEffect(() => {
     api.get('/locations').then(r => setLocations(r.data))
+    loadProductTypes()
   }, [])
+
+  const loadProductTypes = async () => {
+    try {
+      const response = await api.get('/product-types')
+      setProductTypes(response.data)
+    } catch (error) {
+      console.error('Failed to load product types:', error)
+    }
+  }
 
   async function load() {
     const params: any = {}
@@ -40,6 +58,34 @@ export default function Inventory() {
   }
 
   useEffect(() => { load() }, [filters])
+
+  // 生成名稱建議
+  const generateNameSuggestions = (input: string) => {
+    if (!input.trim()) {
+      setNameSuggestions([])
+      return
+    }
+    const suggestions = products
+      .map(p => p.name)
+      .filter(name => name.toLowerCase().includes(input.toLowerCase()))
+      .filter((name, index, arr) => arr.indexOf(name) === index) // 去重
+      .slice(0, 5) // 最多顯示5個建議
+    setNameSuggestions(suggestions)
+  }
+
+  // 生成編號建議
+  const generateCodeSuggestions = (input: string) => {
+    if (!input.trim()) {
+      setCodeSuggestions([])
+      return
+    }
+    const suggestions = products
+      .map(p => p.productCode)
+      .filter(code => code.toLowerCase().includes(input.toLowerCase()))
+      .filter((code, index, arr) => arr.indexOf(code) === index) // 去重
+      .slice(0, 5) // 最多顯示5個建議
+    setCodeSuggestions(suggestions)
+  }
 
   function getQty(p: Product, locId: string) {
     return p.inventories.find(i => i.locationId === locId)?.quantity ?? 0
@@ -99,11 +145,115 @@ export default function Inventory() {
       <div className="toolbar">
         <div className="field">
           <div>產品名稱關鍵字</div>
-          <input className="input" value={filters.q} onChange={e => setFilters({ ...filters, q: e.target.value })} />
+          <div style={{ position: 'relative' }}>
+            <input 
+              className="input" 
+              value={filters.q} 
+              onChange={e => {
+                setFilters({ ...filters, q: e.target.value })
+                generateNameSuggestions(e.target.value)
+                setShowNameDropdown(true)
+              }}
+              onFocus={() => setShowNameDropdown(true)}
+              onBlur={() => setTimeout(() => setShowNameDropdown(false), 200)}
+              placeholder="輸入產品名稱關鍵字"
+            />
+            {showNameDropdown && nameSuggestions.length > 0 && (
+              <div style={{
+                position: 'absolute',
+                top: '100%',
+                left: 0,
+                right: 0,
+                backgroundColor: 'white',
+                border: '1px solid #e5e7eb',
+                borderRadius: '4px',
+                boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
+                zIndex: 1000,
+                maxHeight: '200px',
+                overflow: 'auto'
+              }}>
+                {nameSuggestions.map((suggestion, index) => (
+                  <div
+                    key={index}
+                    style={{
+                      padding: '8px 12px',
+                      cursor: 'pointer',
+                      borderBottom: index < nameSuggestions.length - 1 ? '1px solid #f3f4f6' : 'none'
+                    }}
+                    onMouseDown={(e) => {
+                      e.preventDefault()
+                      setFilters({ ...filters, q: suggestion })
+                      setShowNameDropdown(false)
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.backgroundColor = '#f3f4f6'
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.backgroundColor = 'white'
+                    }}
+                  >
+                    {suggestion}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
         <div className="field">
           <div>產品編號</div>
-          <input className="input" value={filters.code} onChange={e => setFilters({ ...filters, code: e.target.value })} />
+          <div style={{ position: 'relative' }}>
+            <input 
+              className="input" 
+              value={filters.code} 
+              onChange={e => {
+                setFilters({ ...filters, code: e.target.value })
+                generateCodeSuggestions(e.target.value)
+                setShowCodeDropdown(true)
+              }}
+              onFocus={() => setShowCodeDropdown(true)}
+              onBlur={() => setTimeout(() => setShowCodeDropdown(false), 200)}
+              placeholder="輸入產品編號關鍵字"
+            />
+            {showCodeDropdown && codeSuggestions.length > 0 && (
+              <div style={{
+                position: 'absolute',
+                top: '100%',
+                left: 0,
+                right: 0,
+                backgroundColor: 'white',
+                border: '1px solid #e5e7eb',
+                borderRadius: '4px',
+                boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
+                zIndex: 1000,
+                maxHeight: '200px',
+                overflow: 'auto'
+              }}>
+                {codeSuggestions.map((suggestion, index) => (
+                  <div
+                    key={index}
+                    style={{
+                      padding: '8px 12px',
+                      cursor: 'pointer',
+                      borderBottom: index < codeSuggestions.length - 1 ? '1px solid #f3f4f6' : 'none'
+                    }}
+                    onMouseDown={(e) => {
+                      e.preventDefault()
+                      setFilters({ ...filters, code: suggestion })
+                      setShowCodeDropdown(false)
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.backgroundColor = '#f3f4f6'
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.backgroundColor = 'white'
+                    }}
+                  >
+                    {suggestion}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
         <div className="field">
           <div>門市地點</div>
@@ -114,7 +264,12 @@ export default function Inventory() {
         </div>
         <div className="field">
           <div>產品類型</div>
-          <input className="input" value={filters.productType} onChange={e => setFilters({ ...filters, productType: e.target.value })} />
+          <select className="select" value={filters.productType} onChange={e => setFilters({ ...filters, productType: e.target.value })}>
+            <option value="">全部</option>
+            {productTypes.map(type => (
+              <option key={type._id} value={type.name}>{type.name}</option>
+            ))}
+          </select>
         </div>
         <div className="field">
           <div>尺寸</div>
@@ -142,7 +297,7 @@ export default function Inventory() {
         <table className="table">
           <thead>
             <tr>
-              <th>產品姓名</th>
+              <th>產品名稱</th>
               <th>產品編號</th>
               <th>產品類型</th>
               <th>尺寸</th>
