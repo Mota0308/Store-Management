@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+ï»¿import { useEffect, useState } from 'react'
 import api from '../api'
 
 type Location = { _id: string; name: string }
@@ -16,14 +16,14 @@ type Product = {
 
 type SortState = 'default' | 'asc' | 'desc'
 
-// ²£«~¤À²ÕÃş«¬
+// ç”¢å“åˆ†çµ„é¡å‹
 type ProductGroup = {
-  key: string // ²£«~¦WºÙ + ²£«~½s¸¹ªº²Õ¦X
+  key: string // ç”¢å“åç¨± + ç”¢å“ç·¨è™Ÿçš„çµ„åˆ
   name: string
   productCode: string
   productType: string
   products: Product[]
-  totalQuantities: Record<string, number> // ¦U¦aÂIªºÁ`¼Æ¶q
+  totalQuantities: Record<string, number> // å„åœ°é»çš„ç¸½æ•¸é‡
 }
 
 export default function Inventory() {
@@ -34,23 +34,23 @@ export default function Inventory() {
   const [filters, setFilters] = useState({ q: '', code: '', productType: '', size: '', sortBy: '', sortOrder: 'desc' })
   const [deleteModal, setDeleteModal] = useState<{ isOpen: boolean; product: Product | null }>({ isOpen: false, product: null })
 
-  // ¤U©Ô¿ï¶µª¬ºA
+  // ä¸‹æ‹‰é¸é …ç‹€æ…‹
   const [nameSuggestions, setNameSuggestions] = useState<string[]>([])
   const [codeSuggestions, setCodeSuggestions] = useState<string[]>([])
   const [showNameDropdown, setShowNameDropdown] = useState(false)
   const [showCodeDropdown, setShowCodeDropdown] = useState(false)
 
-  // ¨C­Ó¦aÂIªº±Æ§Çª¬ºA
+  // æ¯å€‹åœ°é»çš„æ’åºç‹€æ…‹
   const [locationSortStates, setLocationSortStates] = useState<Record<string, SortState>>({})
 
-  // ¤À²Õ®i¶}ª¬ºA
+  // åˆ†çµ„å±•é–‹ç‹€æ…‹
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
 
-  // ¾É¤J®w¦sª¬ºA
+  // å°å…¥åº«å­˜ç‹€æ…‹
   const [importOpen, setImportOpen] = useState(false)
   const [importState, setImportState] = useState<{ locationId: string; mode: 'out' | 'in'; files: File[] }>({ locationId: '', mode: 'out', files: [] })
 
-  // ªù¥«¹ï½Õª¬ºA
+  // é–€å¸‚å°èª¿ç‹€æ…‹
   const [transferOpen, setTransferOpen] = useState(false)
   const [transferState, setTransferState] = useState<{
     fromLocationId: string
@@ -88,7 +88,7 @@ export default function Inventory() {
 
   useEffect(() => { load() }, [filters])
 
-  // ¥Í¦¨¦WºÙ«ØÄ³
+  // ç”Ÿæˆåç¨±å»ºè­°
   const generateNameSuggestions = (input: string) => {
     if (!input.trim()) {
       setNameSuggestions([])
@@ -97,12 +97,12 @@ export default function Inventory() {
     const suggestions = products
       .map(p => p.name)
       .filter(name => name.toLowerCase().includes(input.toLowerCase()))
-      .filter((name, index, arr) => arr.indexOf(name) === index) // ¥h­«
-      .slice(0, 5) // ³Ì¦hÅã¥Ü5­Ó«ØÄ³
+      .filter((name, index, arr) => arr.indexOf(name) === index) // å»é‡
+      .slice(0, 5) // æœ€å¤šé¡¯ç¤º5å€‹å»ºè­°
     setNameSuggestions(suggestions)
   }
 
-  // ¥Í¦¨½s¸¹«ØÄ³
+  // ç”Ÿæˆç·¨è™Ÿå»ºè­°
   const generateCodeSuggestions = (input: string) => {
     if (!input.trim()) {
       setCodeSuggestions([])
@@ -111,8 +111,8 @@ export default function Inventory() {
     const suggestions = products
       .map(p => p.productCode)
       .filter(code => code.toLowerCase().includes(input.toLowerCase()))
-      .filter((code, index, arr) => arr.indexOf(code) === index) // ¥h­«
-      .slice(0, 5) // ³Ì¦hÅã¥Ü5­Ó«ØÄ³
+      .filter((code, index, arr) => arr.indexOf(code) === index) // å»é‡
+      .slice(0, 5) // æœ€å¤šé¡¯ç¤º5å€‹å»ºè­°
     setCodeSuggestions(suggestions)
   }
 
@@ -126,7 +126,7 @@ export default function Inventory() {
     return '-'
   }
 
-  // ²£«~¤À²ÕÅŞ¿è
+  // ç”¢å“åˆ†çµ„é‚è¼¯
   const groupProducts = (products: Product[]): ProductGroup[] => {
     const groupMap = new Map<string, ProductGroup>()
 
@@ -134,7 +134,7 @@ export default function Inventory() {
       const key = `${product.name}|${product.productCode}`
       
       if (!groupMap.has(key)) {
-        // ­pºâ¦U¦aÂIªºÁ`¼Æ¶q
+        // è¨ˆç®—å„åœ°é»çš„ç¸½æ•¸é‡
         const totalQuantities: Record<string, number> = {}
         locations.forEach(location => {
           totalQuantities[location._id] = 0
@@ -153,7 +153,7 @@ export default function Inventory() {
       const group = groupMap.get(key)!
       group.products.push(product)
       
-      // ²Ö¥[¦U¦aÂIªº¼Æ¶q
+      // ç´¯åŠ å„åœ°é»çš„æ•¸é‡
       locations.forEach(location => {
         const qty = getQty(product, location._id)
         group.totalQuantities[location._id] += qty
@@ -163,7 +163,7 @@ export default function Inventory() {
     return Array.from(groupMap.values())
   }
 
-  // ¤Á´«¤À²Õ®i¶}ª¬ºA
+  // åˆ‡æ›åˆ†çµ„å±•é–‹ç‹€æ…‹
   const toggleGroup = (groupKey: string) => {
     setExpandedGroups(prev => {
       const newSet = new Set(prev)
@@ -176,31 +176,31 @@ export default function Inventory() {
     })
   }
 
-  // ³B²z¦aÂI±Æ§Ç
+  // è™•ç†åœ°é»æ’åº
   const handleLocationSort = (locationId: string) => {
     const currentState = locationSortStates[locationId] || 'default'
     let nextState: SortState
 
     switch (currentState) {
       case 'default':
-        nextState = 'desc' // °ª¨ì§C
+        nextState = 'desc' // é«˜åˆ°ä½
         break
       case 'desc':
-        nextState = 'asc'  // §C¨ì°ª
+        nextState = 'asc'  // ä½åˆ°é«˜
         break
       case 'asc':
-        nextState = 'default' // «ì´_Àq»{
+        nextState = 'default' // æ¢å¾©é»˜èª
         break
     }
 
     setLocationSortStates(prev => ({ ...prev, [locationId]: nextState }))
 
-    // ®Ú¾Ú±Æ§Çª¬ºA¹ï²£«~¶i¦æ±Æ§Ç
+    // æ ¹æ“šæ’åºç‹€æ…‹å°ç”¢å“é€²è¡Œæ’åº
     if (nextState === 'default') {
-      // «ì´_Àq»{±Æ§Ç¡A­«·s¥[¸ü¼Æ¾Ú
+      // æ¢å¾©é»˜èªæ’åºï¼Œé‡æ–°åŠ è¼‰æ•¸æ“š
       load()
     } else {
-      // ¹ï·í«e²£«~¦Cªí¶i¦æ±Æ§Ç
+      // å°ç•¶å‰ç”¢å“åˆ—è¡¨é€²è¡Œæ’åº
       setProducts(prev => {
         const sorted = [...prev].sort((a, b) => {
           const aQty = getQty(a, locationId)
@@ -212,16 +212,16 @@ export default function Inventory() {
     }
   }
 
-  // Àò¨ú±Æ§Ç½bÀY¹Ï¼Ğ
+  // ç²å–æ’åºç®­é ­åœ–æ¨™
   const getSortIcon = (locationId: string) => {
     const state = locationSortStates[locationId] || 'default'
     switch (state) {
       case 'desc':
-        return '¡ô' // ¦V¤W½bÀY - °ª¨ì§C±Æ¦C
+        return 'â†‘' // å‘ä¸Šç®­é ­ - é«˜åˆ°ä½æ’åˆ—
       case 'asc':
-        return '¡õ' // ¦V¤U½bÀY - §C¨ì°ª±Æ¦C
+        return 'â†“' // å‘ä¸‹ç®­é ­ - ä½åˆ°é«˜æ’åˆ—
       default:
-        return '?' // Âù¦V½bÀY - Àq»{ª¬ºA
+        return 'â†•' // é›™å‘ç®­é ­ - é»˜èªç‹€æ…‹
     }
   }
 
@@ -239,57 +239,57 @@ export default function Inventory() {
 
   async function deleteProduct(product: Product) {
     try {
-      console.log('¥¿¦b§R°£°Ó«~:', product._id, product.name)
+      console.log('æ­£åœ¨åˆªé™¤å•†å“:', product._id, product.name)
       const response = await api.delete(`/products/${product._id}`)
-      console.log('§R°£ÅTÀ³:', response.data)
+      console.log('åˆªé™¤éŸ¿æ‡‰:', response.data)
       
       setDeleteModal({ isOpen: false, product: null })
       await load()
-      alert('°Ó«~¤w¦¨¥\§R°£')
+      alert('å•†å“å·²æˆåŠŸåˆªé™¤')
     } catch (error: any) {
-      console.error('§R°£°Ó«~¥¢±Ñ:', error)
-      console.error('¿ù»~¸Ô±¡:', error.response?.data)
-      alert(`§R°£°Ó«~¥¢±Ñ: ${error.response?.data?.message || error.message}`)
+      console.error('åˆªé™¤å•†å“å¤±æ•—:', error)
+      console.error('éŒ¯èª¤è©³æƒ…:', error.response?.data)
+      alert(`åˆªé™¤å•†å“å¤±æ•—: ${error.response?.data?.message || error.message}`)
     }
   }
 
   async function doImport() {
-    if (!importState.locationId || importState.files.length === 0) { alert('½Ğ¿ï¾Ü¦aÂI»PÀÉ®×'); return }
+    if (!importState.locationId || importState.files.length === 0) { alert('è«‹é¸æ“‡åœ°é»èˆ‡æª”æ¡ˆ'); return }
     const form = new FormData()
     form.append('locationId', importState.locationId)
     importState.files.forEach(f => form.append('files', f))
     const url = importState.mode === 'out' ? '/import/outgoing' : '/import/incoming'
     const { data } = await api.post(url, form)
-    alert(`¶×¤J§¹¦¨\nÀÉ®×:${data.files}  ¤Ç°t:${data.matched}  §ó·s:${data.updated}\n¥¼§ä¨ì: ${data.notFound?.join(', ') || 'µL'}`)
+    alert(`åŒ¯å…¥å®Œæˆ\næª”æ¡ˆ:${data.files}  åŒ¹é…:${data.matched}  æ›´æ–°:${data.updated}\næœªæ‰¾åˆ°: ${data.notFound?.join(', ') || 'ç„¡'}`)
     setImportOpen(false)
     await load()
   }
 
-  // ªù¥«¹ï½Õ¥\¯à
+  // é–€å¸‚å°èª¿åŠŸèƒ½
   async function doTransfer() {
     if (!transferState.fromLocationId || !transferState.toLocationId || transferState.products.length === 0) {
-      alert('½Ğ¿ï¾Ü¨Ó·½ªù¥«¡B¥Ø¼Ğªù¥«©M²£«~')
+      alert('è«‹é¸æ“‡ä¾†æºé–€å¸‚ã€ç›®æ¨™é–€å¸‚å’Œç”¢å“')
       return
     }
     
     try {
       const response = await api.post('/inventory/transfer', transferState)
-      alert(`ªù¥«¹ï½Õ§¹¦¨¡G${response.data.message}`)
+      alert(`é–€å¸‚å°èª¿å®Œæˆï¼š${response.data.message}`)
       setTransferOpen(false)
       await load()
     } catch (error: any) {
-      alert(`ªù¥«¹ï½Õ¥¢±Ñ¡G${error.response?.data?.message || error.message}`)
+      alert(`é–€å¸‚å°èª¿å¤±æ•—ï¼š${error.response?.data?.message || error.message}`)
     }
   }
 
-  // Àò¨ú¤À²Õ«áªº²£«~¦Cªí
+  // ç²å–åˆ†çµ„å¾Œçš„ç”¢å“åˆ—è¡¨
   const productGroups = groupProducts(products)
 
   return (
     <div className="card" style={{ display: 'grid', gap: 14 }}>
       <div className="toolbar">
         <div className="field">
-          <div>²£«~¦WºÙÃöÁä¦r</div>
+          <div>ç”¢å“åç¨±é—œéµå­—</div>
           <div style={{ position: 'relative' }}>
             <input 
               className="input" 
@@ -301,7 +301,7 @@ export default function Inventory() {
               }}
               onFocus={() => setShowNameDropdown(true)}
               onBlur={() => setTimeout(() => setShowNameDropdown(false), 200)}
-              placeholder="¿é¤J²£«~¦WºÙÃöÁä¦r"
+              placeholder="è¼¸å…¥ç”¢å“åç¨±é—œéµå­—"
             />
             {showNameDropdown && nameSuggestions.length > 0 && (
               <div style={{
@@ -345,7 +345,7 @@ export default function Inventory() {
           </div>
         </div>
         <div className="field">
-          <div>²£«~½s¸¹</div>
+          <div>ç”¢å“ç·¨è™Ÿ</div>
           <div style={{ position: 'relative' }}>
             <input 
               className="input" 
@@ -357,7 +357,7 @@ export default function Inventory() {
               }}
               onFocus={() => setShowCodeDropdown(true)}
               onBlur={() => setTimeout(() => setShowCodeDropdown(false), 200)}
-              placeholder="¿é¤J²£«~½s¸¹ÃöÁä¦r"
+              placeholder="è¼¸å…¥ç”¢å“ç·¨è™Ÿé—œéµå­—"
             />
             {showCodeDropdown && codeSuggestions.length > 0 && (
               <div style={{
@@ -401,45 +401,45 @@ export default function Inventory() {
           </div>
         </div>
         <div className="field">
-          <div>²£«~Ãş«¬</div>
+          <div>ç”¢å“é¡å‹</div>
           <select className="select" value={filters.productType} onChange={e => setFilters({ ...filters, productType: e.target.value })}>
-            <option value="">¥ş³¡</option>
+            <option value="">å…¨éƒ¨</option>
             {productTypes.map(type => (
               <option key={type._id} value={type.name}>{type.name}</option>
             ))}
           </select>
         </div>
         <div className="field">
-          <div>¤Ø¤o</div>
+          <div>å°ºå¯¸</div>
           <input className="input" value={filters.size} onChange={e => setFilters({ ...filters, size: e.target.value })} />
         </div>
         <div className="field">
-          <div>±Æ§Ç</div>
+          <div>æ’åº</div>
           <div style={{ display: 'flex', gap: 8 }}>
             <select className="select" value={filters.sortBy} onChange={e => setFilters({ ...filters, sortBy: e.target.value })}>
-              <option value="">µL</option>
-              <option value="price">»ù®æ</option>
-              <option value="quantity">®w¦s¼Æ¶q</option>
+              <option value="">ç„¡</option>
+              <option value="price">åƒ¹æ ¼</option>
+              <option value="quantity">åº«å­˜æ•¸é‡</option>
             </select>
             <select className="select" value={filters.sortOrder} onChange={e => setFilters({ ...filters, sortOrder: e.target.value })}>
-              <option value="desc">±q°ª¨ì§C</option>
-              <option value="asc">±q§C¨ì°ª</option>
+              <option value="desc">å¾é«˜åˆ°ä½</option>
+              <option value="asc">å¾ä½åˆ°é«˜</option>
             </select>
           </div>
         </div>
         <div className="spacer" />
-        <button className="btn" onClick={() => setImportOpen(true)}>¾É¤J®w¦s</button>
-        <button className="btn" onClick={() => setTransferOpen(true)}>ªù¥«¹ï½Õ</button>
+        <button className="btn" onClick={() => setImportOpen(true)}>å°å…¥åº«å­˜</button>
+        <button className="btn" onClick={() => setTransferOpen(true)}>é–€å¸‚å°èª¿</button>
       </div>
 
       <div>
         <table className="table">
           <thead>
             <tr>
-              <th>²£«~¦WºÙ</th>
-              <th>²£«~½s¸¹</th>
-              <th>²£«~Ãş«¬</th>
-              <th>¤Ø¤o</th>
+              <th>ç”¢å“åç¨±</th>
+              <th>ç”¢å“ç·¨è™Ÿ</th>
+              <th>ç”¢å“é¡å‹</th>
+              <th>å°ºå¯¸</th>
               {locations.map(l => (
                 <th key={l._id} className="right col-num">
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 4 }}>
@@ -466,7 +466,7 @@ export default function Inventory() {
                       onMouseLeave={(e) => {
                         e.currentTarget.style.backgroundColor = 'transparent'
                       }}
-                      title={`ÂIÀ»±Æ§Ç¡G${locationSortStates[l._id] === 'default' ? '°ª¨ì§C' : locationSortStates[l._id] === 'desc' ? '§C¨ì°ª' : '«ì´_Àq»{'}`}
+                      title={`é»æ“Šæ’åºï¼š${locationSortStates[l._id] === 'default' ? 'é«˜åˆ°ä½' : locationSortStates[l._id] === 'desc' ? 'ä½åˆ°é«˜' : 'æ¢å¾©é»˜èª'}`}
                     >
                       {getSortIcon(l._id)}
                     </button>
@@ -479,7 +479,7 @@ export default function Inventory() {
           <tbody>
             {productGroups.map(group => (
               <>
-                {/* ¤À²Õ¼ĞÃD¦æ */}
+                {/* åˆ†çµ„æ¨™é¡Œè¡Œ */}
                 <tr 
                   key={group.key} 
                   style={{ 
@@ -491,11 +491,11 @@ export default function Inventory() {
                 >
                   <td style={{ fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: 8 }}>
                     <span style={{ fontSize: '16px' }}>
-                      {expandedGroups.has(group.key) ? '¡¿' : '?'}
+                      {expandedGroups.has(group.key) ? 'â–¼' : 'â–¶'}
                     </span>
                     {group.name}
                     <span style={{ fontSize: '12px', color: '#6b7280', fontWeight: 'normal' }}>
-                      ({group.products.length} ­Ó¤Ø¤o)
+                      ({group.products.length} å€‹å°ºå¯¸)
                     </span>
                   </td>
                   <td style={{ fontWeight: 'bold' }}>{group.productCode}</td>
@@ -511,7 +511,7 @@ export default function Inventory() {
                   <td></td>
                 </tr>
                 
-                {/* ®i¶}ªº²£«~¸Ô±¡¦æ */}
+                {/* å±•é–‹çš„ç”¢å“è©³æƒ…è¡Œ */}
                 {expandedGroups.has(group.key) && group.products.map(p => (
                   <tr key={p._id} style={{ backgroundColor: '#fefefe' }}>
                     <td style={{ paddingLeft: '32px', color: '#6b7280' }}>
@@ -544,20 +544,20 @@ export default function Inventory() {
                     <td className="right">
                       <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                         {Object.keys(editing).some(k => k.startsWith(p._id + ':')) ? (
-                          <button className="btn" onClick={() => save(p)}>«O¦s</button>
+                          <button className="btn" onClick={() => save(p)}>ä¿å­˜</button>
                         ) : (
                           <button className="btn secondary" onClick={() => setEditing(prev => {
                             const next: Record<string, number> = { ...prev }
                             locations.forEach(l => { next[`${p._id}:${l._id}`] = getQty(p, l._id) })
                             return next
-                          })}>­×§ï®w¦s</button>
+                          })}>ä¿®æ”¹åº«å­˜</button>
                         )}
                         <button 
                           className="btn" 
                           style={{ backgroundColor: '#dc2626', color: 'white' }}
                           onClick={() => setDeleteModal({ isOpen: true, product: p })}
                         >
-                          §R°£
+                          åˆªé™¤
                         </button>
                       </div>
                     </td>
@@ -569,80 +569,80 @@ export default function Inventory() {
         </table>
       </div>
 
-      {/* §R°£½T»{¼uµ¡ */}
+      {/* åˆªé™¤ç¢ºèªå½ˆçª— */}
       {deleteModal.isOpen && deleteModal.product && (
         <div className="modal-backdrop">
           <div className="modal">
-            <div className="header">½T»{§R°£</div>
+            <div className="header">ç¢ºèªåˆªé™¤</div>
             <div className="body">
-              <p>±z½T©w­n§R°£¥H¤U°Ó«~¶Ü¡H</p>
+              <p>æ‚¨ç¢ºå®šè¦åˆªé™¤ä»¥ä¸‹å•†å“å—ï¼Ÿ</p>
               <div style={{ padding: '12px', backgroundColor: '#f3f4f6', borderRadius: '8px', margin: '12px 0' }}>
-                <p><strong>°Ó«~¦WºÙ¡G</strong>{deleteModal.product.name}</p>
-                <p><strong>°Ó«~½s¸¹¡G</strong>{deleteModal.product.productCode}</p>
-                <p><strong>°Ó«~Ãş«¬¡G</strong>{deleteModal.product.productType}</p>
-                <p><strong>°Ó«~ID¡G</strong>{deleteModal.product._id}</p>
+                <p><strong>å•†å“åç¨±ï¼š</strong>{deleteModal.product.name}</p>
+                <p><strong>å•†å“ç·¨è™Ÿï¼š</strong>{deleteModal.product.productCode}</p>
+                <p><strong>å•†å“é¡å‹ï¼š</strong>{deleteModal.product.productType}</p>
+                <p><strong>å•†å“IDï¼š</strong>{deleteModal.product._id}</p>
               </div>
-              <p style={{ color: '#dc2626', fontWeight: 'bold' }}> ¦¹¾Ş§@µLªkºM¾P¡A±N¥Ã¤[§R°£°Ó«~¤Î¨ä©Ò¦³¬ÛÃö¼Æ¾Ú¡I</p>
+              <p style={{ color: '#dc2626', fontWeight: 'bold' }}> æ­¤æ“ä½œç„¡æ³•æ’¤éŠ·ï¼Œå°‡æ°¸ä¹…åˆªé™¤å•†å“åŠå…¶æ‰€æœ‰ç›¸é—œæ•¸æ“šï¼</p>
             </div>
             <div className="footer">
-              <button className="btn secondary" onClick={() => setDeleteModal({ isOpen: false, product: null })}>¨ú®ø</button>
+              <button className="btn secondary" onClick={() => setDeleteModal({ isOpen: false, product: null })}>å–æ¶ˆ</button>
               <button 
                 className="btn" 
                 style={{ backgroundColor: '#dc2626', color: 'white' }}
                 onClick={() => deleteProduct(deleteModal.product!)}
               >
-                ½T»{§R°£
+                ç¢ºèªåˆªé™¤
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* ¾É¤J®w¦s¼uµ¡ */}
+      {/* å°å…¥åº«å­˜å½ˆçª— */}
       {importOpen && (
         <div className="modal-backdrop">
           <div className="modal">
-            <div className="header">¾É¤J®w¦s</div>
+            <div className="header">å°å…¥åº«å­˜</div>
             <div className="body">
               <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                <div>ªù¥«¦aÂI</div>
+                <div>é–€å¸‚åœ°é»</div>
                 <select className="select" value={importState.locationId} onChange={e => setImportState(s => ({ ...s, locationId: e.target.value }))}>
-                  <option value="">¿ï¾Ü¦aÂI</option>
+                  <option value="">é¸æ“‡åœ°é»</option>
                   {locations.map(l => <option key={l._id} value={l._id}>{l.name}</option>)}
                 </select>
-                <button className={`btn ${importState.mode === 'out' ? '' : 'secondary'}`} onClick={() => setImportState(s => ({ ...s, mode: 'out' }))}>¥X³f</button>
-                <button className={`btn ${importState.mode === 'in' ? '' : 'secondary'}`} onClick={() => setImportState(s => ({ ...s, mode: 'in' }))}>¶i³f</button>
+                <button className={`btn ${importState.mode === 'out' ? '' : 'secondary'}`} onClick={() => setImportState(s => ({ ...s, mode: 'out' }))}>å‡ºè²¨</button>
+                <button className={`btn ${importState.mode === 'in' ? '' : 'secondary'}`} onClick={() => setImportState(s => ({ ...s, mode: 'in' }))}>é€²è²¨</button>
               </div>
               <input multiple type="file" accept="application/pdf" onChange={e => setImportState(s => ({ ...s, files: Array.from(e.target.files || []) }))} />
             </div>
             <div className="footer">
-              <button className="btn secondary" onClick={() => setImportOpen(false)}>¨ú®ø</button>
-              <button className="btn" onClick={doImport}>¶i¦æ</button>
+              <button className="btn secondary" onClick={() => setImportOpen(false)}>å–æ¶ˆ</button>
+              <button className="btn" onClick={doImport}>é€²è¡Œ</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* ªù¥«¹ï½Õ¼uµ¡ */}
+      {/* é–€å¸‚å°èª¿å½ˆçª— */}
       {transferOpen && (
         <div className="modal-backdrop">
           <div className="modal">
-            <div className="header">ªù¥«¹ï½Õ</div>
+            <div className="header">é–€å¸‚å°èª¿</div>
             <div className="body">
               <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: '16px' }}>
-                <div>¨Ó·½ªù¥«</div>
+                <div>ä¾†æºé–€å¸‚</div>
                 <select className="select" value={transferState.fromLocationId} onChange={e => setTransferState(s => ({ ...s, fromLocationId: e.target.value }))}>
-                  <option value="">¿ï¾Ü¨Ó·½ªù¥«</option>
+                  <option value="">é¸æ“‡ä¾†æºé–€å¸‚</option>
                   {locations.map(l => <option key={l._id} value={l._id}>{l.name}</option>)}
                 </select>
-                <div>¥Ø¼Ğªù¥«</div>
+                <div>ç›®æ¨™é–€å¸‚</div>
                 <select className="select" value={transferState.toLocationId} onChange={e => setTransferState(s => ({ ...s, toLocationId: e.target.value }))}>
-                  <option value="">¿ï¾Ü¥Ø¼Ğªù¥«</option>
+                  <option value="">é¸æ“‡ç›®æ¨™é–€å¸‚</option>
                   {locations.map(l => <option key={l._id} value={l._id}>{l.name}</option>)}
                 </select>
               </div>
               <div>
-                <p>¿ï¾Ü­nÂà²¾ªº²£«~¡G</p>
+                <p>é¸æ“‡è¦è½‰ç§»çš„ç”¢å“ï¼š</p>
                 <div style={{ maxHeight: '200px', overflow: 'auto', border: '1px solid #e5e7eb', borderRadius: '4px', padding: '8px' }}>
                   {products.map(product => (
                     <div key={product._id} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
@@ -666,7 +666,7 @@ export default function Inventory() {
                       {transferState.products.find(p => p.productId === product._id) && (
                         <input
                           type="number"
-                          placeholder="¼Æ¶q"
+                          placeholder="æ•¸é‡"
                           min="0"
                           onChange={(e) => {
                             const quantity = parseInt(e.target.value) || 0
@@ -685,8 +685,8 @@ export default function Inventory() {
               </div>
             </div>
             <div className="footer">
-              <button className="btn secondary" onClick={() => setTransferOpen(false)}>¨ú®ø</button>
-              <button className="btn" onClick={doTransfer}>¶i¦æ¹ï½Õ</button>
+              <button className="btn secondary" onClick={() => setTransferOpen(false)}>å–æ¶ˆ</button>
+              <button className="btn" onClick={doTransfer}>é€²è¡Œå°èª¿</button>
             </div>
           </div>
         </div>
@@ -694,3 +694,4 @@ export default function Inventory() {
     </div>
   )
 }
+
