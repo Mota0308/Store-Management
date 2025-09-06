@@ -46,18 +46,6 @@ export default function Inventory() {
   // 分組展開狀態
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
 
-  // 導入庫存狀態
-  const [importOpen, setImportOpen] = useState(false)
-  const [importState, setImportState] = useState<{ locationId: string; mode: 'out' | 'in'; files: File[] }>({ locationId: '', mode: 'out', files: [] })
-
-  // 門市對調狀態
-  const [transferOpen, setTransferOpen] = useState(false)
-  const [transferState, setTransferState] = useState<{
-    fromLocationId: string
-    toLocationId: string
-    products: { productId: string; quantity: number }[]
-  }>({ fromLocationId: '', toLocationId: '', products: [] })
-
   useEffect(() => {
     api.get('/locations').then(r => setLocations(r.data))
     loadProductTypes()
@@ -217,11 +205,11 @@ export default function Inventory() {
     const state = locationSortStates[locationId] || 'default'
     switch (state) {
       case 'desc':
-        return '↓' // 向下箭頭
+        return '' // 向上箭頭
       case 'asc':
-        return '↑' // 向上箭頭
+        return '' // 向下箭頭
       default:
-        return '↕' // 雙向箭頭
+        return '' // 雙向箭頭
     }
   }
 
@@ -253,6 +241,9 @@ export default function Inventory() {
     }
   }
 
+  const [importOpen, setImportOpen] = useState(false)
+  const [importState, setImportState] = useState<{ locationId: string; mode: 'out' | 'in'; files: File[] }>({ locationId: '', mode: 'out', files: [] })
+
   async function doImport() {
     if (!importState.locationId || importState.files.length === 0) { alert('請選擇地點與檔案'); return }
     const form = new FormData()
@@ -263,23 +254,6 @@ export default function Inventory() {
     alert(`匯入完成\n檔案:${data.files}  匹配:${data.matched}  更新:${data.updated}\n未找到: ${data.notFound?.join(', ') || '無'}`)
     setImportOpen(false)
     await load()
-  }
-
-  // 門市對調功能
-  async function doTransfer() {
-    if (!transferState.fromLocationId || !transferState.toLocationId || transferState.products.length === 0) {
-      alert('請選擇來源門市、目標門市和產品')
-      return
-    }
-    
-    try {
-      const response = await api.post('/inventory/transfer', transferState)
-      alert(`門市對調完成：${response.data.message}`)
-      setTransferOpen(false)
-      await load()
-    } catch (error: any) {
-      alert(`門市對調失敗：${error.response?.data?.message || error.message}`)
-    }
   }
 
   // 獲取分組後的產品列表
@@ -429,7 +403,6 @@ export default function Inventory() {
         </div>
         <div className="spacer" />
         <button className="btn" onClick={() => setImportOpen(true)}>導入庫存</button>
-        <button className="btn" onClick={() => setTransferOpen(true)}>門市對調</button>
       </div>
 
       <div>
@@ -491,7 +464,7 @@ export default function Inventory() {
                 >
                   <td style={{ fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: 8 }}>
                     <span style={{ fontSize: '16px' }}>
-                      {expandedGroups.has(group.key) ? '▼' : '▶'}
+                      {expandedGroups.has(group.key) ? '' : ''}
                     </span>
                     {group.name}
                     <span style={{ fontSize: '12px', color: '#6b7280', fontWeight: 'normal' }}>
@@ -598,7 +571,6 @@ export default function Inventory() {
         </div>
       )}
 
-      {/* 導入庫存彈窗 */}
       {importOpen && (
         <div className="modal-backdrop">
           <div className="modal">
@@ -618,75 +590,6 @@ export default function Inventory() {
             <div className="footer">
               <button className="btn secondary" onClick={() => setImportOpen(false)}>取消</button>
               <button className="btn" onClick={doImport}>進行</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 門市對調彈窗 */}
-      {transferOpen && (
-        <div className="modal-backdrop">
-          <div className="modal">
-            <div className="header">門市對調</div>
-            <div className="body">
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: '16px' }}>
-                <div>來源門市</div>
-                <select className="select" value={transferState.fromLocationId} onChange={e => setTransferState(s => ({ ...s, fromLocationId: e.target.value }))}>
-                  <option value="">選擇來源門市</option>
-                  {locations.map(l => <option key={l._id} value={l._id}>{l.name}</option>)}
-                </select>
-                <div>目標門市</div>
-                <select className="select" value={transferState.toLocationId} onChange={e => setTransferState(s => ({ ...s, toLocationId: e.target.value }))}>
-                  <option value="">選擇目標門市</option>
-                  {locations.map(l => <option key={l._id} value={l._id}>{l.name}</option>)}
-                </select>
-              </div>
-              <div>
-                <p>選擇要轉移的產品：</p>
-                <div style={{ maxHeight: '200px', overflow: 'auto', border: '1px solid #e5e7eb', borderRadius: '4px', padding: '8px' }}>
-                  {products.map(product => (
-                    <div key={product._id} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-                      <input
-                        type="checkbox"
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            setTransferState(prev => ({
-                              ...prev,
-                              products: [...prev.products, { productId: product._id, quantity: 0 }]
-                            }))
-                          } else {
-                            setTransferState(prev => ({
-                              ...prev,
-                              products: prev.products.filter(p => p.productId !== product._id)
-                            }))
-                          }
-                        }}
-                      />
-                      <span>{product.name} ({product.productCode})</span>
-                      {transferState.products.find(p => p.productId === product._id) && (
-                        <input
-                          type="number"
-                          placeholder="數量"
-                          min="0"
-                          onChange={(e) => {
-                            const quantity = parseInt(e.target.value) || 0
-                            setTransferState(prev => ({
-                              ...prev,
-                              products: prev.products.map(p => 
-                                p.productId === product._id ? { ...p, quantity } : p
-                              )
-                            }))
-                          }}
-                        />
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-            <div className="footer">
-              <button className="btn secondary" onClick={() => setTransferOpen(false)}>取消</button>
-              <button className="btn" onClick={doTransfer}>進行對調</button>
             </div>
           </div>
         </div>
