@@ -256,6 +256,29 @@ export default function Inventory() {
     await load()
   }
 
+  // 門市對調狀態
+  const [transferOpen, setTransferOpen] = useState(false)
+  const [transferState, setTransferState] = useState<{ fromLocationId: string; toLocationId: string; files: File[] }>({ fromLocationId: '', toLocationId: '', files: [] })
+
+  async function doTransfer() {
+    if (!transferState.fromLocationId || !transferState.toLocationId || transferState.files.length === 0) {
+      alert('請選擇起點、終點和檔案')
+      return
+    }
+    if (transferState.fromLocationId === transferState.toLocationId) {
+      alert('起點和終點不能相同')
+      return
+    }
+    const form = new FormData()
+    form.append('fromLocationId', transferState.fromLocationId)
+    form.append('toLocationId', transferState.toLocationId)
+    transferState.files.forEach(f => form.append('files', f))
+    const { data } = await api.post('/import/transfer', form)
+    alert(`門市對調完成\n檔案:${data.files}  匹配:${data.matched}  更新:${data.updated}\n未找到: ${data.notFound?.join(', ') || '無'}`)
+    setTransferOpen(false)
+    await load()
+  }
+
   // 獲取分組後的產品列表
   const productGroups = groupProducts(products)
 
@@ -402,8 +425,8 @@ export default function Inventory() {
           </div>
         </div>
         <div className="spacer" />
+        <button className="btn secondary" onClick={() => setTransferOpen(true)}>門市對調</button>
         <button className="btn" onClick={() => setImportOpen(true)}>導入庫存</button>
-      </div>
 
       <div>
         <table className="table">
@@ -566,6 +589,36 @@ export default function Inventory() {
               >
                 確認刪除
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {transferOpen && (
+        <div className="modal-backdrop">
+          <div className="modal">
+            <div className="header">門市對調</div>
+            <div className="body">
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                <div>選擇起點</div>
+                <select className="select" value={transferState.fromLocationId} onChange={e => setTransferState(s => ({ ...s, fromLocationId: e.target.value }))}>
+                  <option value="">選擇起點</option>
+                  {locations.map(l => <option key={l._id} value={l._id}>{l.name}</option>)}
+                </select>
+                <div>選擇終點</div>
+                <select className="select" value={transferState.toLocationId} onChange={e => setTransferState(s => ({ ...s, toLocationId: e.target.value }))}>
+                  <option value="">選擇終點</option>
+                  {locations.map(l => <option key={l._id} value={l._id}>{l.name}</option>)}
+                </select>
+              </div>
+              <div style={{ marginTop: 16 }}>
+                <div>導入文檔</div>
+                <input multiple type="file" accept="application/pdf" onChange={e => setTransferState(s => ({ ...s, files: Array.from(e.target.files || []) }))} />
+              </div>
+            </div>
+            <div className="footer">
+              <button className="btn secondary" onClick={() => setTransferOpen(false)}>取消</button>
+              <button className="btn" onClick={doTransfer}>進行對調</button>
             </div>
           </div>
         </div>
