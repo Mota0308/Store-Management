@@ -37,12 +37,16 @@ function normalizeCode(code: string): string {
 // Update inventory by code variants
 async function updateByCodeVariants(code: string, qty: number, locationId: string, summary: any, mode: 'in' | 'out') {
   const variants = codeVariants(code);
+  let found = false;
   
   for (const variant of variants) {
     const products = await Product.find({ productCode: variant });
     
     if (products.length > 0) {
-      summary.matched++; // 添加匹配計數
+      if (!found) {
+        summary.matched++; // 只在第一次找到產品時增加匹配計數
+        found = true;
+      }
       
       for (const product of products) {
         const inv = product.inventories.find(i => String(i.locationId) === String(locationId));
@@ -63,10 +67,12 @@ async function updateByCodeVariants(code: string, qty: number, locationId: strin
           }
         }
       }
-    } else {
-      // 如果沒有找到產品，添加到 notFound 數組
-      summary.notFound.push(normalizeCode(code));
     }
+  }
+  
+  // 如果沒有找到任何產品，添加到 notFound 數組
+  if (!found) {
+    summary.notFound.push(normalizeCode(code));
   }
 }
 
@@ -136,10 +142,14 @@ router.post('/outgoing', upload.array('files'), async (req, res) => {
 // Incoming import
 router.post('/incoming', upload.array('files'), async (req, res) => {
   try {
+    console.log('調試: 收到進貨請求');
     const { locationId } = req.body;
     const files = req.files as Express.Multer.File[];
+    console.log('調試: locationId =', locationId);
+    console.log('調試: 收到文件數量 =', files?.length || 0);
     
     if (!locationId || !files || files.length === 0) {
+      console.log('調試: 缺少必要參數');
       return res.status(400).json({ message: 'Missing locationId or files' });
     }
     
@@ -192,6 +202,7 @@ router.post('/incoming', upload.array('files'), async (req, res) => {
     
     res.json(summary);
   } catch (e) {
+    console.error('調試: 進貨處理錯誤:', e);
     res.status(500).json({ message: 'Failed to import incoming', error: String(e) });
   }
 });
@@ -291,3 +302,7 @@ router.post('/transfer', upload.array('files'), async (req, res) => {
 
 
 export default router;
+
+
+
+
