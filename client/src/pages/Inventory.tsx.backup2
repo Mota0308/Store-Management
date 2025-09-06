@@ -256,29 +256,6 @@ export default function Inventory() {
     await load()
   }
 
-  // 門市對調狀態
-  const [transferOpen, setTransferOpen] = useState(false)
-  const [transferState, setTransferState] = useState<{ fromLocationId: string; toLocationId: string; files: File[] }>({ fromLocationId: '', toLocationId: '', files: [] })
-
-  async function doTransfer() {
-    if (!transferState.fromLocationId || !transferState.toLocationId || transferState.files.length === 0) {
-      alert('請選擇起點、終點和檔案')
-      return
-    }
-    if (transferState.fromLocationId === transferState.toLocationId) {
-      alert('起點和終點不能相同')
-      return
-    }
-    const form = new FormData()
-    form.append('fromLocationId', transferState.fromLocationId)
-    form.append('toLocationId', transferState.toLocationId)
-    transferState.files.forEach(f => form.append('files', f))
-    const { data } = await api.post('/import/transfer', form)
-    alert(`門市對調完成\\n檔案:${data.files}  匹配:${data.matched}  更新:${data.updated}\\n未找到: ${data.notFound?.join(', ') || '無'}`)
-    setTransferOpen(false)
-    await load()
-  }
-
   // 獲取分組後的產品列表
   const productGroups = groupProducts(products)
 
@@ -425,7 +402,7 @@ export default function Inventory() {
           </div>
         </div>
         <div className="spacer" />
-        <button className="btn secondary" onClick={() => setTransferOpen(true)}>門市對調</button>
+        <button className="btn" onClick={() => setImportOpen(true)}>導入庫存</button>
       </div>
 
       <div>
