@@ -278,8 +278,8 @@ export default function Inventory() {
       form.append('toLocationId', transferState.toLocationId)
       transferState.files.forEach(f => form.append('files', f))
       
-      const response = await api.post('/inventory/transfer', form)
-      alert(`門市對調完成\n檔案:${response.data.files}  匹配:${response.data.matched}  轉移:${response.data.transferred}\n未找到: ${response.data.notFound?.join(', ') || '無'}`)
+      const response = await api.post('/import/transfer', form)
+      alert(`門市對調完成\n檔案:${response.data.files}  匹配:${response.data.matched}  轉移:${response.data.updated}\n未找到: ${response.data.notFound?.join(', ') || '無'}`)
       setTransferOpen(false)
       await load()
     } catch (error: any) {
@@ -661,4 +661,6 @@ export default function Inventory() {
     </div>
   )
 }
+
+
 

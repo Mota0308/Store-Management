@@ -41,24 +41,31 @@ async function updateByCodeVariants(code: string, qty: number, locationId: strin
   for (const variant of variants) {
     const products = await Product.find({ productCode: variant });
     
-    for (const product of products) {
-      const inv = product.inventories.find(i => String(i.locationId) === String(locationId));
-      if (inv) {
-        const oldQty = inv.quantity;
-        if (mode === 'in') {
-          inv.quantity += qty;
-        } else {
-          inv.quantity = Math.max(0, inv.quantity - qty);
-        }
-        await product.save();
-        summary.updated++;
-      } else {
-        if (mode === 'in') {
-          product.inventories.push({ locationId: new mongoose.Types.ObjectId(locationId), quantity: qty });
+    if (products.length > 0) {
+      summary.matched++; // 添加匹配計數
+      
+      for (const product of products) {
+        const inv = product.inventories.find(i => String(i.locationId) === String(locationId));
+        if (inv) {
+          const oldQty = inv.quantity;
+          if (mode === 'in') {
+            inv.quantity += qty;
+          } else {
+            inv.quantity = Math.max(0, inv.quantity - qty);
+          }
           await product.save();
           summary.updated++;
+        } else {
+          if (mode === 'in') {
+            product.inventories.push({ locationId: new mongoose.Types.ObjectId(locationId), quantity: qty });
+            await product.save();
+            summary.updated++;
+          }
         }
       }
+    } else {
+      // 如果沒有找到產品，添加到 notFound 數組
+      summary.notFound.push(normalizeCode(code));
     }
   }
 }
