@@ -1,5 +1,20 @@
 ﻿FROM node:18-alpine
 
+# 安裝 Python 和編譯工具
+RUN apk add --no-cache \
+    python3 \
+    make \
+    g++ \
+    cairo-dev \
+    jpeg-dev \
+    pango-dev \
+    musl-dev \
+    giflib-dev \
+    pixman-dev \
+    pangomm-dev \
+    libjpeg-turbo-dev \
+    freetype-dev
+
 # 設置工作目錄
 WORKDIR /app
 
