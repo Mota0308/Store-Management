@@ -1,4 +1,4 @@
-ï»¿import { Router } from 'express';
+import { Router } from 'express';
 import multer from 'multer';
 import pdf from 'pdf-parse';
 import Product from '../models/Product';
@@ -19,29 +19,29 @@ function codeVariants(raw: string): string[] {
   const variants = new Set<string>();
   if (n) variants.add(n);
   
-  // æå–åŸºç¤å‹è™Ÿï¼ˆå¦‚ WS-409PBK/LB  WS-409ï¼‰
+  // ´£¨ú°òÂ¦«¬¸¹¡]¦p WS-409PBK/LB  WS-409¡^
   const baseMatch = n.match(/^([A-Z]+[\-]?\d+)/);
   if (baseMatch) {
     variants.add(baseMatch[1]);
   }
   
-  // æ–°å¢ï¼šè™•ç†å»æ‰æœ€å¾Œä¸€å€‹å­—ç¬¦çš„æƒ…æ³ï¼ˆWS-409PBK/LB  WS-409PBK/Lï¼‰
+  // ·s¼W¡G³B²z¥h±¼³Ì«á¤@­Ó¦r²Åªº±¡ªp¡]WS-409PBK/LB  WS-409PBK/L¡^
   if (n.length > 1) {
     variants.add(n.slice(0, -1));
   }
   
-  // æ–°å¢ï¼šè™•ç†å»æ‰æœ€å¾Œå…©å€‹å­—ç¬¦çš„æƒ…æ³ï¼ˆWS-409PBK/LB  WS-409PBK/ï¼‰
+  // ·s¼W¡G³B²z¥h±¼³Ì«á¨â­Ó¦r²Åªº±¡ªp¡]WS-409PBK/LB  WS-409PBK/¡^
   if (n.length > 2) {
     variants.add(n.slice(0, -2));
   }
   
-  // æ–°å¢ï¼šè™•ç†å»æ‰æ–œç·šå¾Œé¢çš„éƒ¨åˆ†ï¼ˆWS-409PBK/LB  WS-409PBKï¼‰
+  // ·s¼W¡G³B²z¥h±¼±×½u«á­±ªº³¡¤À¡]WS-409PBK/LB  WS-409PBK¡^
   const slashIndex = n.lastIndexOf('/');
   if (slashIndex > 0) {
     variants.add(n.substring(0, slashIndex));
   }
   
-  // åŸæœ‰é‚è¼¯
+  // ­ì¦³ÅŞ¿è
   const m = n.match(/^([A-Z]+)_?(\d+)$/);
   if (m) variants.add(`${m[1]}-${m[2]}`);
   if (n) variants.add(n.replace(/-/g, ''));
@@ -49,55 +49,55 @@ function codeVariants(raw: string): string[] {
   return Array.from(variants).filter(Boolean);
 }
 
-// ä¿®å¾©çš„å°ºå¯¸åŒ¹é…å‡½æ•¸ - æ”¯æŒæ›´å¤šæ ¼å¼
+// ­×´_ªº¤Ø¤o¤Ç°t¨ç¼Æ - ¤ä«ù§ó¦h®æ¦¡
 function extractSizeAndCode(text: string): { baseCode: string; size: string; quantity: number } | null {
   try {
-    console.log(`èª¿è©¦: å˜—è©¦è§£æå°ºå¯¸è¡Œ: "${text}"`);
+    console.log(`½Õ¸Õ: ¹Á¸Õ¸ÑªR¤Ø¤o¦æ: "${text}"`);
     
-    // åŒ¹é…æ ¼å¼: WS-409PBK/LB3XL 3XL æˆ– WS-409TBKLB3XL 3XL
+    // ¤Ç°t®æ¦¡: WS-409PBK/LB3XL 3XL ©Î WS-409TBKLB3XL 3XL
     const sizeMatch = text.match(/^(WS-\d+[A-Za-z\/]+)(\d*)(XL|L|M|S|XS|XXS)\s+\d+/);
     if (sizeMatch) {
       const quantityMatch = text.match(/\d+$/);
       if (quantityMatch) {
         return {
-          baseCode: sizeMatch[1],  // WS-409PBK/LB æˆ– WS-409TBKLB
-          size: (sizeMatch[2] || '1') + sizeMatch[3],  // 3XL æˆ– 1XL
-          quantity: parseInt(quantityMatch[0], 10)  // æœ€å¾Œçš„æ•¸å­—
+          baseCode: sizeMatch[1],  // WS-409PBK/LB ©Î WS-409TBKLB
+          size: (sizeMatch[2] || '1') + sizeMatch[3],  // 3XL ©Î 1XL
+          quantity: parseInt(quantityMatch[0], 10)  // ³Ì«áªº¼Æ¦r
         };
       }
     }
     
-    // æ–°å¢ï¼šåŒ¹é…æ ¼å¼ WS-409TBKLB3XL 3XLï¼ˆæ²’æœ‰æ–œç·šçš„æƒ…æ³ï¼‰
+    // ·s¼W¡G¤Ç°t®æ¦¡ WS-409TBKLB3XL 3XL¡]¨S¦³±×½uªº±¡ªp¡^
     const sizeMatch2 = text.match(/^(WS-\d+[A-Za-z]+)(\d*)(XL|L|M|S|XS|XXS)\s+\d+/);
     if (sizeMatch2) {
       const quantityMatch = text.match(/\d+$/);
       if (quantityMatch) {
         return {
           baseCode: sizeMatch2[1],  // WS-409TBKLB
-          size: (sizeMatch2[2] || '1') + sizeMatch2[3],  // 3XL æˆ– 1XL
-          quantity: parseInt(quantityMatch[0], 10)  // æœ€å¾Œçš„æ•¸å­—
+          size: (sizeMatch2[2] || '1') + sizeMatch2[3],  // 3XL ©Î 1XL
+          quantity: parseInt(quantityMatch[0], 10)  // ³Ì«áªº¼Æ¦r
         };
       }
     }
     
     return null;
   } catch (error) {
-    console.log(`èª¿è©¦: extractSizeAndCode éŒ¯èª¤:`, error);
+    console.log(`½Õ¸Õ: extractSizeAndCode ¿ù»~:`, error);
     return null;
   }
 }
 
-// æ–°å¢ï¼šç”ŸæˆåŒ…å«å°ºå¯¸çš„ç”¢å“ä»£ç¢¼è®Šé«”
+// ·s¼W¡G¥Í¦¨¥]§t¤Ø¤oªº²£«~¥N½XÅÜÅé
 function codeVariantsWithSize(baseCode: string, size: string): string[] {
   const variants = new Set<string>();
   
-  // æ·»åŠ åŸå§‹ä»£ç¢¼
+  // ²K¥[­ì©l¥N½X
   variants.add(baseCode);
   
-  // æ·»åŠ å¸¶å°ºå¯¸çš„ä»£ç¢¼
+  // ²K¥[±a¤Ø¤oªº¥N½X
   variants.add(`${baseCode}${size}`);
   
-  // æ·»åŠ åŸºç¤å‹è™Ÿè®Šé«”
+  // ²K¥[°òÂ¦«¬¸¹ÅÜÅé
   const baseVariants = codeVariants(baseCode);
   baseVariants.forEach(variant => {
     variants.add(variant);
@@ -107,7 +107,7 @@ function codeVariantsWithSize(baseCode: string, size: string): string[] {
   return Array.from(variants).filter(Boolean);
 }
 
-// æ”¹é€²çš„æ­£å‰‡è¡¨é”å¼ï¼Œæ”¯æŒæ›´å¤šæ ¼å¼çš„ç”¢å“ä»£ç¢¼
+// §ï¶iªº¥¿«hªí¹F¦¡¡A¤ä«ù§ó¦h®æ¦¡ªº²£«~¥N½X
 const codePattern = /(?:[A-Z]{1,8}[\-]?\d{2,8}[A-Za-z\/]*)|(?:\b\d{8,14}\b)|(?:WS-\d+[A-Za-z\/]+)/;
 
 function byY(a: any, b: any) { return a.transform[5] - b.transform[5]; }
@@ -124,10 +124,10 @@ async function extractByPdfjs(buffer: Buffer): Promise<{ name: string; code: str
   const doc = await loadingTask.promise;
   const rows: { name: string; code: string; qty: number }[] = [];
 
-  console.log(`èª¿è©¦: PDFç¸½é æ•¸: ${doc.numPages}`);
+  console.log(`½Õ¸Õ: PDFÁ`­¶¼Æ: ${doc.numPages}`);
 
   for (let p = 1; p <= doc.numPages; p++) {
-    console.log(`èª¿è©¦: è™•ç†ç¬¬ ${p} é `);
+    console.log(`½Õ¸Õ: ³B²z²Ä ${p} ­¶`);
     const page = await doc.getPage(p);
     const content = await page.getTextContent();
     const items = content.items as any[];
@@ -142,7 +142,7 @@ async function extractByPdfjs(buffer: Buffer): Promise<{ name: string; code: str
       else { const L: any[] = [it]; (L as any)._y = y; lines.push(L); }
     }
 
-    console.log(`èª¿è©¦: ç¬¬ ${p} é ç¸½è¡Œæ•¸: ${lines.length}`);
+    console.log(`½Õ¸Õ: ²Ä ${p} ­¶Á`¦æ¼Æ: ${lines.length}`);
 
     let nameX: [number, number] | null = null;
     let codeX: [number, number] | null = null;
@@ -151,9 +151,9 @@ async function extractByPdfjs(buffer: Buffer): Promise<{ name: string; code: str
     for (const L of lines) {
       const text = L.map(t => t.str).join('');
       // Expanded header synonyms based on provided PDF formats
-      const nameHeadRegex = /(å•†å“è©³æƒ…|ç”¢å“æè¿°|å•†å“æè¿°|å•†å“åç¨±|å“å)/;
-      const codeHeadRegex = /(å‹è™Ÿ|æ¢ç¢¼è™Ÿç¢¼|æ¢ç¢¼|æ¢å½¢ç¢¼|æ¢ç¢¼ç·¨è™Ÿ|å‹è™Ÿç·¨è™Ÿ|è²¨è™Ÿ)/;
-      const qtyHeadRegex = /(æ•¸é‡|æ•¸ç›®|ç¸½å…±æ•¸é‡|åº«å­˜æ•¸é‡)/;
+      const nameHeadRegex = /(°Ó«~¸Ô±¡|²£«~´y­z|°Ó«~´y­z|°Ó«~¦WºÙ|«~¦W)/;
+      const codeHeadRegex = /(«¬¸¹|±ø½X¸¹½X|±ø½X|±ø§Î½X|±ø½X½s¸¹|«¬¸¹½s¸¹|³f¸¹)/;
+      const qtyHeadRegex = /(¼Æ¶q|¼Æ¥Ø|Á`¦@¼Æ¶q|®w¦s¼Æ¶q)/;
       const hasNameHead = nameHeadRegex.test(text);
       const hasCodeHead = codeHeadRegex.test(text);
       const hasQtyHead = qtyHeadRegex.test(text);
@@ -164,33 +164,33 @@ async function extractByPdfjs(buffer: Buffer): Promise<{ name: string; code: str
         const codeHead = parts.find(p => codeHeadRegex.test(p.s));
         const qtyHead = parts.find(p => qtyHeadRegex.test(p.s));
         if (nameHead && qtyHead) {
-          // If å‹è™Ÿåˆ—ç¼ºå¤±ï¼ŒcodeX å¯ç‚º nullï¼Œç¨å¾Œå¾ name ä¸­æå–
+          // If «¬¸¹¦C¯Ê¥¢¡AcodeX ¥i¬° null¡Aµy«á±q name ¤¤´£¨ú
           nameX = [nameHead.x - 2, (codeHead ? codeHead.x : qtyHead.x) - 2];
           codeX = codeHead ? [codeHead.x - 2, qtyHead.x - 2] : null as any;
-          // æ”¾å¯¬æ•¸é‡æ¬„å¯¬ï¼Œé¿å…é•·æ•¸å­—è¢«æˆªæ–·
+          // ©ñ¼e¼Æ¶qÄæ¼e¡AÁ×§Kªø¼Æ¦r³QºIÂ_
           qtyX = [qtyHead.x - 2, qtyHead.x + 260];
         }
-        console.log(`èª¿è©¦: æ‰¾åˆ°è¡¨é ­ï¼ŒnameX: ${nameX}, codeX: ${codeX}, qtyX: ${qtyX}`);
+        console.log(`½Õ¸Õ: §ä¨ìªíÀY¡AnameX: ${nameX}, codeX: ${codeX}, qtyX: ${qtyX}`);
         break;
       }
     }
 
     if (!nameX || !qtyX) {
-      console.log(`èª¿è©¦: ç¬¬ ${p} é æœªæ‰¾åˆ°è¡¨é ­ï¼Œè·³é`);
+      console.log(`½Õ¸Õ: ²Ä ${p} ­¶¥¼§ä¨ìªíÀY¡A¸õ¹L`);
       continue;
     }
 
     const headerIndex = lines.findIndex(L => {
       const t = L.map((t: any) => t.str).join('');
-      return /(å•†å“è©³æƒ…|ç”¢å“æè¿°|å•†å“æè¿°|å•†å“åç¨±|å“å)/.test(t) && /(æ•¸é‡|æ•¸ç›®|ç¸½å…±æ•¸é‡|åº«å­˜æ•¸é‡)/.test(t);
+      return /(°Ó«~¸Ô±¡|²£«~´y­z|°Ó«~´y­z|°Ó«~¦WºÙ|«~¦W)/.test(t) && /(¼Æ¶q|¼Æ¥Ø|Á`¦@¼Æ¶q|®w¦s¼Æ¶q)/.test(t);
     });
     
-    console.log(`èª¿è©¦: è¡¨é ­ç´¢å¼•: ${headerIndex}`);
+    console.log(`½Õ¸Õ: ªíÀY¯Á¤Ş: ${headerIndex}`);
     
     for (let i = headerIndex + 1; i < lines.length; i++) {
       const L = lines[i].slice().sort(byX);
       const lineText = L.map((t: any) => t.str).join('').trim();
-      if (!lineText || /å°è¨ˆ|åˆè¨ˆ|é‡‘é¡|å‚™è¨»|--END--/i.test(lineText)) break;
+      if (!lineText || /¤p­p|¦X­p|ª÷ÃB|³Æµù|--END--/i.test(lineText)) break;
 
       const inRange = (x: number, R: [number, number]) => x >= R[0] && x < R[1];
       const pick = (R: [number, number]) => L.filter(t => inRange(t.transform[4], R)).map((t: any) => t.str).join('').trim();
@@ -199,23 +199,23 @@ async function extractByPdfjs(buffer: Buffer): Promise<{ name: string; code: str
       const codeText = codeX ? pick(codeX) : '';
       const qtyText = pick(qtyX);
 
-      // å‹è™Ÿå¯å‡ºç¾åœ¨å‹è™Ÿåˆ—æˆ–å•†å“è©³æƒ…åˆ—å…§æ–‡ä¸­
+      // «¬¸¹¥i¥X²{¦b«¬¸¹¦C©Î°Ó«~¸Ô±¡¦C¤º¤å¤¤
       const codeSource = `${codeText} ${name}`.trim();
       
-      // æ·»åŠ è©³ç´°çš„èª¿è©¦ä¿¡æ¯
+      // ²K¥[¸Ô²Óªº½Õ¸Õ«H®§
       if (codeSource.includes('WS-409') || codeSource.includes('409')) {
-        console.log(`èª¿è©¦: æ‰¾åˆ°åŒ…å« WS-409 çš„è¡Œ ${i}: "${lineText}"`);
-        console.log(`èª¿è©¦: name: "${name}", codeText: "${codeText}", qtyText: "${qtyText}"`);
-        console.log(`èª¿è©¦: codeSource: "${codeSource}"`);
+        console.log(`½Õ¸Õ: §ä¨ì¥]§t WS-409 ªº¦æ ${i}: "${lineText}"`);
+        console.log(`½Õ¸Õ: name: "${name}", codeText: "${codeText}", qtyText: "${qtyText}"`);
+        console.log(`½Õ¸Õ: codeSource: "${codeSource}"`);
       }
       
       const codeMatch = codeSource.match(codePattern);
-      // æ•¸é‡å…è¨±æ›´å¤§ä½æ•¸ï¼ˆæœ€å¤š5ä½ï¼‰ï¼Œä¸”å„ªå…ˆå–æ•¸é‡æ¬„ä½çš„ç¬¬ä¸€å€‹æ•´æ•¸
+      // ¼Æ¶q¤¹³\§ó¤j¦ì¼Æ¡]³Ì¦h5¦ì¡^¡A¥BÀu¥ı¨ú¼Æ¶qÄæ¦ìªº²Ä¤@­Ó¾ã¼Æ
       const qtyMatch = qtyText.match(/\b(\d{1,5})\b/);
       const qty = qtyMatch ? parseInt(qtyMatch[1], 10) : 0;
       
       if (codeMatch) {
-        console.log(`èª¿è©¦: æ‰¾åˆ°ç”¢å“ä»£ç¢¼ "${codeMatch[0]}" åœ¨ç¬¬ ${i} è¡Œï¼Œæ•¸é‡: ${qty}`);
+        console.log(`½Õ¸Õ: §ä¨ì²£«~¥N½X "${codeMatch[0]}" ¦b²Ä ${i} ¦æ¡A¼Æ¶q: ${qty}`);
         if (qty > 0) {
           rows.push({ name, code: codeMatch[0], qty });
         }
@@ -223,8 +223,8 @@ async function extractByPdfjs(buffer: Buffer): Promise<{ name: string; code: str
     }
   }
 
-  console.log(`èª¿è©¦: PDFè§£æå®Œæˆï¼Œç¸½å…±æå–åˆ° ${rows.length} å€‹ç”¢å“`);
-  console.log(`èª¿è©¦: æå–çš„ç”¢å“ä»£ç¢¼:`, rows.map(r => r.code));
+  console.log(`½Õ¸Õ: PDF¸ÑªR§¹¦¨¡AÁ`¦@´£¨ú¨ì ${rows.length} ­Ó²£«~`);
+  console.log(`½Õ¸Õ: ´£¨úªº²£«~¥N½X:`, rows.map(r => r.code));
 
   try { await (doc as any).destroy(); } catch {}
   return rows;
@@ -232,10 +232,10 @@ async function extractByPdfjs(buffer: Buffer): Promise<{ name: string; code: str
 
 async function updateByCodeVariants(rawCode: string, qty: number, locationId: string, summary: any, direction: 'out' | 'in') {
   const variants = codeVariants(rawCode);
-  console.log(`èª¿è©¦: åŸå§‹ä»£ç¢¼ "${rawCode}" -> è®Šé«”:`, variants);
+  console.log(`½Õ¸Õ: ­ì©l¥N½X "${rawCode}" -> ÅÜÅé:`, variants);
   if (variants.length === 0) return;
   const product = await Product.findOne({ productCode: { $in: variants } });
-  console.log(`èª¿è©¦: æŸ¥è©¢çµæœ:`, product ? `æ‰¾åˆ°ç”¢å“ ${product.productCode}` : 'æœªæ‰¾åˆ°ç”¢å“');
+  console.log(`½Õ¸Õ: ¬d¸ßµ²ªG:`, product ? `§ä¨ì²£«~ ${product.productCode}` : '¥¼§ä¨ì²£«~');
   if (!product) { 
     summary.notFound.push(normalizeCode(rawCode)); 
     return; 
@@ -248,13 +248,13 @@ async function updateByCodeVariants(rawCode: string, qty: number, locationId: st
   summary.updated++;
 }
 
-// æ–°å¢ï¼šå¸¶å°ºå¯¸çš„ç”¢å“æ›´æ–°å‡½æ•¸
+// ·s¼W¡G±a¤Ø¤oªº²£«~§ó·s¨ç¼Æ
 async function updateByCodeVariantsWithSize(baseCode: string, size: string, qty: number, locationId: string, summary: any, direction: 'out' | 'in') {
   const variants = codeVariantsWithSize(baseCode, size);
-  console.log(`èª¿è©¦: åŸºç¤ä»£ç¢¼ "${baseCode}" å°ºå¯¸ "${size}" -> è®Šé«”:`, variants);
+  console.log(`½Õ¸Õ: °òÂ¦¥N½X "${baseCode}" ¤Ø¤o "${size}" -> ÅÜÅé:`, variants);
   if (variants.length === 0) return;
   const product = await Product.findOne({ productCode: { $in: variants } });
-  console.log(`èª¿è©¦: æŸ¥è©¢çµæœ:`, product ? `æ‰¾åˆ°ç”¢å“ ${product.productCode}` : 'æœªæ‰¾åˆ°ç”¢å“');
+  console.log(`½Õ¸Õ: ¬d¸ßµ²ªG:`, product ? `§ä¨ì²£«~ ${product.productCode}` : '¥¼§ä¨ì²£«~');
   if (!product) { 
     summary.notFound.push(normalizeCode(`${baseCode}${size}`)); 
     return; 
@@ -283,58 +283,58 @@ router.post('/outgoing', upload.array('files'), async (req, res) => {
         const text = data.text;
         if (text) {
           const lines = text.split(/\r?\n/).map((l: string) => l.trim()).filter(Boolean);
-          console.log(`èª¿è©¦: pdf-parse è§£æçµæœï¼Œç¸½è¡Œæ•¸: ${lines.length}`);
-          console.log(`èª¿è©¦: å‰10è¡Œå…§å®¹:`, lines.slice(0, 10));
+          console.log(`½Õ¸Õ: pdf-parse ¸ÑªRµ²ªG¡AÁ`¦æ¼Æ: ${lines.length}`);
+          console.log(`½Õ¸Õ: «e10¦æ¤º®e:`, lines.slice(0, 10));
           
-          // æŸ¥æ‰¾åŒ…å« WS-409 çš„è¡Œ
-          const ws409Lines = lines.filter(line => line.includes('WS-409'));
-          console.log(`èª¿è©¦: åŒ…å« WS-409 çš„è¡Œ:`, ws409Lines);
+          // ¬d§ä¥]§t WS-409 ªº¦æ
+          const ws409Lines = lines.filter((line: string) => line.includes('WS-409'));
+          console.log(`½Õ¸Õ: ¥]§t WS-409 ªº¦æ:`, ws409Lines);
           
-          // ä¿®å¾©çš„æ•¸é‡åŒ¹é…é‚è¼¯ - åŸºæ–¼PDFå¯¦éš›çµæ§‹ï¼ŒåŒ…å«å°ºå¯¸åŒ¹é…
+          // ­×´_ªº¼Æ¶q¤Ç°tÅŞ¿è - °ò©óPDF¹ê»Úµ²ºc¡A¥]§t¤Ø¤o¤Ç°t
           for (let i = 0; i < lines.length; i++) {
             const m = lines[i].match(codePattern);
             if (m) {
-              console.log(`èª¿è©¦: æ‰¾åˆ°ç”¢å“ä»£ç¢¼ "${m[0]}" åœ¨ç¬¬ ${i} è¡Œ: "${lines[i]}"`);
+              console.log(`½Õ¸Õ: §ä¨ì²£«~¥N½X "${m[0]}" ¦b²Ä ${i} ¦æ: "${lines[i]}"`);
               
-              // æª¢æŸ¥æ˜¯å¦ç‚ºå°ºå¯¸è¡Œï¼ˆå¦‚ "WS-409PBK/LB3XL 3XL"ï¼‰
+              // ÀË¬d¬O§_¬°¤Ø¤o¦æ¡]¦p "WS-409PBK/LB3XL 3XL"¡^
               const sizeInfo = extractSizeAndCode(lines[i]);
               if (sizeInfo) {
-                console.log(`èª¿è©¦: æ‰¾åˆ°å°ºå¯¸ä¿¡æ¯ - åŸºç¤ä»£ç¢¼: ${sizeInfo.baseCode}, å°ºå¯¸: ${sizeInfo.size}, æ•¸é‡: ${sizeInfo.quantity}`);
+                console.log(`½Õ¸Õ: §ä¨ì¤Ø¤o«H®§ - °òÂ¦¥N½X: ${sizeInfo.baseCode}, ¤Ø¤o: ${sizeInfo.size}, ¼Æ¶q: ${sizeInfo.quantity}`);
                 rows.push({ 
                   name: lines[i - 1] || '', 
                   code: sizeInfo.baseCode, 
                   qty: sizeInfo.quantity 
                 });
-                console.log(`èª¿è©¦: æ·»åŠ å¸¶å°ºå¯¸çš„ç”¢å“ "${sizeInfo.baseCode}" å°ºå¯¸ "${sizeInfo.size}" æ•¸é‡: ${sizeInfo.quantity}`);
+                console.log(`½Õ¸Õ: ²K¥[±a¤Ø¤oªº²£«~ "${sizeInfo.baseCode}" ¤Ø¤o "${sizeInfo.size}" ¼Æ¶q: ${sizeInfo.quantity}`);
               } else {
-                // åŸæœ‰çš„æ•¸é‡æå–é‚è¼¯
+                // ­ì¦³ªº¼Æ¶q´£¨úÅŞ¿è
                 let qty = 0;
                 let productName = '';
                 
-                // æª¢æŸ¥ç•¶å‰è¡Œæ˜¯å¦åŒ…å«å°ºå¯¸å’Œæ•¸é‡ï¼ˆå¦‚ "WS-409PBK/LB3XL 3XL"ï¼‰
+                // ÀË¬d·í«e¦æ¬O§_¥]§t¤Ø¤o©M¼Æ¶q¡]¦p "WS-409PBK/LB3XL 3XL"¡^
                 const sizeQtyMatch = lines[i].match(/(\d+)(XL|L|M|S|XS|XXS|2XL|3XL)\s+\d+/);
                 if (sizeQtyMatch) {
                   qty = parseInt(sizeQtyMatch[1], 10);
                   productName = lines[i - 1] || '';
-                  console.log(`èª¿è©¦: å¾å°ºå¯¸è¡Œæ‰¾åˆ°æ•¸é‡ ${qty} (${sizeQtyMatch[0]})`);
+                  console.log(`½Õ¸Õ: ±q¤Ø¤o¦æ§ä¨ì¼Æ¶q ${qty} (${sizeQtyMatch[0]})`);
                 } else {
-                  // æª¢æŸ¥ä¸‹ä¸€è¡Œæ˜¯å¦åŒ…å«å°ºå¯¸å’Œæ•¸é‡
+                  // ÀË¬d¤U¤@¦æ¬O§_¥]§t¤Ø¤o©M¼Æ¶q
                   for (let j = i + 1; j <= i + 3 && j < lines.length; j++) {
                     const nextLine = lines[j];
                     const nextSizeQtyMatch = nextLine.match(/(\d+)(XL|L|M|S|XS|XXS|2XL|3XL)\s+\d+/);
                     if (nextSizeQtyMatch) {
                       qty = parseInt(nextSizeQtyMatch[1], 10);
                       productName = lines[i - 1] || '';
-                      console.log(`èª¿è©¦: åœ¨ç¬¬ ${j} è¡Œæ‰¾åˆ°æ•¸é‡ ${qty} (${nextSizeQtyMatch[0]})`);
+                      console.log(`½Õ¸Õ: ¦b²Ä ${j} ¦æ§ä¨ì¼Æ¶q ${qty} (${nextSizeQtyMatch[0]})`);
                       break;
                     }
                     
-                    // æª¢æŸ¥æ˜¯å¦ç‚ºç´”æ•¸å­—è¡Œï¼ˆå¯èƒ½æ˜¯æ•¸é‡ï¼‰
+                    // ÀË¬d¬O§_¬°¯Â¼Æ¦r¦æ¡]¥i¯à¬O¼Æ¶q¡^
                     const pureNumberMatch = nextLine.match(/^\d{1,3}$/);
                     if (pureNumberMatch && parseInt(pureNumberMatch[0], 10) <= 100) {
                       qty = parseInt(pureNumberMatch[0], 10);
                       productName = lines[i - 1] || '';
-                      console.log(`èª¿è©¦: åœ¨ç¬¬ ${j} è¡Œæ‰¾åˆ°ç´”æ•¸å­—æ•¸é‡ ${qty}`);
+                      console.log(`½Õ¸Õ: ¦b²Ä ${j} ¦æ§ä¨ì¯Â¼Æ¦r¼Æ¶q ${qty}`);
                       break;
                     }
                   }
@@ -342,9 +342,9 @@ router.post('/outgoing', upload.array('files'), async (req, res) => {
                 
                 if (qty > 0) {
                   rows.push({ name: productName, code: m[0], qty });
-                  console.log(`èª¿è©¦: æ·»åŠ ç”¢å“ "${m[0]}" æ•¸é‡: ${qty}`);
+                  console.log(`½Õ¸Õ: ²K¥[²£«~ "${m[0]}" ¼Æ¶q: ${qty}`);
                 } else {
-                  console.log(`èª¿è©¦: ç”¢å“ "${m[0]}" æœªæ‰¾åˆ°æœ‰æ•ˆæ•¸é‡`);
+                  console.log(`½Õ¸Õ: ²£«~ "${m[0]}" ¥¼§ä¨ì¦³®Ä¼Æ¶q`);
                 }
               }
             }
@@ -358,7 +358,7 @@ router.post('/outgoing', upload.array('files'), async (req, res) => {
 
     res.json(summary);
   } catch (e) {
-    console.error('èª¿è©¦: outgoing éŒ¯èª¤:', e);
+    console.error('½Õ¸Õ: outgoing ¿ù»~:', e);
     res.status(500).json({ message: 'Failed to import outgoing', error: String(e) });
   }
 });
@@ -379,37 +379,37 @@ router.post('/incoming', upload.array('files'), async (req, res) => {
         const text = data.text;
         if (text) {
           const lines = text.split(/\r?\n/).map((l: string) => l.trim()).filter(Boolean);
-          console.log(`èª¿è©¦: pdf-parse è§£æçµæœï¼Œç¸½è¡Œæ•¸: ${lines.length}`);
-          console.log(`èª¿è©¦: å‰10è¡Œå…§å®¹:`, lines.slice(0, 10));
+          console.log(`½Õ¸Õ: pdf-parse ¸ÑªRµ²ªG¡AÁ`¦æ¼Æ: ${lines.length}`);
+          console.log(`½Õ¸Õ: «e10¦æ¤º®e:`, lines.slice(0, 10));
           
-          // æŸ¥æ‰¾åŒ…å« WS-409 çš„è¡Œ
-          const ws409Lines = lines.filter(line => line.includes('WS-409'));
-          console.log(`èª¿è©¦: åŒ…å« WS-409 çš„è¡Œ:`, ws409Lines);
+          // ¬d§ä¥]§t WS-409 ªº¦æ
+          const ws409Lines = lines.filter((line: string) => line.includes('WS-409'));
+          console.log(`½Õ¸Õ: ¥]§t WS-409 ªº¦æ:`, ws409Lines);
           
-          // æ–°å¢ï¼šå»é‡é‚è¼¯ - ä½¿ç”¨ Map ä¾†è¿½è¹¤å·²è™•ç†çš„ç”¢å“ï¼ˆåŸºç¤ä»£ç¢¼ + å°ºå¯¸ï¼‰
+          // ·s¼W¡G¥h­«ÅŞ¿è - ¨Ï¥Î Map ¨Ó°lÂÜ¤w³B²zªº²£«~¡]°òÂ¦¥N½X + ¤Ø¤o¡^
           const processedProducts = new Map<string, { baseCode: string; size: string; quantity: number }>();
           
-          // ä¿®å¾©çš„æ•¸é‡åŒ¹é…é‚è¼¯ - åŸºæ–¼PDFå¯¦éš›çµæ§‹ï¼ŒåŒ…å«å°ºå¯¸åŒ¹é…
+          // ­×´_ªº¼Æ¶q¤Ç°tÅŞ¿è - °ò©óPDF¹ê»Úµ²ºc¡A¥]§t¤Ø¤o¤Ç°t
           for (let i = 0; i < lines.length; i++) {
             const m = lines[i].match(codePattern);
             if (m) {
-              console.log(`èª¿è©¦: æ‰¾åˆ°ç”¢å“ä»£ç¢¼ "${m[0]}" åœ¨ç¬¬ ${i} è¡Œ: "${lines[i]}"`);
+              console.log(`½Õ¸Õ: §ä¨ì²£«~¥N½X "${m[0]}" ¦b²Ä ${i} ¦æ: "${lines[i]}"`);
               
-              // æª¢æŸ¥æ˜¯å¦ç‚ºå°ºå¯¸è¡Œï¼ˆå¦‚ "WS-409PBK/LB3XL 3XL"ï¼‰
+              // ÀË¬d¬O§_¬°¤Ø¤o¦æ¡]¦p "WS-409PBK/LB3XL 3XL"¡^
               const sizeInfo = extractSizeAndCode(lines[i]);
               if (sizeInfo) {
-                console.log(`èª¿è©¦: æ‰¾åˆ°å°ºå¯¸ä¿¡æ¯ - åŸºç¤ä»£ç¢¼: ${sizeInfo.baseCode}, å°ºå¯¸: ${sizeInfo.size}, æ•¸é‡: ${sizeInfo.quantity}`);
+                console.log(`½Õ¸Õ: §ä¨ì¤Ø¤o«H®§ - °òÂ¦¥N½X: ${sizeInfo.baseCode}, ¤Ø¤o: ${sizeInfo.size}, ¼Æ¶q: ${sizeInfo.quantity}`);
                 
-                // å‰µå»ºå”¯ä¸€çš„ç”¢å“æ¨™è­˜ç¬¦ï¼ˆåŸºç¤ä»£ç¢¼ + å°ºå¯¸ï¼‰
+                // ³Ğ«Ø°ß¤@ªº²£«~¼ĞÃÑ²Å¡]°òÂ¦¥N½X + ¤Ø¤o¡^
                 const productKey = `${sizeInfo.baseCode}_${sizeInfo.size}`;
                 
-                // æª¢æŸ¥æ˜¯å¦å·²ç¶“è™•ç†éé€™å€‹ç”¢å“
+                // ÀË¬d¬O§_¤w¸g³B²z¹L³o­Ó²£«~
                 if (processedProducts.has(productKey)) {
-                  console.log(`èª¿è©¦: è·³éé‡è¤‡çš„ç”¢å“ "${productKey}"`);
+                  console.log(`½Õ¸Õ: ¸õ¹L­«½Æªº²£«~ "${productKey}"`);
                   continue;
                 }
                 
-                // è¨˜éŒ„å·²è™•ç†çš„ç”¢å“
+                // °O¿ı¤w³B²zªº²£«~
                 processedProducts.set(productKey, {
                   baseCode: sizeInfo.baseCode,
                   size: sizeInfo.size,
@@ -421,52 +421,52 @@ router.post('/incoming', upload.array('files'), async (req, res) => {
                   code: sizeInfo.baseCode, 
                   qty: sizeInfo.quantity 
                 });
-                console.log(`èª¿è©¦: æ·»åŠ å¸¶å°ºå¯¸çš„ç”¢å“ "${sizeInfo.baseCode}" å°ºå¯¸ "${sizeInfo.size}" æ•¸é‡: ${sizeInfo.quantity}`);
+                console.log(`½Õ¸Õ: ²K¥[±a¤Ø¤oªº²£«~ "${sizeInfo.baseCode}" ¤Ø¤o "${sizeInfo.size}" ¼Æ¶q: ${sizeInfo.quantity}`);
               } else {
-                // åŸæœ‰çš„æ•¸é‡æå–é‚è¼¯
+                // ­ì¦³ªº¼Æ¶q´£¨úÅŞ¿è
                 let qty = 0;
                 let productName = '';
                 
-                // æª¢æŸ¥ç•¶å‰è¡Œæ˜¯å¦åŒ…å«å°ºå¯¸å’Œæ•¸é‡ï¼ˆå¦‚ "WS-409PBK/LB3XL 3XL"ï¼‰
+                // ÀË¬d·í«e¦æ¬O§_¥]§t¤Ø¤o©M¼Æ¶q¡]¦p "WS-409PBK/LB3XL 3XL"¡^
                 const sizeQtyMatch = lines[i].match(/(\d+)(XL|L|M|S|XS|XXS|2XL|3XL)\s+\d+/);
                 if (sizeQtyMatch) {
                   qty = parseInt(sizeQtyMatch[1], 10);
                   productName = lines[i - 1] || '';
-                  console.log(`èª¿è©¦: å¾å°ºå¯¸è¡Œæ‰¾åˆ°æ•¸é‡ ${qty} (${sizeQtyMatch[0]})`);
+                  console.log(`½Õ¸Õ: ±q¤Ø¤o¦æ§ä¨ì¼Æ¶q ${qty} (${sizeQtyMatch[0]})`);
                 } else {
-                  // æª¢æŸ¥ä¸‹ä¸€è¡Œæ˜¯å¦åŒ…å«å°ºå¯¸å’Œæ•¸é‡
+                  // ÀË¬d¤U¤@¦æ¬O§_¥]§t¤Ø¤o©M¼Æ¶q
                   for (let j = i + 1; j <= i + 3 && j < lines.length; j++) {
                     const nextLine = lines[j];
                     const nextSizeQtyMatch = nextLine.match(/(\d+)(XL|L|M|S|XS|XXS|2XL|3XL)\s+\d+/);
                     if (nextSizeQtyMatch) {
                       qty = parseInt(nextSizeQtyMatch[1], 10);
                       productName = lines[i - 1] || '';
-                      console.log(`èª¿è©¦: åœ¨ç¬¬ ${j} è¡Œæ‰¾åˆ°æ•¸é‡ ${qty} (${nextSizeQtyMatch[0]})`);
+                      console.log(`½Õ¸Õ: ¦b²Ä ${j} ¦æ§ä¨ì¼Æ¶q ${qty} (${nextSizeQtyMatch[0]})`);
                       break;
                     }
                     
-                    // æª¢æŸ¥æ˜¯å¦ç‚ºç´”æ•¸å­—è¡Œï¼ˆå¯èƒ½æ˜¯æ•¸é‡ï¼‰
+                    // ÀË¬d¬O§_¬°¯Â¼Æ¦r¦æ¡]¥i¯à¬O¼Æ¶q¡^
                     const pureNumberMatch = nextLine.match(/^\d{1,3}$/);
                     if (pureNumberMatch && parseInt(pureNumberMatch[0], 10) <= 100) {
                       qty = parseInt(pureNumberMatch[0], 10);
                       productName = lines[i - 1] || '';
-                      console.log(`èª¿è©¦: åœ¨ç¬¬ ${j} è¡Œæ‰¾åˆ°ç´”æ•¸å­—æ•¸é‡ ${qty}`);
+                      console.log(`½Õ¸Õ: ¦b²Ä ${j} ¦æ§ä¨ì¯Â¼Æ¦r¼Æ¶q ${qty}`);
                       break;
                     }
                   }
                 }
                 
                 if (qty > 0) {
-                  // å‰µå»ºå”¯ä¸€çš„ç”¢å“æ¨™è­˜ç¬¦ï¼ˆç”¢å“ä»£ç¢¼ï¼‰
+                  // ³Ğ«Ø°ß¤@ªº²£«~¼ĞÃÑ²Å¡]²£«~¥N½X¡^
                   const productKey = m[0];
                   
-                  // æª¢æŸ¥æ˜¯å¦å·²ç¶“è™•ç†éé€™å€‹ç”¢å“
+                  // ÀË¬d¬O§_¤w¸g³B²z¹L³o­Ó²£«~
                   if (processedProducts.has(productKey)) {
-                    console.log(`èª¿è©¦: è·³éé‡è¤‡çš„ç”¢å“ "${productKey}"`);
+                    console.log(`½Õ¸Õ: ¸õ¹L­«½Æªº²£«~ "${productKey}"`);
                     continue;
                   }
                   
-                  // è¨˜éŒ„å·²è™•ç†çš„ç”¢å“
+                  // °O¿ı¤w³B²zªº²£«~
                   processedProducts.set(productKey, {
                     baseCode: m[0],
                     size: '',
@@ -474,16 +474,16 @@ router.post('/incoming', upload.array('files'), async (req, res) => {
                   });
                   
                   rows.push({ name: productName, code: m[0], qty });
-                  console.log(`èª¿è©¦: æ·»åŠ ç”¢å“ "${m[0]}" æ•¸é‡: ${qty}`);
+                  console.log(`½Õ¸Õ: ²K¥[²£«~ "${m[0]}" ¼Æ¶q: ${qty}`);
                 } else {
-                  console.log(`èª¿è©¦: ç”¢å“ "${m[0]}" æœªæ‰¾åˆ°æœ‰æ•ˆæ•¸é‡`);
+                  console.log(`½Õ¸Õ: ²£«~ "${m[0]}" ¥¼§ä¨ì¦³®Ä¼Æ¶q`);
                 }
               }
             }
           }
           
-          console.log(`èª¿è©¦: å»é‡å¾Œç¸½å…±è™•ç†äº† ${processedProducts.size} å€‹å”¯ä¸€ç”¢å“`);
-          console.log(`èª¿è©¦: è™•ç†çš„ç”¢å“åˆ—è¡¨:`, Array.from(processedProducts.entries()));
+          console.log(`½Õ¸Õ: ¥h­««áÁ`¦@³B²z¤F ${processedProducts.size} ­Ó°ß¤@²£«~`);
+          console.log(`½Õ¸Õ: ³B²zªº²£«~¦Cªí:`, Array.from(processedProducts.entries()));
         }
       }
 
@@ -493,7 +493,7 @@ router.post('/incoming', upload.array('files'), async (req, res) => {
 
     res.json(summary);
   } catch (e) {
-    console.error('èª¿è©¦: incoming éŒ¯èª¤:', e);
+    console.error('½Õ¸Õ: incoming ¿ù»~:', e);
     res.status(500).json({ message: 'Failed to import incoming', error: String(e) });
   }
 });

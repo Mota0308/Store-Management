@@ -3,7 +3,6 @@ import mongoose from 'mongoose';
 
 const router = Router();
 
-// 產品類型模型
 const ProductTypeSchema = new mongoose.Schema({
   name: { type: String, required: true, unique: true },
   description: { type: String, default: '' }
@@ -14,10 +13,10 @@ const ProductType = mongoose.model('ProductType', ProductTypeSchema, 'productTyp
 // 獲取所有產品類型
 router.get('/', async (req, res) => {
   try {
-    const types = await ProductType.find().sort({ name: 1 });
-    res.json(types);
-  } catch (e) {
-    res.status(500).json({ message: 'Failed to fetch product types', error: String(e) });
+    const productTypes = await ProductType.find().sort({ name: 1 });
+    res.json(productTypes);
+  } catch (error) {
+    res.status(500).json({ message: 'Failed to fetch product types', error: String(error) });
   }
 });
 
@@ -29,39 +28,36 @@ router.post('/batch', async (req, res) => {
       return res.status(400).json({ message: 'Types array is required' });
     }
 
-    const validTypes = types
-      .map((t: any) => typeof t === 'string' ? t.trim() : '')
-      .filter((t: string) => t.length > 0);
+    const productTypes = [];
+    const errors = [];
 
-    if (validTypes.length === 0) {
-      return res.status(400).json({ message: 'No valid types provided' });
+    for (const typeName of types) {
+      if (typeof typeName !== 'string' || !typeName.trim()) {
+        errors.push(`Invalid type name: ${typeName}`);
+        continue;
+      }
+
+      try {
+        const productType = await ProductType.create({ name: typeName.trim() });
+        productTypes.push(productType);
+      } catch (error: any) {
+        if (error.code === 11000) {
+          errors.push(`Product type "${typeName}" already exists`);
+        } else {
+          errors.push(`Failed to create "${typeName}": ${error.message}`);
+        }
+      }
     }
 
-    // 檢查已存在的類型
-    const existingTypes = await ProductType.find({ name: { $in: validTypes } });
-    const existingNames = existingTypes.map(t => t.name);
-    const newTypes = validTypes.filter(name => !existingNames.includes(name));
-
-    if (newTypes.length === 0) {
-      return res.json({ 
-        message: 'All types already exist', 
-        created: 0, 
-        existing: existingNames 
-      });
-    }
-
-    // 創建新類型
-    const typeDocs = newTypes.map(name => ({ name, description: '' }));
-    const created = await ProductType.insertMany(typeDocs);
-
-    res.json({ 
-      message: `Created ${created.length} new product types`, 
-      created: created.length,
-      existing: existingNames,
-      newTypes: created.map(t => t.name)
+    const message = `Created ${productTypes.length} product types${errors.length > 0 ? `. Errors: ${errors.join(', ')}` : ''}`;
+    res.status(201).json({ 
+      message, 
+      created: productTypes.length, 
+      errors: errors.length,
+      productTypes 
     });
-  } catch (e) {
-    res.status(500).json({ message: 'Failed to create product types', error: String(e) });
+  } catch (error) {
+    res.status(500).json({ message: 'Failed to create product types', error: String(error) });
   }
 });
 
@@ -73,16 +69,13 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ message: 'Name is required' });
     }
 
-    const productType = await ProductType.create({ 
-      name: name.trim(), 
-      description: description || '' 
-    });
+    const productType = await ProductType.create({ name: name.trim(), description: description || '' });
     res.status(201).json(productType);
-  } catch (e) {
-    if (e.code === 11000) {
+  } catch (error: any) {
+    if (error.code === 11000) {
       res.status(400).json({ message: 'Product type already exists' });
     } else {
-      res.status(500).json({ message: 'Failed to create product type', error: String(e) });
+      res.status(500).json({ message: 'Failed to create product type', error: String(error) });
     }
   }
 });
@@ -91,13 +84,15 @@ router.post('/', async (req, res) => {
 router.delete('/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const result = await ProductType.findByIdAndDelete(id);
-    if (!result) {
+    const productType = await ProductType.findByIdAndDelete(id);
+    
+    if (!productType) {
       return res.status(404).json({ message: 'Product type not found' });
     }
+
     res.json({ message: 'Product type deleted successfully' });
-  } catch (e) {
-    res.status(500).json({ message: 'Failed to delete product type', error: String(e) });
+  } catch (error) {
+    res.status(500).json({ message: 'Failed to delete product type', error: String(error) });
   }
 });
 
