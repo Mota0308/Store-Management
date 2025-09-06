@@ -14,12 +14,14 @@ type Product = {
   inventories: { locationId: string; quantity: number }[]
 }
 
+type SortState = 'default' | 'asc' | 'desc'
+
 export default function Inventory() {
   const [locations, setLocations] = useState<Location[]>([])
   const [products, setProducts] = useState<Product[]>([])
   const [productTypes, setProductTypes] = useState<ProductType[]>([])
   const [editing, setEditing] = useState<Record<string, number>>({})
-  const [filters, setFilters] = useState({ q: '', code: '', locationId: '', productType: '', size: '', sortBy: '', sortOrder: 'desc' })
+  const [filters, setFilters] = useState({ q: '', code: '', productType: '', size: '', sortBy: '', sortOrder: 'desc' })
   const [deleteModal, setDeleteModal] = useState<{ isOpen: boolean; product: Product | null }>({ isOpen: false, product: null })
 
   // 下拉選項狀態
@@ -27,6 +29,9 @@ export default function Inventory() {
   const [codeSuggestions, setCodeSuggestions] = useState<string[]>([])
   const [showNameDropdown, setShowNameDropdown] = useState(false)
   const [showCodeDropdown, setShowCodeDropdown] = useState(false)
+
+  // 每個地點的排序狀態
+  const [locationSortStates, setLocationSortStates] = useState<Record<string, SortState>>({})
 
   useEffect(() => {
     api.get('/locations').then(r => setLocations(r.data))
@@ -46,7 +51,6 @@ export default function Inventory() {
     const params: any = {}
     if (filters.q) params.q = filters.q
     if (filters.code) params.productCode = filters.code
-    if (filters.locationId) params.locationId = filters.locationId
     if (filters.productType) params.productType = filters.productType
     if (filters.size) params.size = filters.size
     if (filters.sortBy) {
@@ -95,6 +99,55 @@ export default function Inventory() {
     if (Array.isArray(p.sizes) && p.sizes.length) return p.sizes.join(', ')
     if (p.size) return p.size
     return '-'
+  }
+
+  // 處理地點排序
+  const handleLocationSort = (locationId: string) => {
+    const currentState = locationSortStates[locationId] || 'default'
+    let nextState: SortState
+
+    switch (currentState) {
+      case 'default':
+        nextState = 'desc' // 高到低
+        break
+      case 'desc':
+        nextState = 'asc'  // 低到高
+        break
+      case 'asc':
+        nextState = 'default' // 恢復默認
+        break
+    }
+
+    setLocationSortStates(prev => ({ ...prev, [locationId]: nextState }))
+
+    // 根據排序狀態對產品進行排序
+    if (nextState === 'default') {
+      // 恢復默認排序，重新加載數據
+      load()
+    } else {
+      // 對當前產品列表進行排序
+      setProducts(prev => {
+        const sorted = [...prev].sort((a, b) => {
+          const aQty = getQty(a, locationId)
+          const bQty = getQty(b, locationId)
+          return nextState === 'desc' ? bQty - aQty : aQty - bQty
+        })
+        return sorted
+      })
+    }
+  }
+
+  // 獲取排序箭頭圖標
+  const getSortIcon = (locationId: string) => {
+    const state = locationSortStates[locationId] || 'default'
+    switch (state) {
+      case 'desc':
+        return '' // 向上箭頭
+      case 'asc':
+        return '' // 向下箭頭
+      default:
+        return '' // 雙向箭頭
+    }
   }
 
   async function save(p: Product) {
@@ -256,13 +309,6 @@ export default function Inventory() {
           </div>
         </div>
         <div className="field">
-          <div>門市地點</div>
-          <select className="select" value={filters.locationId} onChange={e => setFilters({ ...filters, locationId: e.target.value })}>
-            <option value="">全部</option>
-            {locations.map(l => <option key={l._id} value={l._id}>{l.name}</option>)}
-          </select>
-        </div>
-        <div className="field">
           <div>產品類型</div>
           <select className="select" value={filters.productType} onChange={e => setFilters({ ...filters, productType: e.target.value })}>
             <option value="">全部</option>
@@ -302,7 +348,37 @@ export default function Inventory() {
               <th>產品類型</th>
               <th>尺寸</th>
               {locations.map(l => (
-                <th key={l._id} className="right col-num">{l.name}</th>
+                <th key={l._id} className="right col-num">
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 4 }}>
+                    <span>{l.name}</span>
+                    <button
+                      onClick={() => handleLocationSort(l._id)}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        cursor: 'pointer',
+                        fontSize: '14px',
+                        color: '#6b7280',
+                        padding: '2px',
+                        borderRadius: '2px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        minWidth: '20px',
+                        height: '20px'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.backgroundColor = '#f3f4f6'
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.backgroundColor = 'transparent'
+                      }}
+                      title={`點擊排序：${locationSortStates[l._id] === 'default' ? '高到低' : locationSortStates[l._id] === 'desc' ? '低到高' : '恢復默認'}`}
+                    >
+                      {getSortIcon(l._id)}
+                    </button>
+                  </div>
+                </th>
               ))}
               <th></th>
             </tr>

@@ -1,7 +1,6 @@
 ﻿import { useEffect, useState } from 'react'
 import api from '../api'
 
-type Location = { _id: string; name: string }
 type ProductType = { _id: string; name: string; description?: string }
 type DraftProduct = {
   name: string
@@ -12,9 +11,7 @@ type DraftProduct = {
 }
 
 export default function AddProduct() {
-  const [locations, setLocations] = useState<Location[]>([])
   const [productTypes, setProductTypes] = useState<ProductType[]>([])
-  const [locationId, setLocationId] = useState('')
 
   const [imageUrl, setImageUrl] = useState<string | undefined>(undefined)
   const [uploading, setUploading] = useState(false)
@@ -33,7 +30,6 @@ export default function AddProduct() {
   const [deletingType, setDeletingType] = useState<string | null>(null)
 
   useEffect(() => {
-    api.get('/locations').then(r => setLocations(r.data))
     loadProductTypes()
   }, [])
 
@@ -103,18 +99,17 @@ export default function AddProduct() {
   }
 
   async function submitAll() {
-    if (!locationId) { alert('請先選擇門市地點'); return }
     if (queue.length === 0) { alert('清單為空'); return }
     
     for (const p of queue) {
-      // 將單個尺寸轉換為數組格式
+      // 將單個尺寸轉換為數組格式，不指定門市地點
       await api.post('/products', { 
         ...p, 
         sizes: [p.size],  // 轉換為數組格式
-        locationIds: [locationId] 
+        locationIds: []   // 不指定門市地點
       })
     }
-    alert(`已添加 ${queue.length} 項產品至所選門市`)
+    alert(`已添加 ${queue.length} 項產品`)
     setQueue([])
   }
 
@@ -175,7 +170,7 @@ export default function AddProduct() {
   return (
     <div className="card" style={{ maxWidth: 980, display: 'grid', gap: 16 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <h2 style={{ margin: 0 }}>添加產品（先選擇門市，後批量添加）</h2>
+        <h2 style={{ margin: 0 }}>添加產品</h2>
         <button 
           className="btn secondary" 
           onClick={() => setShowTypeModal(true)}
@@ -183,14 +178,6 @@ export default function AddProduct() {
         >
           添加產品類型
         </button>
-      </div>
-
-      <div className="label" style={{ maxWidth: 420 }}>
-        門市地點
-        <select className="select" value={locationId} onChange={e => setLocationId(e.target.value)} required>
-          <option value="">選擇地點</option>
-          {locations.map(l => <option key={l._id} value={l._id}>{l.name}</option>)}
-        </select>
       </div>
 
       <div className="card" style={{ border: '1px dashed #e5e7eb' }}>
@@ -326,7 +313,7 @@ export default function AddProduct() {
       </div>
 
       <div className="actions" style={{ justifyContent: 'flex-end' }}>
-        <button className="btn" onClick={submitAll} disabled={!locationId || queue.length === 0 || uploading}>添加到該門市</button>
+        <button className="btn" onClick={submitAll} disabled={queue.length === 0 || uploading}>添加產品</button>
       </div>
 
       {/* 產品類型添加模態框 */}
