@@ -1,6 +1,12 @@
-﻿// 在 imports.ts 中找到這兩行並修復：
-// 第290行附近：
-const ws409Lines = lines.filter((line: string) => line.includes('WS-409'));
-
-// 第386行附近：
-const ws409Lines = lines.filter((line: string) => line.includes('WS-409'));
+﻿  // 獲取排序箭頭圖標
+  const getSortIcon = (locationId: string) => {
+    const state = locationSortStates[locationId] || 'default'
+    switch (state) {
+      case 'desc':
+        return '' // 向上箭頭
+      case 'asc':
+        return '' // 向下箭頭
+      default:
+        return '' // 雙向箭頭
+    }
+  }
