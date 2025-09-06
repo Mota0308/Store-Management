@@ -594,6 +594,36 @@ export default function Inventory() {
         </div>
       )}
 
+      {transferOpen && (
+        <div className="modal-backdrop">
+          <div className="modal">
+            <div className="header">門市對調</div>
+            <div className="body">
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                <div>選擇起點</div>
+                <select className="select" value={transferState.fromLocationId} onChange={e => setTransferState(s => ({ ...s, fromLocationId: e.target.value }))}>
+                  <option value="">選擇起點</option>
+                  {locations.map(l => <option key={l._id} value={l._id}>{l.name}</option>)}
+                </select>
+                <div>選擇終點</div>
+                <select className="select" value={transferState.toLocationId} onChange={e => setTransferState(s => ({ ...s, toLocationId: e.target.value }))}>
+                  <option value="">選擇終點</option>
+                  {locations.map(l => <option key={l._id} value={l._id}>{l.name}</option>)}
+                </select>
+              </div>
+              <div style={{ marginTop: 16 }}>
+                <div>導入文檔</div>
+                <input multiple type="file" accept="application/pdf" onChange={e => setTransferState(s => ({ ...s, files: Array.from(e.target.files || []) }))} />
+              </div>
+            </div>
+            <div className="footer">
+              <button className="btn secondary" onClick={() => setTransferOpen(false)}>取消</button>
+              <button className="btn" onClick={doTransfer}>進行對調</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {importOpen && (
         <div className="modal-backdrop">
           <div className="modal">
