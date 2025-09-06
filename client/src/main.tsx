@@ -9,15 +9,11 @@ import './styles.css'
 const router = createBrowserRouter([
   {
     path: '/',
-    element: <App />
-  },
-  {
-    path: '/add',
-    element: <AddProduct />
-  },
-  {
-    path: '/inventory',
-    element: <Inventory />
+    element: <App />,
+    children: [
+      { index: true, element: <AddProduct /> },
+      { path: 'inventory', element: <Inventory /> }
+    ]
   }
 ])
 
