@@ -165,6 +165,32 @@ export default function Inventory() {
     return product.size || ''
   }
 
+  // 新增：按尺寸大小排序的函數
+  function sortProductsBySize(products: Product[]): Product[] {
+    return products.sort((a, b) => {
+      const aSize = getProductSize(a)
+      const bSize = getProductSize(b)
+      
+      // 提取數字進行比較
+      const aNumbers = aSize.match(/\d+/g) || []
+      const bNumbers = bSize.match(/\d+/g) || []
+      
+      // 如果都有數字，按第一個數字比較
+      if (aNumbers.length > 0 && bNumbers.length > 0) {
+        const aNum = parseInt(aNumbers[0] || '0')
+        const bNum = parseInt(bNumbers[0] || '0')
+        return aNum - bNum
+      }
+      
+      // 如果只有一個有數字，有數字的排在前面
+      if (aNumbers.length > 0 && bNumbers.length === 0) return -1
+      if (aNumbers.length === 0 && bNumbers.length > 0) return 1
+      
+      // 都沒有數字，按字符串比較
+      return aSize.localeCompare(bSize)
+    })
+  }
+
   // 修復版本：添加完整的 null 檢查
   function getQuantity(product: Product, locationId: string): number {
     if (!product.inventories || !Array.isArray(product.inventories)) {
@@ -413,7 +439,25 @@ async function handleDelete(product: Product) {
   }
 }
 
-// Group products by name and productCode
+// 新增：刪除整個商品組的函數
+async function handleDeleteGroup(group: ProductGroup) {
+  if (confirm(`確定要刪除整個商品組 "${group.name}" (${group.productCode}) 嗎？\n這將刪除該商品的所有尺寸變體，此操作不可撤銷！`)) {
+    try {
+      // 批量刪除該組的所有商品
+      const deletePromises = group.products.map(product => 
+        api.delete(`/products/${product._id}`)
+      )
+      
+      await Promise.all(deletePromises)
+      alert(`商品組 "${group.name}" 刪除成功，共刪除 ${group.products.length} 個商品`)
+      await load()
+    } catch (error: any) {
+      alert(`刪除失敗：${error.response?.data?.message || error.message}`)
+    }
+  }
+}
+
+// Group products by name and productCode，並按尺寸排序
 const groupedProducts = (filteredProducts || []).reduce((groups, product) => {
   const key = `${product.name}-${product.productCode}`
   if (!groups[key]) {
@@ -427,6 +471,11 @@ const groupedProducts = (filteredProducts || []).reduce((groups, product) => {
   groups[key].products.push(product)
   return groups
 }, {} as Record<string, ProductGroup>)
+
+// 對每個組內的產品按尺寸排序
+Object.values(groupedProducts).forEach(group => {
+  group.products = sortProductsBySize(group.products)
+})
 
 function toggleGroup(groupKey: string) {
   const newExpanded = new Set(expandedGroups)
@@ -487,15 +536,40 @@ return (
           </tr>
         </thead>
         <tbody>
-          {Object.values(groupedProducts).map((group: ProductGroup) => (
+          {Object.values(groupedProducts).map((group: ProductGroup, groupIndex) => (
             <React.Fragment key={group.key}>
-              <tr className="group-header" onClick={() => toggleGroup(group.key)}>
-                <td colSpan={locations.length + 4} style={{ cursor: 'pointer' }}>
+              <tr className="group-header" style={{ borderBottom: '2px solid #dc2626' }}>
+                <td colSpan={locations.length + 3} style={{ cursor: 'pointer' }} onClick={() => toggleGroup(group.key)}>
                   {expandedGroups.has(group.key) ? '▼' : '▶'} {group.name} ({group.productCode})
                 </td>
+                <td style={{ textAlign: 'center' }}>
+                  <button 
+                    className="btn danger" 
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      handleDeleteGroup(group)
+                    }}
+                    style={{ 
+                      backgroundColor: '#dc2626', 
+                      color: 'white', 
+                      border: 'none',
+                      padding: '4px 8px',
+                      borderRadius: '4px',
+                      cursor: 'pointer',
+                      fontSize: '12px'
+                    }}
+                  >
+                    刪除
+                  </button>
+                </td>
               </tr>
-              {expandedGroups.has(group.key) && group.products.map((product: Product) => (
-                <tr key={product._id}>
+              {expandedGroups.has(group.key) && group.products.map((product: Product, productIndex) => (
+                <tr 
+                  key={product._id} 
+                  style={{ 
+                    borderBottom: productIndex === group.products.length - 1 ? '2px solid #dc2626' : '1px solid #dc2626'
+                  }}
+                >
                   {editingProduct === product._id ? (
                     // 編輯模式
                     <>
