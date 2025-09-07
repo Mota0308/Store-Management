@@ -267,8 +267,8 @@ router.post('/excel', upload.array('files'), async (req, res) => {
           }
         }
         
-        // 檢查必需的列是否存在
-        if (!columnIndexes.productCode || !columnIndexes.productName || !columnIndexes.size) {
+        // 檢查必需的列是否存在 - 修復這裡！
+        if (columnIndexes.productCode === undefined || columnIndexes.productName === undefined || columnIndexes.size === undefined) {
           console.log('調試: 缺少必需列');
           continue;
         }
