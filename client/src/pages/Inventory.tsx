@@ -13,7 +13,7 @@ interface ProductType {
 }
 
 interface Inventory {
-  locationId: string
+  locationId: string | { _id: string; name: string } // 支持 populate 後的對象
   quantity: number
 }
 
@@ -167,7 +167,14 @@ export default function Inventory() {
     if (!product.inventories || !Array.isArray(product.inventories)) {
       return 0
     }
-    const inventory = product.inventories.find(inv => inv.locationId === locationId)
+    const inventory = product.inventories.find(inv => {
+      // 處理 populate 後的 locationId 對象
+      if (typeof inv.locationId === 'object' && inv.locationId !== null) {
+        return inv.locationId._id === locationId || inv.locationId._id.toString() === locationId
+      }
+      // 處理原始的 ObjectId 字符串
+      return inv.locationId === locationId || inv.locationId.toString() === locationId
+    })
     return inventory ? inventory.quantity : 0
   }
 
@@ -273,7 +280,7 @@ export default function Inventory() {
       size: getProductSize(product),
       price: product.price,
       inventories: (product.inventories || []).map(inv => ({
-        locationId: inv.locationId.toString(),
+        locationId: typeof inv.locationId === 'object' ? inv.locationId._id : inv.locationId.toString(),
         quantity: inv.quantity
       }))
     })
