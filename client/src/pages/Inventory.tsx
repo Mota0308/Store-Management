@@ -58,6 +58,8 @@ export default function Inventory() {
   const [excelImportOpen, setExcelImportOpen] = useState(false)
   const [excelImportState, setExcelImportState] = useState<{ files: File[] }>({ files: [] })
 
+  // 清零狀態
+  const [clearOpen, setClearOpen] = useState(false)
   // 編輯狀態
   const [editingProduct, setEditingProduct] = useState<string | null>(null)
   const [editForm, setEditForm] = useState<{
@@ -95,7 +97,7 @@ export default function Inventory() {
   }, [selectedType, searchTerm, sortBy, sortOrder])
 
   async function loadProductTypes() {
-    const response = await api.get('/product-types')
+      const response = await api.get('/product-types')
     setProductTypes(response.data || [])
   }
 
@@ -314,7 +316,41 @@ ${response.data.errors?.length > 0 ? '錯誤詳情:\n' + response.data.errors.sl
   }
 }
 
-  // 編輯和刪除處理函數
+// 清零所有商品數量
+async function doClearAll() {
+  if (!confirm('確定要清零所有商品的數量嗎？此操作不可撤銷！')) {
+    return
+  }
+  
+  try {
+    const response = await api.post('/import/clear-all')
+    
+    const resultMsg = `清零完成！
+    
+處理產品: ${response.data.processed}
+更新產品: ${response.data.updated}
+錯誤數量: ${response.data.errors?.length || 0}
+
+${response.data.errors?.length > 0 ? '錯誤詳情:\n' + response.data.errors.slice(0, 5).join('\n') + (response.data.errors.length > 5 ? '\n...' : '') : '無錯誤'}`
+    
+    alert(resultMsg)
+    setClearOpen(false)
+    await load()
+  } catch (error: any) {
+    console.error('清零錯誤:', error)
+    
+    let errorMsg = '清零失敗：'
+    if (error.response?.data?.message) {
+      errorMsg += error.response.data.message
+    } else {
+      errorMsg += error.message
+    }
+    
+    alert(errorMsg)
+  }
+}
+
+// 編輯和刪除處理函數
   function handleEdit(product: Product) {
     setEditingProduct(product._id)
     setEditForm({
@@ -358,7 +394,7 @@ ${response.data.errors?.length > 0 ? '錯誤詳情:\n' + response.data.errors.sl
       try {
         await api.delete(`/products/${product._id}`)
         alert('商品刪除成功')
-        await load()
+    await load()
       } catch (error: any) {
         alert(`刪除失敗：${error.response?.data?.message || error.message}`)
       }
@@ -415,6 +451,7 @@ ${response.data.errors?.length > 0 ? '錯誤詳情:\n' + response.data.errors.sl
         
         <div className="spacer" />
         <button className="btn" onClick={() => setExcelImportOpen(true)}>導入Excel</button>
+        <button className="btn" onClick={() => setClearOpen(true)}>清零</button>
         <button className="btn" onClick={() => setImportOpen(true)}>導入庫存</button>
         <button className="btn" onClick={() => setTransferOpen(true)}>門市對調</button>
       </div>
@@ -457,7 +494,7 @@ ${response.data.errors?.length > 0 ? '錯誤詳情:\n' + response.data.errors.sl
                             onChange={e => setEditForm(prev => ({ ...prev, name: e.target.value }))}
                             style={{ width: '100%', padding: '4px 8px', border: '1px solid #d1d5db', borderRadius: '4px' }}
                           />
-                        </td>
+                    </td>
                         <td>
                           <input
                             type="text"
@@ -465,7 +502,7 @@ ${response.data.errors?.length > 0 ? '錯誤詳情:\n' + response.data.errors.sl
                             onChange={e => setEditForm(prev => ({ ...prev, productCode: e.target.value }))}
                             style={{ width: '100%', padding: '4px 8px', border: '1px solid #d1d5db', borderRadius: '4px' }}
                           />
-                        </td>
+                    </td>
                         <td>
                           <input
                             type="text"
@@ -515,8 +552,8 @@ ${response.data.errors?.length > 0 ? '錯誤詳情:\n' + response.data.errors.sl
                           <div className="actions">
                             <button className="btn ghost" onClick={() => handleEdit(product)}>編輯</button>
                             <button className="btn ghost" onClick={() => handleDelete(product)}>刪除</button>
-                          </div>
-                        </td>
+                      </div>
+                    </td>
                       </>
                     )}
                   </tr>
@@ -617,6 +654,23 @@ ${response.data.errors?.length > 0 ? '錯誤詳情:\n' + response.data.errors.sl
             <div className="footer">
               <button className="btn secondary" onClick={() => setExcelImportOpen(false)}>取消</button>
               <button className="btn" onClick={doExcelImport}>進行導入</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 清零確認對話框 */}
+      {clearOpen && (
+        <div className="modal-backdrop">
+          <div className="modal">
+            <div className="header">清零所有商品數量</div>
+            <div className="body">
+              <p>⚠️ 警告：此操作將把所有商品的庫存數量設為0，此操作不可撤銷！</p>
+              <p>確定要繼續嗎？</p>
+            </div>
+            <div className="footer">
+              <button className="btn secondary" onClick={() => setClearOpen(false)}>取消</button>
+              <button className="btn danger" onClick={doClearAll}>確認清零</button>
             </div>
           </div>
         </div>

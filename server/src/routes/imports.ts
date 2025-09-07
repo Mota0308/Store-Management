@@ -167,7 +167,7 @@ router.post('/incoming', upload.array('files'), async (req, res) => {
       matched: 0, 
       created: 0,
       updated: 0, 
-      notFound: [] as string[],
+      notFound: [] as string[], 
       parsed: [] as any[],
       errors: [] as string[]
     };
@@ -182,12 +182,12 @@ router.post('/incoming', upload.array('files'), async (req, res) => {
         }
         
         if (rows.length === 0) {
-          const data = await pdf(file.buffer);
-          const text = data.text;
-          if (text) {
-            const lines = text.split(/\r?\n/).map((l: string) => l.trim()).filter(Boolean);
-            for (let i = 0; i < lines.length; i++) {
-              const m = lines[i].match(codePattern);
+      const data = await pdf(file.buffer);
+      const text = data.text;
+      if (text) {
+        const lines = text.split(/\r?\n/).map((l: string) => l.trim()).filter(Boolean);
+        for (let i = 0; i < lines.length; i++) {
+          const m = lines[i].match(codePattern);
               if (!m) continue;
               for (let j = i; j <= i + 6 && j < lines.length; j++) {
                 const q = lines[j].match(/\b(\d{1,5})\b/);
@@ -247,7 +247,7 @@ router.post('/outgoing', upload.array('files'), async (req, res) => {
       summary.parsed.push(rows.map(r => ({ name: r.name, code: normalizeCode(r.code), qty: r.qty })));
       for (const r of rows) await updateByCodeVariants(r.code, r.qty, locationId, summary, 'out');
     }
-
+    
     res.json(summary);
   } catch (e) {
     res.status(500).json({ message: 'Failed to import outgoing', error: String(e) });
@@ -274,7 +274,7 @@ router.post('/transfer', upload.array('files'), async (req, res) => {
       processed: 0,
       matched: 0, 
       updated: 0, 
-      notFound: [] as string[],
+      notFound: [] as string[], 
       parsed: [] as any[],
       errors: [] as string[]
     };
@@ -289,12 +289,12 @@ router.post('/transfer', upload.array('files'), async (req, res) => {
         }
         
         if (rows.length === 0) {
-          const data = await pdf(file.buffer);
-          const text = data.text;
-          if (text) {
-            const lines = text.split(/\r?\n/).map((l: string) => l.trim()).filter(Boolean);
-            for (let i = 0; i < lines.length; i++) {
-              const m = lines[i].match(codePattern);
+      const data = await pdf(file.buffer);
+      const text = data.text;
+      if (text) {
+        const lines = text.split(/\r?\n/).map((l: string) => l.trim()).filter(Boolean);
+        for (let i = 0; i < lines.length; i++) {
+          const m = lines[i].match(codePattern);
               if (!m) continue;
               for (let j = i; j <= i + 6 && j < lines.length; j++) {
                 const q = lines[j].match(/\b(\d{1,5})\b/);
@@ -588,8 +588,8 @@ router.post('/excel', upload.array('files'), async (req, res) => {
                     }
                   }
                 }
-                await product.save();
-                summary.updated++;
+              await product.save();
+              summary.updated++;
               } else {
                 // 創建新產品 - 添加重複檢查
                 // 再次檢查是否真的不存在（防止並發問題）
