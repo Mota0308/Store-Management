@@ -1,4 +1,4 @@
-﻿import express from 'express';
+import express from 'express';
 import multer from 'multer';
 import pdf from 'pdf-parse';
 import XLSX from 'xlsx';
@@ -533,19 +533,28 @@ router.post('/excel', upload.array('files'), async (req, res) => {
               
               summary.processed++;
               
-              // 查找現有產品 - 改進查詢邏輯
+              // 查找現有產品 - 改進查詢邏輯，避免重複創建
               let product = await Product.findOne({
                 $and: [
-                  { name: cleanProductName },
-                  { productCode: cleanProductCode },
+                  { productCode: cleanProductCode }, // 主要按產品代碼查找
                   {
                     $or: [
-                      { size: cleanSize },
+                      { size: cleanSize },           // 尺寸匹配
                       { sizes: { $in: [cleanSize] } }
                     ]
                   }
                 ]
               });
+
+              // 如果沒找到，再嘗試按名稱和代碼查找（更寬鬆的條件）
+              if (!product) {
+                product = await Product.findOne({
+                  $and: [
+                    { name: cleanProductName },
+                    { productCode: cleanProductCode }
+                  ]
+                });
+              }
               
               if (product) {
                 // 更新現有產品的庫存
@@ -582,63 +591,105 @@ router.post('/excel', upload.array('files'), async (req, res) => {
                 await product.save();
                 summary.updated++;
               } else {
-                // 創建新產品
-                summary.created++;
+                // 創建新產品 - 添加重複檢查
+                // 再次檢查是否真的不存在（防止並發問題）
+                const existingProduct = await Product.findOne({
+                  productCode: cleanProductCode
+                });
                 
-                // 確定產品類型 - 改進推測邏輯
-                let productType = '其他';
-                const nameLower = cleanProductName.toLowerCase();
-                if (nameLower.includes('保暖') || nameLower.includes('防寒') || nameLower.includes('羽絨')) {
-                  productType = '保暖衣';
-                } else if (nameLower.includes('抓毛') || nameLower.includes('fleece')) {
-                  productType = '抓毛';
-                } else if (nameLower.includes('上水') || nameLower.includes('防水')) {
-                  productType = '上水褸';
-                } else if (nameLower.includes('泳衣') || nameLower.includes('泳褲') || nameLower.includes('泳裝')) {
-                  productType = '泳裝';
-                } else if (nameLower.includes('t恤') || nameLower.includes('t-shirt') || nameLower.includes('短袖')) {
-                  productType = 'T恤';
-                }
-                
-                // 收集各門市的庫存
-                const inventories = [];
-                for (const locationName of ['觀塘', '灣仔', '荔枝角', '元朗', '國内倉']) {
-                  if (columnIndexes[locationName] !== undefined) {
-                    const quantityValue = row[columnIndexes[locationName]];
-                    let quantity = 0;
-                    
-                    // 改進數量解析
-                    if (quantityValue !== null && quantityValue !== undefined && quantityValue !== '') {
-                      const numValue = parseFloat(String(quantityValue));
-                      if (!isNaN(numValue) && numValue >= 0) {
-                        quantity = Math.floor(numValue); // 確保是整數
+                if (existingProduct) {
+                  // 如果存在，更新現有產品
+                  summary.matched++;
+                  for (const locationName of ['觀塘', '灣仔', '荔枝角', '元朗', '國内倉']) {
+                    if (columnIndexes[locationName] !== undefined) {
+                      const quantityValue = row[columnIndexes[locationName]];
+                      let quantity = 0;
+                      
+                      // 改進數量解析
+                      if (quantityValue !== null && quantityValue !== undefined && quantityValue !== '') {
+                        const numValue = parseFloat(String(quantityValue));
+                        if (!isNaN(numValue) && numValue >= 0) {
+                          quantity = Math.floor(numValue); // 確保是整數
+                        }
                       }
-                    }
-                    
-                    if (quantity > 0) {
-                      const locationId = locationMap[locationName];
-                      if (locationId) {
-                        inventories.push({
-                          locationId: new mongoose.Types.ObjectId(locationId),
-                          quantity: quantity
-                        });
+                      
+                      if (quantity > 0) {
+                        const locationId = locationMap[locationName];
+                        if (locationId) {
+                          let inventory = existingProduct.inventories.find((inv: any) => inv.locationId.toString() === locationId);
+                          if (inventory) {
+                            inventory.quantity += quantity;
+                          } else {
+                            existingProduct.inventories.push({
+                              locationId: new mongoose.Types.ObjectId(locationId),
+                              quantity: quantity
+                            });
+                          }
+                        }
                       }
                     }
                   }
+                  await existingProduct.save();
+                  summary.updated++;
+                } else {
+                  // 創建新產品
+                  summary.created++;
+                  
+                  // 確定產品類型 - 改進推測邏輯
+                  let productType = '其他';
+                  const nameLower = cleanProductName.toLowerCase();
+                  if (nameLower.includes('保暖') || nameLower.includes('防寒') || nameLower.includes('羽絨')) {
+                    productType = '保暖衣';
+                  } else if (nameLower.includes('抓毛') || nameLower.includes('fleece')) {
+                    productType = '抓毛';
+                  } else if (nameLower.includes('上水') || nameLower.includes('防水')) {
+                    productType = '上水褸';
+                  } else if (nameLower.includes('泳衣') || nameLower.includes('泳褲') || nameLower.includes('泳裝')) {
+                    productType = '泳裝';
+                  } else if (nameLower.includes('t恤') || nameLower.includes('t-shirt') || nameLower.includes('短袖')) {
+                    productType = 'T恤';
+                  }
+                  
+                  // 收集各門市的庫存
+                  const inventories = [];
+                  for (const locationName of ['觀塘', '灣仔', '荔枝角', '元朗', '國内倉']) {
+                    if (columnIndexes[locationName] !== undefined) {
+                      const quantityValue = row[columnIndexes[locationName]];
+                      let quantity = 0;
+                      
+                      // 改進數量解析
+                      if (quantityValue !== null && quantityValue !== undefined && quantityValue !== '') {
+                        const numValue = parseFloat(String(quantityValue));
+                        if (!isNaN(numValue) && numValue >= 0) {
+                          quantity = Math.floor(numValue); // 確保是整數
+                        }
+                      }
+                      
+                      if (quantity > 0) {
+                        const locationId = locationMap[locationName];
+                        if (locationId) {
+                          inventories.push({
+                            locationId: new mongoose.Types.ObjectId(locationId),
+                            quantity: quantity
+                          });
+                        }
+                      }
+                    }
+                  }
+                  
+                  // 創建新產品
+                  const newProduct = new Product({
+                    name: cleanProductName,
+                    productCode: cleanProductCode,
+                    productType: productType,
+                    size: cleanSize,
+                    price: 0,
+                    inventories: inventories
+                  });
+                  
+                  await newProduct.save();
+                  console.log(`調試: 創建新產品 - ${cleanProductName} (${cleanProductCode})`);
                 }
-                
-                // 創建新產品
-                const newProduct = new Product({
-                  name: cleanProductName,
-                  productCode: cleanProductCode,
-                  productType: productType,
-                  size: cleanSize,
-                  price: 0,
-                  inventories: inventories
-                });
-                
-                await newProduct.save();
-                console.log(`調試: 創建新產品 - ${cleanProductName} (${cleanProductCode})`);
               }
             } catch (rowError) {
               const errorMsg = `第${rowIndex+1}行處理錯誤: ${rowError}`;
