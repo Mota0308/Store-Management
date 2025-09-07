@@ -96,16 +96,17 @@ export default function Inventory() {
 
   async function loadProductTypes() {
     const response = await api.get('/product-types')
-    setProductTypes(response.data)
+    setProductTypes(response.data || [])
   }
 
   async function load() {
     const response = await api.get('/products')
-    setProducts(response.data)
+    // 修復：後端返回的是 { products: [...], pagination: {...} }
+    setProducts(response.data.products || [])
   }
 
   useEffect(() => {
-    let filtered = products
+    let filtered = products || [] // 添加安全檢查
 
     // Filter by product type
     if (selectedType) {
