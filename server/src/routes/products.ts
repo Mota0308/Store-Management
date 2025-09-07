@@ -36,7 +36,7 @@ router.post('/', async (req, res) => {
   }
 });
 
-// List with search/filter/sort and pagination
+// List with search/filter/sort - 移除分頁限制
 router.get('/', async (req, res) => {
   try {
     const { q, productCode, productType, size, locationId, sortBy, sortOrder } = req.query as Record<string, string>;
@@ -65,14 +65,9 @@ router.get('/', async (req, res) => {
       sort.createdAt = -1; // 默認按創建時間倒序
     }
 
-    const page = parseInt(req.query.page as string) || 1;
-    const limit = parseInt(req.query.limit as string) || 50;
-    const skip = (page - 1) * limit;
-
+    // 移除分頁限制，獲取所有商品
     const products = await Product.find(filter)
       .sort(sort)
-      .skip(skip)
-      .limit(limit)
       .populate('inventories.locationId', 'name');
 
     const total = await Product.countDocuments(filter);
@@ -80,10 +75,10 @@ router.get('/', async (req, res) => {
     res.json({
       products,
       pagination: {
-        page,
-        limit,
+        page: 1,
+        limit: total,
         total,
-        pages: Math.ceil(total / limit)
+        pages: 1
       }
     });
   } catch (e) {
