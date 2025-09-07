@@ -1,5 +1,6 @@
 ﻿import React, { useState, useEffect } from 'react'
 import api from '../api'
+import * as XLSX from 'xlsx'
 
 // 定義類型接口
 interface Location {
@@ -236,6 +237,56 @@ export default function Inventory() {
   function getSortIcon(column: string): string {
     if (sortBy !== column) return '↕'
     return sortOrder === 'asc' ? '↓' : '↑'
+  }
+
+  // 新增：導出Excel功能
+  function exportToExcel() {
+    try {
+      // 準備數據
+      const exportData = []
+      
+      // 添加表頭
+      const headers = ['編號', '產品', '尺寸', '觀塘', '灣仔', '荔枝角', '元朗', '國内倉']
+      exportData.push(headers)
+      
+      // 添加產品數據
+      Object.values(groupedProducts).forEach(group => {
+        // 對每個組內的產品按尺寸排序
+        const sortedProducts = sortProductsBySize([...group.products])
+        
+        sortedProducts.forEach(product => {
+          const row = [
+            product.productCode,
+            product.name,
+            getProductSize(product),
+            getQuantity(product, locations.find(l => l.name === '觀塘')?._id || ''),
+            getQuantity(product, locations.find(l => l.name === '灣仔')?._id || ''),
+            getQuantity(product, locations.find(l => l.name === '荔枝角')?._id || ''),
+            getQuantity(product, locations.find(l => l.name === '元朗')?._id || ''),
+            getQuantity(product, locations.find(l => l.name === '國内倉')?._id || '')
+          ]
+          exportData.push(row)
+        })
+      })
+      
+      // 創建工作簿
+      const ws = XLSX.utils.aoa_to_sheet(exportData)
+      const wb = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(wb, ws, '庫存報表')
+      
+      // 生成文件名
+      const now = new Date()
+      const timestamp = now.toISOString().slice(0, 19).replace(/:/g, '-')
+      const filename = `庫存報表_${timestamp}.xlsx`
+      
+      // 導出文件
+      XLSX.writeFile(wb, filename)
+      
+      alert('Excel文件導出成功！')
+    } catch (error) {
+      console.error('導出Excel失敗:', error)
+      alert('導出Excel失敗，請重試')
+    }
   }
 
   // 導入庫存功能
@@ -511,6 +562,7 @@ return (
       </div>
       
       <div className="spacer" />
+      <button className="btn" onClick={exportToExcel}>導出Excel</button>
       <button className="btn" onClick={() => setExcelImportOpen(true)}>導入Excel</button>
       <button className="btn" onClick={() => setClearOpen(true)}>清零</button>
       <button className="btn" onClick={() => setImportOpen(true)}>導入庫存</button>
