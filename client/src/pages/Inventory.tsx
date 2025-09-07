@@ -215,7 +215,8 @@ export default function Inventory() {
       form.append('locationId', importState.locationId)
       importState.files.forEach(f => form.append('files', f))
       
-      const response = await api.post('/import/incoming', form)
+      // 修復：根據type調用不同的API端點
+      const response = await api.post(`/import/${type}`, form)
       alert(`${type === 'incoming' ? '進貨' : '出貨'}完成\n處理:${response.data.processed}  匹配:${response.data.matched}  新增:${response.data.created}  更新:${response.data.updated}\n未找到: ${response.data.notFound?.join(', ') || '無'}`)
       setImportOpen(false)
       await load()
