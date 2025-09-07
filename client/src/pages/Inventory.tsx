@@ -58,6 +58,24 @@ export default function Inventory() {
   const [excelImportOpen, setExcelImportOpen] = useState(false)
   const [excelImportState, setExcelImportState] = useState<{ files: File[] }>({ files: [] })
 
+  // 編輯狀態
+  const [editingProduct, setEditingProduct] = useState<string | null>(null)
+  const [editForm, setEditForm] = useState<{
+    name: string
+    productCode: string
+    productType: string
+    size: string
+    price: number
+    inventories: Array<{ locationId: string; quantity: number }>
+  }>({
+    name: '',
+    productCode: '',
+    productType: '',
+    size: '',
+    price: 0,
+    inventories: []
+  })
+
   useEffect(() => {
     api.get('/locations').then((r: any) => {
       // 按照指定順序排序：觀塘，灣仔，荔枝角，元朗，國内倉
@@ -105,10 +123,13 @@ export default function Inventory() {
 
     // Sort products
     if (sortBy) {
-      filtered = filtered.sort((a, b) => {
+      filtered.sort((a, b) => {
         let aValue: any, bValue: any
-
-        if (sortBy === 'name') {
+        
+        if (sortBy === 'total') {
+          aValue = getTotalQuantity(a)
+          bValue = getTotalQuantity(b)
+        } else if (sortBy === 'name') {
           aValue = a.name
           bValue = b.name
         } else if (sortBy === 'productCode') {
@@ -117,62 +138,61 @@ export default function Inventory() {
         } else if (sortBy === 'size') {
           aValue = getProductSize(a)
           bValue = getProductSize(b)
-        } else if (sortBy === 'total') {
-          aValue = a.inventories.reduce((sum: number, inv: Inventory) => sum + inv.quantity, 0)
-          bValue = b.inventories.reduce((sum: number, inv: Inventory) => sum + inv.quantity, 0)
         } else {
-          // Sort by location quantity
-          const location = locations.find(l => l._id === sortBy)
-          if (location) {
-            const aInv = a.inventories.find((inv: Inventory) => inv.locationId === location._id)
-            const bInv = b.inventories.find((inv: Inventory) => inv.locationId === location._id)
-            aValue = aInv ? aInv.quantity : 0
-            bValue = bInv ? bInv.quantity : 0
-          }
+          // Location sorting
+          aValue = getQuantity(a, sortBy)
+          bValue = getQuantity(b, sortBy)
         }
-
-        if (aValue < bValue) return sortOrder === 'asc' ? -1 : 1
-        if (aValue > bValue) return sortOrder === 'asc' ? 1 : -1
-        return 0
+        
+        if (typeof aValue === 'string') {
+          return sortOrder === 'asc' ? aValue.localeCompare(bValue) : bValue.localeCompare(aValue)
+        } else {
+          return sortOrder === 'asc' ? aValue - bValue : bValue - aValue
+        }
       })
     }
 
     setFilteredProducts(filtered)
-  }, [products, selectedType, searchTerm, sortBy, sortOrder, locations])
+  }, [products, selectedType, searchTerm, sortBy, sortOrder])
+
+  function getProductSize(product: Product): string {
+    if (product.sizes && product.sizes.length > 0) {
+      return product.sizes.join(', ')
+    }
+    return product.size || ''
+  }
+
+  function getQuantity(product: Product, locationId: string): number {
+    const inventory = product.inventories.find(inv => inv.locationId === locationId)
+    return inventory ? inventory.quantity : 0
+  }
+
+  function getTotalQuantity(product: Product): number {
+    return product.inventories.reduce((sum, inv) => sum + inv.quantity, 0)
+  }
 
   function handleSort(column: string) {
     if (sortBy === column) {
       setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')
     } else {
       setSortBy(column)
-      setSortOrder('desc') // 默認從高到低排序
+      setSortOrder('desc')
     }
   }
 
-  function getSortIcon(column: string) {
+  function getSortIcon(column: string): string {
     if (sortBy !== column) return '↕'
     return sortOrder === 'asc' ? '↓' : '↑'
   }
 
-  function getProductSize(product: Product): string {
-    if (Array.isArray(product.sizes) && product.sizes.length) return product.sizes.join(', ')
-    if (product.size) return product.size
-    return '-'
-  }
-
-  function getQuantity(product: Product, locationId: string): number {
-    const inventory = product.inventories.find((inv: Inventory) => inv.locationId === locationId)
-    return inventory ? inventory.quantity : 0
-  }
-
-  function getTotalQuantity(product: Product): number {
-    return product.inventories.reduce((sum: number, inv: Inventory) => sum + inv.quantity, 0)
-  }
-
   // 導入庫存功能
-  async function doImport(mode: 'incoming' | 'outgoing') {
-    if (!importState.locationId || importState.files.length === 0) {
-      alert('請選擇門市和PDF檔案')
+  async function doImport(type: 'incoming' | 'outgoing') {
+    if (importState.locationId === '') {
+      alert('請選擇門市')
+      return
+    }
+    if (importState.files.length === 0) {
+      alert('請選擇PDF檔案')
       return
     }
     
@@ -181,19 +201,23 @@ export default function Inventory() {
       form.append('locationId', importState.locationId)
       importState.files.forEach(f => form.append('files', f))
       
-      const response = await api.post(`/import/${mode}`, form)
-      alert(`${mode === 'incoming' ? '進貨' : '出貨'}完成\n處理:${response.data.processed}  匹配:${response.data.matched}  更新:${response.data.updated}\n未找到: ${response.data.notFound?.join(', ') || '無'}`)
+      const response = await api.post('/import/incoming', form)
+      alert(`${type === 'incoming' ? '進貨' : '出貨'}完成\n處理:${response.data.processed}  匹配:${response.data.matched}  新增:${response.data.created}  更新:${response.data.updated}\n未找到: ${response.data.notFound?.join(', ') || '無'}`)
       setImportOpen(false)
       await load()
     } catch (error: any) {
-      alert(`${mode === 'incoming' ? '進貨' : '出貨'}失敗：${error.response?.data?.message || error.message}`)
+      alert(`${type === 'incoming' ? '進貨' : '出貨'}失敗：${error.response?.data?.message || error.message}`)
     }
   }
 
   // 門市對調功能
   async function doTransfer() {
-    if (!transferState.fromLocationId || !transferState.toLocationId || transferState.files.length === 0) {
-      alert('請選擇來源門市、目標門市和PDF檔案')
+    if (transferState.fromLocationId === '' || transferState.toLocationId === '') {
+      alert('請選擇來源門市和目標門市')
+      return
+    }
+    if (transferState.files.length === 0) {
+      alert('請選擇PDF檔案')
       return
     }
     
@@ -229,6 +253,57 @@ export default function Inventory() {
       await load()
     } catch (error: any) {
       alert(`Excel導入失敗：${error.response?.data?.message || error.message}`)
+    }
+  }
+
+  // 編輯和刪除處理函數
+  function handleEdit(product: Product) {
+    setEditingProduct(product._id)
+    setEditForm({
+      name: product.name,
+      productCode: product.productCode,
+      productType: product.productType,
+      size: getProductSize(product),
+      price: product.price,
+      inventories: product.inventories.map(inv => ({
+        locationId: inv.locationId.toString(),
+        quantity: inv.quantity
+      }))
+    })
+  }
+
+  function handleCancelEdit() {
+    setEditingProduct(null)
+    setEditForm({
+      name: '',
+      productCode: '',
+      productType: '',
+      size: '',
+      price: 0,
+      inventories: []
+    })
+  }
+
+  async function handleSaveEdit(productId: string) {
+    try {
+      const response = await api.put(`/products/${productId}`, editForm)
+      alert('商品更新成功')
+      setEditingProduct(null)
+      await load()
+    } catch (error: any) {
+      alert(`更新失敗：${error.response?.data?.message || error.message}`)
+    }
+  }
+
+  async function handleDelete(product: Product) {
+    if (confirm(`確定要刪除產品 "${product.name}" 嗎？`)) {
+      try {
+        await api.delete(`/products/${product._id}`)
+        alert('商品刪除成功')
+        await load()
+      } catch (error: any) {
+        alert(`刪除失敗：${error.response?.data?.message || error.message}`)
+      }
     }
   }
 
@@ -301,25 +376,91 @@ export default function Inventory() {
               <th onClick={() => handleSort('total')} style={{ cursor: 'pointer' }}>
                 總計 {getSortIcon('total')}
               </th>
+              <th>操作</th>
             </tr>
           </thead>
           <tbody>
             {Object.values(groupedProducts).map((group: ProductGroup) => (
               <React.Fragment key={group.key}>
                 <tr className="group-header" onClick={() => toggleGroup(group.key)}>
-                  <td colSpan={locations.length + 3} style={{ cursor: 'pointer' }}>
+                  <td colSpan={locations.length + 4} style={{ cursor: 'pointer' }}>
                     {expandedGroups.has(group.key) ? '▼' : '▶'} {group.name} ({group.productCode})
                   </td>
                 </tr>
                 {expandedGroups.has(group.key) && group.products.map((product: Product) => (
                   <tr key={product._id}>
-                    <td>{product.name}</td>
-                    <td>{product.productCode}</td>
-                    <td>{getProductSize(product)}</td>
-                    {locations.map(location => (
-                      <td key={location._id}>{getQuantity(product, location._id)}</td>
-                    ))}
-                    <td>{getTotalQuantity(product)}</td>
+                    {editingProduct === product._id ? (
+                      // 編輯模式
+                      <>
+                        <td>
+                          <input
+                            type="text"
+                            value={editForm.name}
+                            onChange={e => setEditForm(prev => ({ ...prev, name: e.target.value }))}
+                            style={{ width: '100%', padding: '4px 8px', border: '1px solid #d1d5db', borderRadius: '4px' }}
+                          />
+                        </td>
+                        <td>
+                          <input
+                            type="text"
+                            value={editForm.productCode}
+                            onChange={e => setEditForm(prev => ({ ...prev, productCode: e.target.value }))}
+                            style={{ width: '100%', padding: '4px 8px', border: '1px solid #d1d5db', borderRadius: '4px' }}
+                          />
+                        </td>
+                        <td>
+                          <input
+                            type="text"
+                            value={editForm.size}
+                            onChange={e => setEditForm(prev => ({ ...prev, size: e.target.value }))}
+                            style={{ width: '100%', padding: '4px 8px', border: '1px solid #d1d5db', borderRadius: '4px' }}
+                          />
+                        </td>
+                        {locations.map(location => {
+                          const inventory = editForm.inventories.find(inv => inv.locationId === location._id)
+                          return (
+                            <td key={location._id}>
+                              <input
+                                type="number"
+                                value={inventory?.quantity || 0}
+                                onChange={e => {
+                                  const newInventories = editForm.inventories.filter(inv => inv.locationId !== location._id)
+                                  if (parseInt(e.target.value) > 0) {
+                                    newInventories.push({ locationId: location._id, quantity: parseInt(e.target.value) })
+                                  }
+                                  setEditForm(prev => ({ ...prev, inventories: newInventories }))
+                                }}
+                                style={{ width: '100%', padding: '4px 8px', border: '1px solid #d1d5db', borderRadius: '4px' }}
+                              />
+                            </td>
+                          )
+                        })}
+                        <td>{editForm.inventories.reduce((sum, inv) => sum + inv.quantity, 0)}</td>
+                        <td>
+                          <div className="actions">
+                            <button className="btn" onClick={() => handleSaveEdit(product._id)}>保存</button>
+                            <button className="btn secondary" onClick={handleCancelEdit}>取消</button>
+                          </div>
+                        </td>
+                      </>
+                    ) : (
+                      // 顯示模式
+                      <>
+                        <td>{product.name}</td>
+                        <td>{product.productCode}</td>
+                        <td>{getProductSize(product)}</td>
+                        {locations.map(location => (
+                          <td key={location._id}>{getQuantity(product, location._id)}</td>
+                        ))}
+                        <td>{getTotalQuantity(product)}</td>
+                        <td>
+                          <div className="actions">
+                            <button className="btn ghost" onClick={() => handleEdit(product)}>編輯</button>
+                            <button className="btn ghost" onClick={() => handleDelete(product)}>刪除</button>
+                          </div>
+                        </td>
+                      </>
+                    )}
                   </tr>
                 ))}
               </React.Fragment>

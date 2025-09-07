@@ -79,13 +79,51 @@ table tr:hover td { background: #fafbff; }
 .toolbar .btn { margin-left: 8px; }
 .toolbar .btn:first-child { margin-left: 0; }
 
-
-
 /* 表格列寬度優化 */
 table th:nth-child(1), table td:nth-child(1) { width: 300px; min-width: 300px; } /* 產品名稱 */
 table th:nth-child(2), table td:nth-child(2) { width: 120px; min-width: 120px; } /* 編號 */
 table th:nth-child(3), table td:nth-child(3) { width: 80px; min-width: 80px; } /* 尺寸 */
 table th:nth-child(n+4), table td:nth-child(n+4) { width: 100px; min-width: 100px; text-align: center; } /* 門市列和總計 */
+
+/* 操作列樣式 */
+table th:last-child, table td:last-child { 
+  width: 120px; 
+  min-width: 120px; 
+  text-align: center; 
+}
+
+/* 操作按鈕容器 */
+.actions { 
+  display: flex; 
+  gap: 6px; 
+  justify-content: center; 
+  align-items: center;
+}
+
+/* 操作按鈕樣式 */
+.btn.ghost { 
+  padding: 4px 8px; 
+  font-size: 12px; 
+  height: 28px; 
+  min-width: 50px;
+}
+
+/* 編輯模式輸入框樣式 */
+table input[type="text"], 
+table input[type="number"] {
+  width: 100%;
+  padding: 4px 8px;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  font-size: 14px;
+  outline: none;
+}
+
+table input[type="text"]:focus, 
+table input[type="number"]:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 2px rgba(37,99,235,.15);
+}
 
 /* 確保表格內容可見 */
 .table-container::-webkit-scrollbar { height: 8px; }

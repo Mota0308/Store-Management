@@ -48,105 +48,76 @@ router.get('/', async (req, res) => {
       filter.productCode = { $regex: productCode, $options: 'i' };
     }
     if (productType) filter.productType = productType;
-    if (size) filter.sizes = size;
-    if (locationId) filter['inventories.locationId'] = locationId;
+    if (size) {
+      filter.$or = [
+        { size: size },
+        { sizes: { $in: [size] } }
+      ];
+    }
+    if (locationId) {
+      filter['inventories.locationId'] = new mongoose.Types.ObjectId(locationId);
+    }
 
     const sort: any = {};
-    if (sortBy === 'price') sort.price = sortOrder === 'asc' ? 1 : -1;
-    if (sortBy === 'quantity') sort['inventories.quantity'] = sortOrder === 'asc' ? 1 : -1;
+    if (sortBy) {
+      sort[sortBy] = sortOrder === 'desc' ? -1 : 1;
+    } else {
+      sort.createdAt = -1; // 默認按創建時間倒序
+    }
 
-    console.log('查詢商品 - 過濾條件:', filter);
-    console.log('MongoDB 連接狀態:', mongoose.connection.readyState);
-    console.log('數據庫名稱:', mongoose.connection.db?.databaseName);
-    
-    const products = await Product.find(filter).sort(sort);
-    console.log(`找到 ${products.length} 個商品`);
-    
-    res.json(products);
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 50;
+    const skip = (page - 1) * limit;
+
+    const products = await Product.find(filter)
+      .sort(sort)
+      .skip(skip)
+      .limit(limit)
+      .populate('inventories.locationId', 'name');
+
+    const total = await Product.countDocuments(filter);
+
+    res.json({
+      products,
+      pagination: {
+        page,
+        limit,
+        total,
+        pages: Math.ceil(total / limit)
+      }
+    });
   } catch (e) {
     console.error('查詢商品失敗:', e);
-    res.status(500).json({ message: 'Failed to list', error: String(e) });
+    res.status(500).json({ message: 'Failed to fetch products', error: String(e) });
   }
 });
 
 // Get single product
 router.get('/:id', async (req, res) => {
   try {
-    const { id } = req.params;
-    const product = await Product.findById(id);
-    if (!product) return res.status(404).json({ message: 'Product not found' });
-    res.json(product);
-  } catch (e) {
-    res.status(500).json({ message: 'Failed to get product', error: String(e) });
-  }
-});
-
-// Update product
-router.put('/:id', async (req, res) => {
-  try {
-    const { id } = req.params;
-    const product = await Product.findByIdAndUpdate(id, req.body, { new: true });
-    if (!product) return res.status(404).json({ message: 'Product not found' });
-    res.json(product);
-  } catch (e) {
-    res.status(500).json({ message: 'Failed to update product', error: String(e) });
-  }
-});
-
-// Delete product
-router.delete('/:id', async (req, res) => {
-  try {
-    const { id } = req.params;
-    console.log('收到刪除請求，商品ID:', id);
-    console.log('MongoDB 連接狀態:', mongoose.connection.readyState);
-    console.log('數據庫名稱:', mongoose.connection.db?.databaseName);
-    
-    // 先檢查商品是否存在
-    const existingProduct = await Product.findById(id);
-    if (!existingProduct) {
-      console.log('商品不存在:', id);
+    const product = await Product.findById(req.params.id).populate('inventories.locationId', 'name');
+    if (!product) {
       return res.status(404).json({ message: 'Product not found' });
     }
-    
-    console.log('找到商品:', existingProduct.name, existingProduct.productCode);
-    
-    // 使用 deleteOne 而不是 findByIdAndDelete，並強制刷新
-    const deleteResult = await Product.deleteOne({ _id: id });
-    console.log('刪除結果:', deleteResult);
-    
-    if (deleteResult.deletedCount === 0) {
-      console.log('刪除失敗，沒有文檔被刪除');
-      return res.status(404).json({ message: 'Product not found' });
-    }
-    
-    console.log('成功刪除商品:', existingProduct.name, existingProduct.productCode);
-    
-    // 強制刷新連接
-    await mongoose.connection.db?.admin().ping();
-    
-    // 驗證商品是否真的被刪除
-    const verifyDeleted = await Product.findById(id);
-    console.log('驗證刪除結果:', verifyDeleted ? '仍然存在' : '已刪除');
-    
-    res.json({ message: 'Product deleted successfully', deletedProduct: { name: existingProduct.name, productCode: existingProduct.productCode } });
+    res.json(product);
   } catch (e) {
-    console.error('刪除商品時發生錯誤:', e);
-    res.status(500).json({ message: 'Failed to delete product', error: String(e) });
+    res.status(500).json({ message: 'Failed to fetch product', error: String(e) });
   }
 });
 
-// Update inventory quantities for a product per location
+// Update inventory
 router.patch('/:id/inventory', async (req, res) => {
   try {
-    const { id } = req.params;
     const { locationId, quantity, quantities } = req.body;
-    const product = await Product.findById(id);
-    if (!product) return res.status(404).json({ message: 'Product not found' });
-
+    const product = await Product.findById(req.params.id);
+    if (!product) {
+      return res.status(404).json({ message: 'Product not found' });
+    }
+    
+    // 支持批量更新（新功能）
     if (quantities && Array.isArray(quantities)) {
-      // 支持批量更新
       for (const { locationId: locId, quantity: qty } of quantities) {
-        if (typeof locId === 'string' && typeof qty === 'number') {
+        if (locId && typeof qty === 'number') {
           const inv = product.inventories.find(i => String(i.locationId) === String(locId));
           if (inv) {
             inv.quantity = qty;
@@ -168,6 +139,66 @@ router.patch('/:id/inventory', async (req, res) => {
     res.json(product);
   } catch (e) {
     res.status(500).json({ message: 'Failed to update inventory', error: String(e) });
+  }
+});
+
+// Update product
+router.put('/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, productCode, productType, size, price, inventories } = req.body;
+    
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ message: 'Invalid product ID' });
+    }
+    
+    const product = await Product.findById(id);
+    if (!product) {
+      return res.status(404).json({ message: 'Product not found' });
+    }
+    
+    // 更新產品基本信息
+    if (name !== undefined) product.name = name;
+    if (productCode !== undefined) product.productCode = productCode;
+    if (productType !== undefined) product.productType = productType;
+    if (size !== undefined) product.sizes = size;
+    if (price !== undefined) product.price = price;
+    
+    // 更新庫存信息
+    if (inventories && Array.isArray(inventories)) {
+      product.inventories = inventories.map((inv: any) => ({
+        locationId: new mongoose.Types.ObjectId(inv.locationId),
+        quantity: inv.quantity
+      }));
+    }
+    
+    await product.save();
+    res.json(product);
+  } catch (e) {
+    console.error('更新商品失敗:', e);
+    res.status(500).json({ message: 'Failed to update product', error: String(e) });
+  }
+});
+
+// Delete product
+router.delete('/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ message: 'Invalid product ID' });
+    }
+    
+    const product = await Product.findById(id);
+    if (!product) {
+      return res.status(404).json({ message: 'Product not found' });
+    }
+    
+    await Product.findByIdAndDelete(id);
+    res.json({ message: 'Product deleted successfully' });
+  } catch (e) {
+    console.error('刪除商品失敗:', e);
+    res.status(500).json({ message: 'Failed to delete product', error: String(e) });
   }
 });
 
