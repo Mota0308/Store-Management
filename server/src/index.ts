@@ -32,7 +32,11 @@ if (process.env.NODE_ENV === 'production') {
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb+srv://chenyaolin0308:9GUhZvnuEpAA1r6c@cluster0.0dhi0qc.mongodb.net/Storage?retryWrites=true&w=majority&appName=Cluster0';
 
 async function seedLocations() {
-  const names = ['觀塘', '荔枝角', '元朗', '灣仔', '國内倉'];
+  // 刪除屯門數據
+  await Location.deleteMany({ name: '屯門' });
+  console.log('已刪除屯門數據');
+  
+  const names = ['觀塘', '灣仔', '荔枝角', '元朗', '國内倉'];
   for (const name of names) {
     const existing = await Location.findOne({ name });
     if (!existing) {
@@ -119,4 +123,5 @@ async function start() {
 }
 
 start();
+
 
