@@ -13,7 +13,7 @@ interface ProductType {
 }
 
 interface Inventory {
-  locationId: string | { _id: string; name: string } // 支持 populate 後的對象
+  locationId: string | { _id: string; name: string } | null // 添加 null 支持
   quantity: number
 }
 
@@ -165,17 +165,28 @@ export default function Inventory() {
     return product.size || ''
   }
 
+  // 修復版本：添加完整的 null 檢查
   function getQuantity(product: Product, locationId: string): number {
     if (!product.inventories || !Array.isArray(product.inventories)) {
       return 0
     }
     const inventory = product.inventories.find(inv => {
+      // 檢查 locationId 是否為 null 或 undefined
+      if (!inv.locationId) {
+        return false
+      }
+      
       // 處理 populate 後的 locationId 對象
       if (typeof inv.locationId === 'object' && inv.locationId !== null) {
         return inv.locationId._id === locationId || inv.locationId._id.toString() === locationId
       }
-      // 處理原始的 ObjectId 字符串
-      return inv.locationId === locationId || inv.locationId.toString() === locationId
+      
+      // 處理原始的 ObjectId 字符串，添加 null 檢查
+      if (inv.locationId && typeof inv.locationId === 'string') {
+        return inv.locationId === locationId || inv.locationId.toString() === locationId
+      }
+      
+      return false
     })
     return inventory ? inventory.quantity : 0
   }
@@ -253,7 +264,6 @@ export default function Inventory() {
     }
   }
 
-  // Excel導入功能
   // Excel導入功能 - 完全修復版本
 async function doExcelImport() {
   if (excelImportState.files.length === 0) {
@@ -360,7 +370,7 @@ ${response.data.errors?.length > 0 ? '錯誤詳情:\n' + response.data.errors.sl
       size: getProductSize(product),
       price: product.price,
       inventories: (product.inventories || []).map(inv => ({
-        locationId: typeof inv.locationId === 'object' ? inv.locationId._id : inv.locationId.toString(),
+        locationId: typeof inv.locationId === 'object' ? inv.locationId._id : (inv.locationId || '').toString(),
         quantity: inv.quantity
       }))
     })
