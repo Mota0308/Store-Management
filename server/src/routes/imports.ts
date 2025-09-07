@@ -299,20 +299,41 @@ router.post('/excel', upload.array('files'), async (req, res) => {
         
         // 獲取標題行
         const headers = data[0] as string[];
-        const requiredColumns = ['商品詳情', '型號', '商品選項', '觀塘', '灣仔', '荔枝角', '元朗', '國内倉'];
+        console.log('調試: Excel標題行:', headers);
         
-        // 檢查必需的列是否存在
+        // 檢查必需的列是否存在（支持多種列名變體）
         const columnIndexes: Record<string, number> = {};
-        for (const col of requiredColumns) {
-          const index = headers.findIndex(h => h && h.toString().trim() === col);
-          if (index === -1) {
-            summary.errors.push(`文件 ${file.originalname}: 缺少必需列 "${col}"`);
-            continue;
+        const columnMappings: Record<string, string[]> = {
+          '商品詳情': ['商品詳情', '商品名稱', '產品名稱', '產品', '名稱', '商品'],
+          '型號': ['型號', '產品編號', '編號', '貨號', 'SKU', '產品代碼'],
+          '商品選項': ['商品選項', '尺寸', '規格', '選項', '尺碼'],
+          '觀塘': ['觀塘', '觀塘店', '觀塘門市', '觀塘倉'],
+          '灣仔': ['灣仔', '灣仔店', '灣仔門市', '灣仔倉'],
+          '荔枝角': ['荔枝角', '荔枝角店', '荔枝角門市', '荔枝角倉'],
+          '元朗': ['元朗', '元朗店', '元朗門市', '元朗倉'],
+          '國内倉': ['國内倉', '國內倉', '倉庫', '總倉', '國内', '國內']
+        };
+        
+        for (const [requiredCol, variants] of Object.entries(columnMappings)) {
+          let found = false;
+          for (const variant of variants) {
+            const index = headers.findIndex(h => h && h.toString().trim() === variant);
+            if (index !== -1) {
+              columnIndexes[requiredCol] = index;
+              found = true;
+              console.log(`調試: 找到列 "${requiredCol}" 對應 "${variant}" 在索引 ${index}`);
+              break;
+            }
           }
-          columnIndexes[col] = index;
+          if (!found) {
+            summary.errors.push(`文件 ${file.originalname}: 缺少必需列 "${requiredCol}" (支持的變體: ${variants.join(', ')})`);
+          }
         }
         
-        if (summary.errors.length > 0) continue;
+        if (summary.errors.length > 0) {
+          console.log('調試: 列檢查錯誤:', summary.errors);
+          continue;
+        }
         
         // 獲取門市ID映射
         const locations = await Location.find({});
