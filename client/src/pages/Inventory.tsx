@@ -252,24 +252,67 @@ export default function Inventory() {
   }
 
   // Excel導入功能
-  async function doExcelImport() {
-    if (excelImportState.files.length === 0) {
-      alert('請選擇Excel檔案')
-      return
+  // Excel導入功能 - 完全修復版本
+async function doExcelImport() {
+  if (excelImportState.files.length === 0) {
+    alert('請選擇Excel檔案')
+    return
+  }
+  
+  // 檢查文件大小
+  const totalSize = excelImportState.files.reduce((sum, file) => sum + file.size, 0)
+  if (totalSize > 10 * 1024 * 1024) { // 10MB限制
+    alert('文件總大小超過10MB，請使用較小的文件')
+    return
+  }
+  
+  try {
+    // 显示处理中提示
+    const processingMsg = '正在處理Excel文件，請稍候...\n這可能需要幾分鐘時間，請不要關閉頁面。'
+    alert(processingMsg)
+    
+    const form = new FormData()
+    excelImportState.files.forEach(f => form.append('files', f))
+    
+    // 使用更长的超时时间
+    const response = await api.post('/import/excel', form, {
+      timeout: 300000, // 5分钟超时
+      headers: {
+        'Content-Type': 'multipart/form-data'
+      }
+    })
+    
+    // 显示详细结果
+    const resultMsg = `Excel導入完成！
+    
+處理行數: ${response.data.processed}
+匹配產品: ${response.data.matched}
+新增產品: ${response.data.created}
+更新產品: ${response.data.updated}
+錯誤數量: ${response.data.errors?.length || 0}
+
+${response.data.errors?.length > 0 ? '錯誤詳情:\n' + response.data.errors.slice(0, 5).join('\n') + (response.data.errors.length > 5 ? '\n...' : '') : '無錯誤'}`
+    
+    alert(resultMsg)
+    setExcelImportOpen(false)
+    await load()
+  } catch (error: any) {
+    console.error('Excel導入錯誤:', error)
+    
+    let errorMsg = 'Excel導入失敗：'
+    if (error.code === 'ECONNABORTED') {
+      errorMsg += '處理超時，請嘗試使用較小的文件或檢查網絡連接'
+    } else if (error.response?.status === 413) {
+      errorMsg += '文件太大，請使用較小的文件'
+    } else if (error.response?.data?.message) {
+      errorMsg += error.response.data.message
+    } else {
+      errorMsg += error.message
     }
     
-    try {
-      const form = new FormData()
-      excelImportState.files.forEach(f => form.append('files', f))
-      
-      const response = await api.post('/import/excel', form)
-      alert(`Excel導入完成\n處理:${response.data.processed}  匹配:${response.data.matched}  新增:${response.data.created}  更新:${response.data.updated}\n錯誤: ${response.data.errors?.join(', ') || '無'}`)
-      setExcelImportOpen(false)
-      await load()
-    } catch (error: any) {
-      alert(`Excel導入失敗：${error.response?.data?.message || error.message}`)
-    }
+    alert(errorMsg)
   }
+}
 
   // 編輯和刪除處理函數
   function handleEdit(product: Product) {

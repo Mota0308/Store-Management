@@ -362,7 +362,7 @@ router.post('/transfer', upload.array('files'), async (req, res) => {
   }
 });
 
-// Excel導入功能 - 修復版本
+// Excel導入功能 - 完全修復版本
 router.post('/excel', upload.array('files'), async (req, res) => {
   try {
     console.log('調試: 收到Excel導入請求');
@@ -386,71 +386,94 @@ router.post('/excel', upload.array('files'), async (req, res) => {
       try {
         console.log(`調試: 處理文件 ${file.originalname}, 大小: ${file.size} bytes`);
         
-        // 讀取Excel文件 - 增加更多選項
+        // 檢查文件大小
+        if (file.size > 10 * 1024 * 1024) { // 10MB限制
+          summary.errors.push(`文件 ${file.originalname} 太大 (${Math.round(file.size / 1024 / 1024)}MB)，請使用較小的文件`);
+          continue;
+        }
+        
+        // 檢查文件類型
+        if (!file.originalname.match(/\.(xlsx|xls)$/i)) {
+          summary.errors.push(`文件 ${file.originalname} 不是有效的Excel文件`);
+          continue;
+        }
+        
+        // 讀取Excel文件 - 優化選項
         const workbook = XLSX.read(file.buffer, { 
           type: 'buffer',
-          cellDates: true,
+          cellDates: false, // 關閉日期解析以提高性能
           cellNF: false,
           cellText: false,
-          raw: false
+          raw: true, // 使用原始值以提高性能
+          dense: true // 使用密集模式
         });
         
         console.log('調試: Excel工作表名稱:', workbook.SheetNames);
         
-        const sheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[sheetName];
-        
-        // 檢查工作表是否存在
-        if (!worksheet) {
-          summary.errors.push(`文件 ${file.originalname}: 無法讀取工作表`);
+        if (workbook.SheetNames.length === 0) {
+          summary.errors.push(`文件 ${file.originalname}: 沒有找到工作表`);
           continue;
         }
         
-        // 轉換為JSON，增加更多選項
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        
+        if (!worksheet) {
+          summary.errors.push(`文件 ${file.originalname}: 無法讀取工作表 "${sheetName}"`);
+          continue;
+        }
+        
+        // 轉換為JSON - 優化選項
         const data = XLSX.utils.sheet_to_json(worksheet, { 
           header: 1,
           defval: '',
-          blankrows: false
-        });
+          blankrows: false,
+          raw: true // 使用原始值
+        }) as any[][];
         
         console.log('調試: Excel數據行數:', data.length);
-        console.log('調試: Excel前3行數據:', data.slice(0, 3));
         
         if (data.length < 2) {
           summary.errors.push(`文件 ${file.originalname}: 數據行數不足 (只有 ${data.length} 行)`);
           continue;
         }
         
+        // 限制處理的行數，避免超時
+        const maxRows = Math.min(data.length, 2000); // 最多處理2000行
+        if (data.length > 2000) {
+          summary.errors.push(`文件 ${file.originalname}: 數據行數過多 (${data.length} 行)，只處理前2000行`);
+        }
+        
         // 獲取標題行（第一行）
         const headers = data[0] as any[];
         console.log('調試: Excel標題行:', headers);
         
-        // 清理標題行，移除空值和轉換為字符串
+        // 清理標題行
         const cleanHeaders = headers.map((h: any) => {
           if (h === null || h === undefined) return '';
           return String(h).trim();
-        }).filter(h => h !== '');
+        }).filter((h: string) => h !== '');
         
         console.log('調試: 清理後的標題行:', cleanHeaders);
         
-        // 根據第一行內容判斷列類型
+        // 列映射 - 支持更多變體
         const columnIndexes: Record<string, number> = {};
         const columnMappings: Record<string, string[]> = {
-          'productCode': ['編號', '型號', '產品編號', '貨號', 'SKU', '產品代碼', '代碼', '編碼'],
-          'productName': ['產品', '商品詳情', '商品名稱', '產品名稱', '名稱', '商品', '品名'],
-          'size': ['尺寸', '商品選項', '規格', '選項', '尺碼', '大小'],
-          '觀塘': ['觀塘', '觀塘店', '觀塘門市', '觀塘倉', '觀塘庫存'],
-          '灣仔': ['灣仔', '灣仔店', '灣仔門市', '灣仔倉', '灣仔庫存'],
-          '荔枝角': ['荔枝角', '荔枝角店', '荔枝角門市', '荔枝角倉', '荔枝角庫存'],
-          '元朗': ['元朗', '元朗店', '元朗門市', '元朗倉', '元朗庫存'],
-          '國内倉': ['國內倉', '國内倉', '倉庫', '總倉', '國内', '國內', '國内倉庫', '國內倉庫']
+          'productCode': ['編號', '型號', '產品編號', '貨號', 'SKU', '產品代碼', '代碼', '編碼', '商品編號', '產品代號'],
+          'productName': ['產品', '商品詳情', '商品名稱', '產品名稱', '名稱', '商品', '品名', '商品描述', '產品描述'],
+          'size': ['尺寸', '商品選項', '規格', '選項', '尺碼', '大小', '規格尺寸', '商品規格'],
+          '觀塘': ['觀塘', '觀塘店', '觀塘門市', '觀塘倉', '觀塘庫存', '觀塘區'],
+          '灣仔': ['灣仔', '灣仔店', '灣仔門市', '灣仔倉', '灣仔庫存', '灣仔區'],
+          '荔枝角': ['荔枝角', '荔枝角店', '荔枝角門市', '荔枝角倉', '荔枝角庫存', '荔枝角區'],
+          '元朗': ['元朗', '元朗店', '元朗門市', '元朗倉', '元朗庫存', '元朗區'],
+          '國内倉': ['國內倉', '國内倉', '倉庫', '總倉', '國内', '國內', '國内倉庫', '國內倉庫', '內地倉', '大陸倉']
         };
         
         // 識別列索引 - 改進匹配邏輯
         for (const [columnType, variants] of Object.entries(columnMappings)) {
           let found = false;
           for (const variant of variants) {
-            const index = cleanHeaders.findIndex(h => h === variant);
+            const index = cleanHeaders.findIndex((h: string) => h === variant);
             if (index !== -1) {
               columnIndexes[columnType] = index;
               found = true;
@@ -480,56 +503,122 @@ router.post('/excel', upload.array('files'), async (req, res) => {
         
         console.log('調試: 門市映射:', locationMap);
         
-        // 從第二行開始處理數據
-        for (let i = 1; i < data.length; i++) {
-          const row = data[i] as any[];
-          if (!row || row.length === 0) continue;
+        // 批量處理數據以提高性能
+        const batchSize = 100; // 每批處理100行
+        for (let start = 1; start < maxRows; start += batchSize) {
+          const end = Math.min(start + batchSize, maxRows);
+          const batch = data.slice(start, end);
           
-          try {
-            // 提取基本產品信息 - 增加空值檢查
-            const productCode = row[columnIndexes.productCode];
-            const productName = row[columnIndexes.productName];
-            const size = row[columnIndexes.size];
+          // 處理批次
+          for (let i = 0; i < batch.length; i++) {
+            const rowIndex = start + i;
+            const row = batch[i] as any[];
+            if (!row || row.length === 0) continue;
             
-            // 轉換為字符串並清理
-            const cleanProductCode = productCode ? String(productCode).trim() : '';
-            const cleanProductName = productName ? String(productName).trim() : '';
-            const cleanSize = size ? String(size).trim() : '';
-            
-            if (!cleanProductCode || !cleanProductName || !cleanSize) {
-              summary.errors.push(`第${i+1}行: 編號、產品名稱或尺寸為空 (編號: "${cleanProductCode}", 名稱: "${cleanProductName}", 尺寸: "${cleanSize}")`);
-              continue;
-            }
-            
-            summary.processed++;
-            console.log(`調試: 處理第${i+1}行 - 編號: ${cleanProductCode}, 名稱: ${cleanProductName}, 尺寸: ${cleanSize}`);
-            
-            // 查找現有產品
-            let product = await Product.findOne({
-              name: cleanProductName,
-              productCode: cleanProductCode,
-              $or: [
-                { size: cleanSize },
-                { sizes: { $in: [cleanSize] } }
-              ]
-            });
-            
-            if (product) {
-              // 更新現有產品的庫存
-              summary.matched++;
-              for (const locationName of ['觀塘', '灣仔', '荔枝角', '元朗', '國内倉']) {
-                if (columnIndexes[locationName] !== undefined) {
-                  const quantityValue = row[columnIndexes[locationName]];
-                  const quantity = quantityValue ? parseInt(String(quantityValue), 10) : 0;
-                  
-                  if (quantity > 0) {
-                    const locationId = locationMap[locationName];
-                    if (locationId) {
-                      let inventory = product.inventories.find((inv: any) => inv.locationId.toString() === locationId);
-                      if (inventory) {
-                        inventory.quantity += quantity;
-                      } else {
-                        product.inventories.push({
+            try {
+              // 提取基本產品信息
+              const productCode = row[columnIndexes.productCode];
+              const productName = row[columnIndexes.productName];
+              const size = row[columnIndexes.size];
+              
+              // 轉換為字符串並清理
+              const cleanProductCode = productCode ? String(productCode).trim() : '';
+              const cleanProductName = productName ? String(productName).trim() : '';
+              const cleanSize = size ? String(size).trim() : '';
+              
+              if (!cleanProductCode || !cleanProductName || !cleanSize) {
+                summary.errors.push(`第${rowIndex+1}行: 編號、產品名稱或尺寸為空 (編號: "${cleanProductCode}", 名稱: "${cleanProductName}", 尺寸: "${cleanSize}")`);
+                continue;
+              }
+              
+              summary.processed++;
+              
+              // 查找現有產品 - 改進查詢邏輯
+              let product = await Product.findOne({
+                $and: [
+                  { name: cleanProductName },
+                  { productCode: cleanProductCode },
+                  {
+                    $or: [
+                      { size: cleanSize },
+                      { sizes: { $in: [cleanSize] } }
+                    ]
+                  }
+                ]
+              });
+              
+              if (product) {
+                // 更新現有產品的庫存
+                summary.matched++;
+                for (const locationName of ['觀塘', '灣仔', '荔枝角', '元朗', '國内倉']) {
+                  if (columnIndexes[locationName] !== undefined) {
+                    const quantityValue = row[columnIndexes[locationName]];
+                    let quantity = 0;
+                    
+                    // 改進數量解析
+                    if (quantityValue !== null && quantityValue !== undefined && quantityValue !== '') {
+                      const numValue = parseFloat(String(quantityValue));
+                      if (!isNaN(numValue) && numValue >= 0) {
+                        quantity = Math.floor(numValue); // 確保是整數
+                      }
+                    }
+                    
+                    if (quantity > 0) {
+                      const locationId = locationMap[locationName];
+                      if (locationId) {
+                        let inventory = product.inventories.find((inv: any) => inv.locationId.toString() === locationId);
+                        if (inventory) {
+                          inventory.quantity += quantity;
+                        } else {
+                          product.inventories.push({
+                            locationId: new mongoose.Types.ObjectId(locationId),
+                            quantity: quantity
+                          });
+                        }
+                      }
+                    }
+                  }
+                }
+                await product.save();
+                summary.updated++;
+              } else {
+                // 創建新產品
+                summary.created++;
+                
+                // 確定產品類型 - 改進推測邏輯
+                let productType = '其他';
+                const nameLower = cleanProductName.toLowerCase();
+                if (nameLower.includes('保暖') || nameLower.includes('防寒') || nameLower.includes('羽絨')) {
+                  productType = '保暖衣';
+                } else if (nameLower.includes('抓毛') || nameLower.includes('fleece')) {
+                  productType = '抓毛';
+                } else if (nameLower.includes('上水') || nameLower.includes('防水')) {
+                  productType = '上水褸';
+                } else if (nameLower.includes('泳衣') || nameLower.includes('泳褲') || nameLower.includes('泳裝')) {
+                  productType = '泳裝';
+                } else if (nameLower.includes('t恤') || nameLower.includes('t-shirt') || nameLower.includes('短袖')) {
+                  productType = 'T恤';
+                }
+                
+                // 收集各門市的庫存
+                const inventories = [];
+                for (const locationName of ['觀塘', '灣仔', '荔枝角', '元朗', '國内倉']) {
+                  if (columnIndexes[locationName] !== undefined) {
+                    const quantityValue = row[columnIndexes[locationName]];
+                    let quantity = 0;
+                    
+                    // 改進數量解析
+                    if (quantityValue !== null && quantityValue !== undefined && quantityValue !== '') {
+                      const numValue = parseFloat(String(quantityValue));
+                      if (!isNaN(numValue) && numValue >= 0) {
+                        quantity = Math.floor(numValue); // 確保是整數
+                      }
+                    }
+                    
+                    if (quantity > 0) {
+                      const locationId = locationMap[locationName];
+                      if (locationId) {
+                        inventories.push({
                           locationId: new mongoose.Types.ObjectId(locationId),
                           quantity: quantity
                         });
@@ -537,59 +626,30 @@ router.post('/excel', upload.array('files'), async (req, res) => {
                     }
                   }
                 }
+                
+                // 創建新產品
+                const newProduct = new Product({
+                  name: cleanProductName,
+                  productCode: cleanProductCode,
+                  productType: productType,
+                  size: cleanSize,
+                  price: 0,
+                  inventories: inventories
+                });
+                
+                await newProduct.save();
+                console.log(`調試: 創建新產品 - ${cleanProductName} (${cleanProductCode})`);
               }
-              await product.save();
-              summary.updated++;
-            } else {
-              // 創建新產品
-              summary.created++;
-              
-              // 確定產品類型（基於名稱推測）
-              let productType = '其他';
-              if (cleanProductName.includes('保暖') || cleanProductName.includes('防寒')) {
-                productType = '保暖衣';
-              } else if (cleanProductName.includes('抓毛')) {
-                productType = '抓毛';
-              } else if (cleanProductName.includes('上水')) {
-                productType = '上水褸';
-              }
-              
-              // 收集各門市的庫存
-              const inventories = [];
-              for (const locationName of ['觀塘', '灣仔', '荔枝角', '元朗', '國内倉']) {
-                if (columnIndexes[locationName] !== undefined) {
-                  const quantityValue = row[columnIndexes[locationName]];
-                  const quantity = quantityValue ? parseInt(String(quantityValue), 10) : 0;
-                  
-                  if (quantity > 0) {
-                    const locationId = locationMap[locationName];
-                    if (locationId) {
-                      inventories.push({
-                        locationId: new mongoose.Types.ObjectId(locationId),
-                        quantity: quantity
-                      });
-                    }
-                  }
-                }
-              }
-              
-              // 創建新產品
-              const newProduct = new Product({
-                name: cleanProductName,
-                productCode: cleanProductCode,
-                productType: productType,
-                size: cleanSize,
-                price: 0,
-                inventories: inventories
-              });
-              
-              await newProduct.save();
-              console.log(`調試: 創建新產品 - ${cleanProductName} (${cleanProductCode})`);
+            } catch (rowError) {
+              const errorMsg = `第${rowIndex+1}行處理錯誤: ${rowError}`;
+              console.error('調試:', errorMsg);
+              summary.errors.push(errorMsg);
             }
-          } catch (rowError) {
-            const errorMsg = `第${i+1}行處理錯誤: ${rowError}`;
-            console.error('調試:', errorMsg);
-            summary.errors.push(errorMsg);
+          }
+          
+          // 批次間暫停，避免阻塞
+          if (end < maxRows) {
+            await new Promise(resolve => setTimeout(resolve, 50));
           }
         }
       } catch (fileError) {
