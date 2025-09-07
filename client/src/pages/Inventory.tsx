@@ -42,7 +42,7 @@ export default function Inventory() {
   const [selectedType, setSelectedType] = useState<string>('')
   const [searchTerm, setSearchTerm] = useState('')
   const [sortBy, setSortBy] = useState<string>('')
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc')
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
   
   // 導入庫存狀態
@@ -144,13 +144,13 @@ export default function Inventory() {
       setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')
     } else {
       setSortBy(column)
-      setSortOrder('asc')
+      setSortOrder('desc') // 默認從高到低排序
     }
   }
 
   function getSortIcon(column: string) {
     if (sortBy !== column) return '↕'
-    return sortOrder === 'asc' ? '↑' : '↓'
+    return sortOrder === 'asc' ? '↓' : '↑'
   }
 
   function getQuantity(product: Product, locationId: string): number {
