@@ -22,7 +22,8 @@ interface Product {
   name: string
   productCode: string
   productType: string
-  size: string
+  sizes?: string[]
+  size?: string
   price: number
   inventories: Inventory[]
 }
@@ -98,7 +99,7 @@ export default function Inventory() {
       filtered = filtered.filter(p => 
         p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         p.productCode.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        p.size.toLowerCase().includes(searchTerm.toLowerCase())
+        getProductSize(p).toLowerCase().includes(searchTerm.toLowerCase())
       )
     }
 
@@ -114,8 +115,8 @@ export default function Inventory() {
           aValue = a.productCode
           bValue = b.productCode
         } else if (sortBy === 'size') {
-          aValue = a.size
-          bValue = b.size
+          aValue = getProductSize(a)
+          bValue = getProductSize(b)
         } else if (sortBy === 'total') {
           aValue = a.inventories.reduce((sum: number, inv: Inventory) => sum + inv.quantity, 0)
           bValue = b.inventories.reduce((sum: number, inv: Inventory) => sum + inv.quantity, 0)
@@ -151,6 +152,12 @@ export default function Inventory() {
   function getSortIcon(column: string) {
     if (sortBy !== column) return '↕'
     return sortOrder === 'asc' ? '↓' : '↑'
+  }
+
+  function getProductSize(product: Product): string {
+    if (Array.isArray(product.sizes) && product.sizes.length) return product.sizes.join(', ')
+    if (product.size) return product.size
+    return '-'
   }
 
   function getQuantity(product: Product, locationId: string): number {
@@ -308,7 +315,7 @@ export default function Inventory() {
                   <tr key={product._id}>
                     <td>{product.name}</td>
                     <td>{product.productCode}</td>
-                    <td>{product.size}</td>
+                    <td>{getProductSize(product)}</td>
                     {locations.map(location => (
                       <td key={location._id}>{getQuantity(product, location._id)}</td>
                     ))}
