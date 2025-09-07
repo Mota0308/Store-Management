@@ -11,29 +11,34 @@ const { getDocument } = pdfjsLib;
 
 const router = express.Router();
 
-// �t�mmulter�ϥΤ��s�s�x
+// 配置multer使用內存存儲
 const upload = multer({ 
   storage: multer.memoryStorage(),
-  limits: { fileSize: 10 * 1024 * 1024 } // 10MB����
+  limits: { fileSize: 10 * 1024 * 1024 } // 10MB限制
 });
 
-// ���U����
+// 輔助函數
 function normalizeCode(s: string) {
-  return (s || '').replace(/[�X�V?�V?]/g, '-').replace(/[^A-Za-z0-9_-]/g, '').toUpperCase();
+  return (s || '').replace(/[—–‑–−]/g, '-').replace(/[^A-Za-z0-9_\/-]/g, '').toUpperCase();
 }
 
 function codeVariants(raw: string): string[] {
   const n = normalizeCode(raw);
   const variants = new Set<string>();
   if (n) variants.add(n);
-  const m = n.match(/^([A-Z]+)_?(\d+)$/);
-  if (m) variants.add(`${m[1]}-${m[2]}`);
+  const m = n.match(/^([A-Z]+)_?(\d+)([A-Z]*)(?:\/([A-Z]+))?$/);
+  if (m) {
+    variants.add(`${m[1]}-${m[2]}${m[3] || ''}`);
+    if (m[4]) {
+      variants.add(`${m[1]}-${m[2]}${m[3] || ''}/${m[4]}`);
+    }
+  }
   if (n) variants.add(n.replace(/-/g, ''));
   return Array.from(variants).filter(Boolean);
 }
 
-// Support alphanumeric model codes like AB-1234 and numeric-only barcodes (EAN-8/12/13/14)
-const codePattern = /(?:[A-Z]{1,8}[\-�X�V?�V?]?\d{2,8})|(?:\b\d{8,14}\b)/;
+// Support alphanumeric model codes like AB-1234, AB-1234CD, AB-1234CD/EF and numeric-only barcodes (EAN-8/12/13/14)
+const codePattern = /(?:[A-Z]{1,8}[\-—–‑–−]?\d{2,8}(?:[A-Z]+)?(?:\/[A-Z]+)?)|(?:\b\d{8,14}\b)/;
 
 function byY(a: any, b: any) { return a.transform[5] - b.transform[5]; }
 function byX(a: any, b: any) { return a.transform[4] - b.transform[4]; }
@@ -71,9 +76,9 @@ async function extractByPdfjs(buffer: Buffer): Promise<{ name: string; code: str
     for (const L of lines) {
       const text = L.map(t => t.str).join('');
       // Expanded header synonyms based on provided PDF formats
-      const nameHeadRegex = /(�ӫ~�Ա�|���~�y�z|�ӫ~�y�z|�ӫ~�W��|�~�W)/;
-      const codeHeadRegex = /(����|���X���X|���X|���νX|���X�s��|�����s��|�f��)/;
-      const qtyHeadRegex = /(�ƶq|�ƥ�|�`�@�ƶq|�w�s�ƶq)/;
+      const nameHeadRegex = /(商品詳情|產品描述|商品描述|商品名稱|品名)/;
+      const codeHeadRegex = /(型號|條碼號碼|條碼|條形碼|條碼編號|型號編號|貨號)/;
+      const qtyHeadRegex = /(數量|數目|總共數量|庫存數量)/;
       const hasNameHead = nameHeadRegex.test(text);
       const hasCodeHead = codeHeadRegex.test(text);
       const hasQtyHead = qtyHeadRegex.test(text);
@@ -84,10 +89,10 @@ async function extractByPdfjs(buffer: Buffer): Promise<{ name: string; code: str
         const codeHead = parts.find(p => codeHeadRegex.test(p.s));
         const qtyHead = parts.find(p => qtyHeadRegex.test(p.s));
         if (nameHead && qtyHead) {
-          // If �����C�ʥ��AcodeX �i�� null�A�y���q name ������
+          // If 型號列缺失，codeX 可為 null，稍後從 name 中提取
           nameX = [nameHead.x - 2, (codeHead ? codeHead.x : qtyHead.x) - 2];
           codeX = codeHead ? [codeHead.x - 2, qtyHead.x - 2] : null as any;
-          // ���e�ƶq���e�A�קK���Ʀr�Q�I�_
+          // 放寬數量欄寬，避免長數字被截斷
           qtyX = [qtyHead.x - 2, qtyHead.x + 260];
         }
         break;
@@ -98,12 +103,12 @@ async function extractByPdfjs(buffer: Buffer): Promise<{ name: string; code: str
 
     const headerIndex = lines.findIndex(L => {
       const t = L.map((t: any) => t.str).join('');
-      return /(�ӫ~�Ա�|���~�y�z|�ӫ~�y�z|�ӫ~�W��|�~�W)/.test(t) && /(�ƶq|�ƥ�|�`�@�ƶq|�w�s�ƶq)/.test(t);
+      return /(商品詳情|產品描述|商品描述|商品名稱|品名)/.test(t) && /(數量|數目|總共數量|庫存數量)/.test(t);
     });
     for (let i = headerIndex + 1; i < lines.length; i++) {
       const L = lines[i].slice().sort(byX);
       const lineText = L.map((t: any) => t.str).join('').trim();
-      if (!lineText || /�p�p|�X�p|���B|�Ƶ�|--END--/i.test(lineText)) break;
+      if (!lineText || /小計|合計|金額|備註|--END--/i.test(lineText)) break;
 
       const inRange = (x: number, R: [number, number]) => x >= R[0] && x < R[1];
       const pick = (R: [number, number]) => L.filter(t => inRange(t.transform[4], R)).map((t: any) => t.str).join('').trim();
@@ -112,10 +117,10 @@ async function extractByPdfjs(buffer: Buffer): Promise<{ name: string; code: str
       const codeText = codeX ? pick(codeX) : '';
       const qtyText = pick(qtyX);
 
-      // �����i�X�{�b�����C�ΰӫ~�Ա��C���夤
+      // 型號可出現在型號列或商品詳情列內文中
       const codeSource = `${codeText} ${name}`.trim();
       const codeMatch = codeSource.match(codePattern);
-      // �ƶq���\���j���ơ]�̦h5���^�A�B�u�����ƶq���쪺�Ĥ@�Ӿ���
+      // 數量允許更大位數（最多5位），且優先取數量欄位的第一個整數
       const qtyMatch = qtyText.match(/\b(\d{1,5})\b/);
       const qty = qtyMatch ? parseInt(qtyMatch[1], 10) : 0;
       if (codeMatch && qty > 0) rows.push({ name, code: codeMatch[0], qty });
@@ -139,14 +144,14 @@ async function updateByCodeVariants(rawCode: string, qty: number, locationId: st
   summary.updated++;
 }
 
-// �i�f�\��
+// 進貨功能
 router.post('/incoming', upload.array('files'), async (req, res) => {
   try {
-    console.log('�ո�: �����i�f�ШD');
+    console.log('調試: 收到進貨請求');
     const { locationId } = req.body;
     const files = req.files as Express.Multer.File[];
-    console.log('�ո�: locationId =', locationId);
-    console.log('�ո�: ���������ƶq =', files?.length || 0);
+    console.log('調試: locationId =', locationId);
+    console.log('調試: 收到文件數量 =', files?.length || 0);
     
     if (!locationId) {
       return res.status(400).json({ message: 'Missing locationId' });
@@ -173,7 +178,7 @@ router.post('/incoming', upload.array('files'), async (req, res) => {
         try { 
           rows = await extractByPdfjs(file.buffer); 
         } catch (pdfjsError) {
-          console.log('PDF.js �ѪR���ѡA���ըϥ� pdf-parse:', pdfjsError);
+          console.log('PDF.js 解析失敗，嘗試使用 pdf-parse:', pdfjsError);
         }
         
         if (rows.length === 0) {
@@ -192,34 +197,33 @@ router.post('/incoming', upload.array('files'), async (req, res) => {
           }
         }
 
-        console.log(`�ո�: �q PDF ������ ${rows.length} ���ƾ�:`, rows);
+        console.log(`調試: 從 PDF 提取到 ${rows.length} 行數據:`, rows);
         summary.parsed.push(rows.map(r => ({ name: r.name, code: normalizeCode(r.code), qty: r.qty })));
         for (const r of rows) {
-          console.log(`�ո�: �B�z���ƾ�:`, r);
+          console.log(`調試: 處理行數據:`, r);
           await updateByCodeVariants(r.code, r.qty, locationId, summary, 'in');
         }
       } catch (fileError) {
-        console.error('�ո�: �i�f�B�z���~:', fileError);
-        summary.errors.push(`���� ${file.originalname} �B�z���~: ${fileError}`);
+        console.error('調試: 進貨處理錯誤:', fileError);
+        summary.errors.push(`文件 ${file.originalname} 處理錯誤: ${fileError}`);
       }
     }
     
     res.json(summary);
   } catch (e) {
-    console.error('�ո�: �i�f�B�z���~:', e);
+    console.error('調試: 進貨處理錯誤:', e);
     res.status(500).json({ message: 'Failed to process incoming', error: String(e) });
   }
 });
 
-// �X�f�\��
+// 出貨功能
 router.post('/outgoing', upload.array('files'), async (req, res) => {
   try {
     const { locationId } = req.body as any;
     if (!locationId) return res.status(400).json({ message: 'locationId required' });
     const files = (req.files as Express.Multer.File[]) || [];
 
-    const summary = { files: files.length, matched: 0, updated: 0, notFound: [] as string[], parsed: [] as any[],
-  errors: [] as string[] };
+    const summary = { files: files.length, matched: 0, updated: 0, notFound: [] as string[], parsed: [] as any[], errors: [] as string[] };
 
     for (const f of files) {
       let rows: { name: string; code: string; qty: number }[] = [];
@@ -250,10 +254,10 @@ router.post('/outgoing', upload.array('files'), async (req, res) => {
   }
 });
 
-// �������ե\��
+// 門市對調功能
 router.post('/transfer', upload.array('files'), async (req, res) => {
   try {
-    console.log('�ո�: �����������սШD');
+    console.log('調試: 收到門市對調請求');
     const { fromLocationId, toLocationId } = req.body;
     const files = req.files as Express.Multer.File[];
     
@@ -272,7 +276,7 @@ router.post('/transfer', upload.array('files'), async (req, res) => {
       updated: 0, 
       notFound: [] as string[],
       parsed: [] as any[],
-  errors: [] as string[]
+      errors: [] as string[]
     };
     
     for (const file of files) {
@@ -281,7 +285,7 @@ router.post('/transfer', upload.array('files'), async (req, res) => {
         try { 
           rows = await extractByPdfjs(file.buffer); 
         } catch (pdfjsError) {
-          console.log('PDF.js �ѪR���ѡA���ըϥ� pdf-parse:', pdfjsError);
+          console.log('PDF.js 解析失敗，嘗試使用 pdf-parse:', pdfjsError);
         }
         
         if (rows.length === 0) {
@@ -300,13 +304,13 @@ router.post('/transfer', upload.array('files'), async (req, res) => {
           }
         }
 
-        console.log(`�ո�: �q PDF ������ ${rows.length} ���ƾ�:`, rows);
+        console.log(`調試: 從 PDF 提取到 ${rows.length} 行數據:`, rows);
         summary.parsed.push(rows.map(r => ({ name: r.name, code: normalizeCode(r.code), qty: r.qty })));
         
         for (const r of rows) {
           summary.processed++;
           
-          // �d���{�����~
+          // 查找現有產品
           const variants = codeVariants(r.code);
           if (variants.length === 0) continue;
           
@@ -318,7 +322,7 @@ router.post('/transfer', upload.array('files'), async (req, res) => {
           
           summary.matched++;
           
-          // ���֨ӷ������w�s
+          // 減少來源門市庫存
           let fromInventory = product.inventories.find((inv: any) => 
             inv.locationId.toString() === fromLocationId
           );
@@ -326,7 +330,7 @@ router.post('/transfer', upload.array('files'), async (req, res) => {
           if (fromInventory && fromInventory.quantity >= r.qty) {
             fromInventory.quantity -= r.qty;
             
-            // �W�[�ؼЪ����w�s
+            // 增加目標門市庫存
             let toInventory = product.inventories.find((inv: any) => 
               inv.locationId.toString() === toLocationId
             );
@@ -343,27 +347,27 @@ router.post('/transfer', upload.array('files'), async (req, res) => {
             await product.save();
             summary.updated++;
           } else {
-            summary.notFound.push(`���~ ${r.code} �b�ӷ������w�s����`);
+            summary.notFound.push(`產品 ${r.code} 在來源門市庫存不足`);
           }
         }
       } catch (fileError) {
-        summary.notFound.push(`���� ${file.originalname} �B�z���~: ${fileError}`);
+        summary.notFound.push(`文件 ${file.originalname} 處理錯誤: ${fileError}`);
       }
     }
     
     res.json(summary);
   } catch (e) {
-    console.error('�ո�: �������ճB�z���~:', e);
+    console.error('調試: 門市對調處理錯誤:', e);
     res.status(500).json({ message: 'Failed to process transfer', error: String(e) });
   }
 });
 
-// Excel�ɤJ�\��
+// Excel導入功能 - 修復版本
 router.post('/excel', upload.array('files'), async (req, res) => {
   try {
-    console.log('�ո�: ����Excel�ɤJ�ШD');
+    console.log('調試: 收到Excel導入請求');
     const files = req.files as Express.Multer.File[];
-    console.log('�ո�: ����Excel�����ƶq =', files?.length || 0);
+    console.log('調試: 收到Excel文件數量 =', files?.length || 0);
     
     if (!files || files.length === 0) {
       return res.status(400).json({ message: 'Missing Excel files' });
@@ -380,98 +384,144 @@ router.post('/excel', upload.array('files'), async (req, res) => {
     
     for (const file of files) {
       try {
-        // Ū��Excel����
-        const workbook = XLSX.read(file.buffer, { type: 'buffer' });
+        console.log(`調試: 處理文件 ${file.originalname}, 大小: ${file.size} bytes`);
+        
+        // 讀取Excel文件 - 增加更多選項
+        const workbook = XLSX.read(file.buffer, { 
+          type: 'buffer',
+          cellDates: true,
+          cellNF: false,
+          cellText: false,
+          raw: false
+        });
+        
+        console.log('調試: Excel工作表名稱:', workbook.SheetNames);
+        
         const sheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[sheetName];
-        const data = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
         
-        if (data.length < 2) {
-          summary.errors.push(`���� ${file.originalname}: �ƾڦ��Ƥ���`);
+        // 檢查工作表是否存在
+        if (!worksheet) {
+          summary.errors.push(`文件 ${file.originalname}: 無法讀取工作表`);
           continue;
         }
         
-        // �������D���]�Ĥ@���^
-        const headers = data[0] as string[];
-        console.log('�ո�: Excel���D��:', headers);
+        // 轉換為JSON，增加更多選項
+        const data = XLSX.utils.sheet_to_json(worksheet, { 
+          header: 1,
+          defval: '',
+          blankrows: false
+        });
         
-        // �ھڲĤ@�椺�e�P�_�C����
+        console.log('調試: Excel數據行數:', data.length);
+        console.log('調試: Excel前3行數據:', data.slice(0, 3));
+        
+        if (data.length < 2) {
+          summary.errors.push(`文件 ${file.originalname}: 數據行數不足 (只有 ${data.length} 行)`);
+          continue;
+        }
+        
+        // 獲取標題行（第一行）
+        const headers = data[0] as any[];
+        console.log('調試: Excel標題行:', headers);
+        
+        // 清理標題行，移除空值和轉換為字符串
+        const cleanHeaders = headers.map((h: any) => {
+          if (h === null || h === undefined) return '';
+          return String(h).trim();
+        }).filter(h => h !== '');
+        
+        console.log('調試: 清理後的標題行:', cleanHeaders);
+        
+        // 根據第一行內容判斷列類型
         const columnIndexes: Record<string, number> = {};
         const columnMappings: Record<string, string[]> = {
-          'productCode': ['�s��', '����', '���~�s��', '�f��', 'SKU', '���~�N�X', '�N�X', '�s�X'],
-          'productName': ['���~', '�ӫ~�Ա�', '�ӫ~�W��', '���~�W��', '�W��', '�ӫ~', '�~�W'],
-          'size': ['�ؤo', '�ӫ~�ﶵ', '�W��', '�ﶵ', '�ؽX', '�j�p'],
-          '�[��': ['�[��', '�[����', '�[������', '�[����', '�[���w�s'],
-          '�W�J': ['�W�J', '�W�J��', '�W�J����', '�W�J��', '�W�J�w�s'],
-          '���K��': ['���K��', '���K����', '���K������', '���K����', '���K���w�s'],
-          '����': ['����', '���ԩ�', '���Ԫ���', '���ԭ�', '���Ԯw�s'],
-          '��?��': ['�ꤺ��', '��?��', '�ܮw', '�`��', '��?', '�ꤺ', '��?�ܮw', '�ꤺ�ܮw']
+          'productCode': ['編號', '型號', '產品編號', '貨號', 'SKU', '產品代碼', '代碼', '編碼'],
+          'productName': ['產品', '商品詳情', '商品名稱', '產品名稱', '名稱', '商品', '品名'],
+          'size': ['尺寸', '商品選項', '規格', '選項', '尺碼', '大小'],
+          '觀塘': ['觀塘', '觀塘店', '觀塘門市', '觀塘倉', '觀塘庫存'],
+          '灣仔': ['灣仔', '灣仔店', '灣仔門市', '灣仔倉', '灣仔庫存'],
+          '荔枝角': ['荔枝角', '荔枝角店', '荔枝角門市', '荔枝角倉', '荔枝角庫存'],
+          '元朗': ['元朗', '元朗店', '元朗門市', '元朗倉', '元朗庫存'],
+          '國内倉': ['國內倉', '國内倉', '倉庫', '總倉', '國内', '國內', '國内倉庫', '國內倉庫']
         };
         
-        // �ѧO�C����
+        // 識別列索引 - 改進匹配邏輯
         for (const [columnType, variants] of Object.entries(columnMappings)) {
           let found = false;
           for (const variant of variants) {
-            const index = headers.findIndex(h => h && h.toString().trim() === variant);
+            const index = cleanHeaders.findIndex(h => h === variant);
             if (index !== -1) {
               columnIndexes[columnType] = index;
               found = true;
-              console.log(`�ո�: �����C "${columnType}" ���� "${variant}" �b���� ${index}`);
+              console.log(`調試: 找到列 "${columnType}" 對應 "${variant}" 在索引 ${index}`);
               break;
             }
           }
           if (!found && ['productCode', 'productName', 'size'].includes(columnType)) {
-            summary.errors.push(`���� ${file.originalname}: �ʤ֥��ݦC "${columnType}" (����������: ${variants.join(', ')})`);
+            const errorMsg = `文件 ${file.originalname}: 缺少必需列 "${columnType}" (支持的變體: ${variants.join(', ')})`;
+            console.log('調試:', errorMsg);
+            summary.errors.push(errorMsg);
           }
         }
         
-        // �ˬd���ݪ��C�O�_�s�b - �״_�o�̡I
+        // 檢查必需的列是否存在
         if (columnIndexes.productCode === undefined || columnIndexes.productName === undefined || columnIndexes.size === undefined) {
-          console.log('�ո�: �ʤ֥��ݦC');
+          console.log('調試: 缺少必需列，跳過此文件');
           continue;
         }
         
-        // ��������ID�M�g
+        // 獲取門市ID映射
         const locations = await Location.find({});
         const locationMap: Record<string, string> = {};
         locations.forEach((loc: any) => {
           locationMap[loc.name] = loc._id.toString();
         });
         
-        // �q�ĤG���}�l�B�z�ƾ�
+        console.log('調試: 門市映射:', locationMap);
+        
+        // 從第二行開始處理數據
         for (let i = 1; i < data.length; i++) {
           const row = data[i] as any[];
           if (!row || row.length === 0) continue;
           
           try {
-            // �����򥻲��~�H��
-            const productCode = row[columnIndexes.productCode]?.toString().trim();
-            const productName = row[columnIndexes.productName]?.toString().trim();
-            const size = row[columnIndexes.size]?.toString().trim();
+            // 提取基本產品信息 - 增加空值檢查
+            const productCode = row[columnIndexes.productCode];
+            const productName = row[columnIndexes.productName];
+            const size = row[columnIndexes.size];
             
-            if (!productCode || !productName || !size) {
-              summary.errors.push(`��${i+1}��: �s���B���~�W�٩Τؤo����`);
+            // 轉換為字符串並清理
+            const cleanProductCode = productCode ? String(productCode).trim() : '';
+            const cleanProductName = productName ? String(productName).trim() : '';
+            const cleanSize = size ? String(size).trim() : '';
+            
+            if (!cleanProductCode || !cleanProductName || !cleanSize) {
+              summary.errors.push(`第${i+1}行: 編號、產品名稱或尺寸為空 (編號: "${cleanProductCode}", 名稱: "${cleanProductName}", 尺寸: "${cleanSize}")`);
               continue;
             }
             
             summary.processed++;
+            console.log(`調試: 處理第${i+1}行 - 編號: ${cleanProductCode}, 名稱: ${cleanProductName}, 尺寸: ${cleanSize}`);
             
-            // �d���{�����~
+            // 查找現有產品
             let product = await Product.findOne({
-              name: productName,
-              productCode: productCode,
+              name: cleanProductName,
+              productCode: cleanProductCode,
               $or: [
-                { size: size },
-                { sizes: { $in: [size] } }
+                { size: cleanSize },
+                { sizes: { $in: [cleanSize] } }
               ]
             });
             
             if (product) {
-              // ���s�{�����~���w�s
+              // 更新現有產品的庫存
               summary.matched++;
-              for (const locationName of ['�[��', '�W�J', '���K��', '����', '��?��']) {
+              for (const locationName of ['觀塘', '灣仔', '荔枝角', '元朗', '國内倉']) {
                 if (columnIndexes[locationName] !== undefined) {
-                  const quantity = parseInt(row[columnIndexes[locationName]]?.toString() || '0', 10);
+                  const quantityValue = row[columnIndexes[locationName]];
+                  const quantity = quantityValue ? parseInt(String(quantityValue), 10) : 0;
+                  
                   if (quantity > 0) {
                     const locationId = locationMap[locationName];
                     if (locationId) {
@@ -491,24 +541,26 @@ router.post('/excel', upload.array('files'), async (req, res) => {
               await product.save();
               summary.updated++;
             } else {
-              // �Ыطs���~
+              // 創建新產品
               summary.created++;
               
-              // �T�w���~�����]�����W�ٱ����^
-              let productType = '���L';
-              if (productName.includes('�O�x') || productName.includes('���H')) {
-                productType = '�O�x��';
-              } else if (productName.includes('����')) {
-                productType = '����';
-              } else if (productName.includes('�W��')) {
-                productType = '�W����';
+              // 確定產品類型（基於名稱推測）
+              let productType = '其他';
+              if (cleanProductName.includes('保暖') || cleanProductName.includes('防寒')) {
+                productType = '保暖衣';
+              } else if (cleanProductName.includes('抓毛')) {
+                productType = '抓毛';
+              } else if (cleanProductName.includes('上水')) {
+                productType = '上水褸';
               }
               
-              // �����U�������w�s
+              // 收集各門市的庫存
               const inventories = [];
-              for (const locationName of ['�[��', '�W�J', '���K��', '����', '��?��']) {
+              for (const locationName of ['觀塘', '灣仔', '荔枝角', '元朗', '國内倉']) {
                 if (columnIndexes[locationName] !== undefined) {
-                  const quantity = parseInt(row[columnIndexes[locationName]]?.toString() || '0', 10);
+                  const quantityValue = row[columnIndexes[locationName]];
+                  const quantity = quantityValue ? parseInt(String(quantityValue), 10) : 0;
+                  
                   if (quantity > 0) {
                     const locationId = locationMap[locationName];
                     if (locationId) {
@@ -521,30 +573,36 @@ router.post('/excel', upload.array('files'), async (req, res) => {
                 }
               }
               
-              // �Ыطs���~
+              // 創建新產品
               const newProduct = new Product({
-                name: productName,
-                productCode: productCode,
+                name: cleanProductName,
+                productCode: cleanProductCode,
                 productType: productType,
-                size: size, // �ϥγ��@�ؤo�榡
-                price: 0, // �q�{����
+                size: cleanSize,
+                price: 0,
                 inventories: inventories
               });
               
               await newProduct.save();
+              console.log(`調試: 創建新產品 - ${cleanProductName} (${cleanProductCode})`);
             }
           } catch (rowError) {
-            summary.errors.push(`��${i+1}���B�z���~: ${rowError}`);
+            const errorMsg = `第${i+1}行處理錯誤: ${rowError}`;
+            console.error('調試:', errorMsg);
+            summary.errors.push(errorMsg);
           }
         }
       } catch (fileError) {
-        summary.errors.push(`���� ${file.originalname} �B�z���~: ${fileError}`);
+        const errorMsg = `文件 ${file.originalname} 處理錯誤: ${fileError}`;
+        console.error('調試:', errorMsg);
+        summary.errors.push(errorMsg);
       }
     }
     
+    console.log('調試: Excel導入完成，結果:', summary);
     res.json(summary);
   } catch (e) {
-    console.error('�ո�: Excel�ɤJ�B�z���~:', e);
+    console.error('調試: Excel導入處理錯誤:', e);
     res.status(500).json({ message: 'Failed to import Excel', error: String(e) });
   }
 });
