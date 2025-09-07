@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 import api from '../api'
 
 // 定義類型接口
@@ -57,6 +57,9 @@ export default function Inventory() {
   // Excel導入狀態
   const [excelImportOpen, setExcelImportOpen] = useState(false)
   const [excelImportState, setExcelImportState] = useState<{ files: File[] }>({ files: [] })
+
+  // 清零狀態
+  const [clearOpen, setClearOpen] = useState(false)
 
   // 編輯狀態
   const [editingProduct, setEditingProduct] = useState<string | null>(null)

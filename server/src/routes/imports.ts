@@ -718,4 +718,58 @@ router.post('/excel', upload.array('files'), async (req, res) => {
   }
 });
 
+// 清零所有商品數量功能
+router.post('/clear-all', async (req, res) => {
+  try {
+    console.log('調試: 收到清零所有商品數量請求');
+    
+    const summary = { 
+      processed: 0,
+      updated: 0, 
+      errors: [] as string[]
+    };
+    
+    // 查找所有產品
+    const allProducts = await Product.find({});
+    console.log(`調試: 找到 ${allProducts.length} 個產品需要清零`);
+    
+    // 批量處理產品
+    const batchSize = 50; // 每批處理50個產品
+    for (let i = 0; i < allProducts.length; i += batchSize) {
+      const batch = allProducts.slice(i, i + batchSize);
+      
+      for (const product of batch) {
+        try {
+          summary.processed++;
+          
+          // 將所有庫存數量設為0
+          product.inventories.forEach((inventory: any) => {
+            inventory.quantity = 0;
+          });
+          
+          await product.save();
+          summary.updated++;
+          
+          console.log(`調試: 清零產品 ${product.name} (${product.productCode}) 的庫存`);
+        } catch (productError) {
+          const errorMsg = `產品 ${product.name} (${product.productCode}) 清零失敗: ${productError}`;
+          console.error('調試:', errorMsg);
+          summary.errors.push(errorMsg);
+        }
+      }
+      
+      // 批次間暫停，避免阻塞
+      if (i + batchSize < allProducts.length) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+    }
+    
+    console.log('調試: 清零完成，結果:', summary);
+    res.json(summary);
+  } catch (e) {
+    console.error('調試: 清零處理錯誤:', e);
+    res.status(500).json({ message: 'Failed to clear all products', error: String(e) });
+  }
+});
+
 export default router;
