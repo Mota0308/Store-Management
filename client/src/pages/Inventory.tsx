@@ -163,11 +163,17 @@ export default function Inventory() {
   }
 
   function getQuantity(product: Product, locationId: string): number {
+    if (!product.inventories || !Array.isArray(product.inventories)) {
+      return 0
+    }
     const inventory = product.inventories.find(inv => inv.locationId === locationId)
     return inventory ? inventory.quantity : 0
   }
 
   function getTotalQuantity(product: Product): number {
+    if (!product.inventories || !Array.isArray(product.inventories)) {
+      return 0
+    }
     return product.inventories.reduce((sum, inv) => sum + inv.quantity, 0)
   }
 
@@ -265,7 +271,7 @@ export default function Inventory() {
       productType: product.productType,
       size: getProductSize(product),
       price: product.price,
-      inventories: product.inventories.map(inv => ({
+      inventories: (product.inventories || []).map(inv => ({
         locationId: inv.locationId.toString(),
         quantity: inv.quantity
       }))
@@ -308,7 +314,7 @@ export default function Inventory() {
   }
 
   // Group products by name and productCode
-  const groupedProducts = filteredProducts.reduce((groups, product) => {
+  const groupedProducts = (filteredProducts || []).reduce((groups, product) => {
     const key = `${product.name}-${product.productCode}`
     if (!groups[key]) {
       groups[key] = {
@@ -435,7 +441,7 @@ export default function Inventory() {
                             </td>
                           )
                         })}
-                        <td>{editForm.inventories.reduce((sum, inv) => sum + inv.quantity, 0)}</td>
+                        <td>{(editForm.inventories || []).reduce((sum, inv) => sum + inv.quantity, 0)}</td>
                         <td>
                           <div className="actions">
                             <button className="btn" onClick={() => handleSaveEdit(product._id)}>保存</button>
