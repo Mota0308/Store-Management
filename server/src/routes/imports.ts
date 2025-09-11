@@ -102,7 +102,7 @@ function extractQuantity(text: string): number {
     /數目[：:]\s*(\d{1,3})/,
     /總共數量[：:]\s*(\d{1,3})/,
     /庫存數量[：:]\s*(\d{1,3})/,
-    // 匹配合理的商品數量範圍（1-999）
+    // 匹配合理的商品數量範圍（1-999），但排除明顯的訂單號
     /\b([1-9]\d{0,2})\b/
   ];
   
@@ -110,14 +110,42 @@ function extractQuantity(text: string): number {
     const match = text.match(pattern);
     if (match) {
       const qty = parseInt(match[1], 10);
-      // 只接受合理的商品數量範圍
-      if (qty > 0 && qty <= 999) {
+      // 只接受合理的商品數量範圍，排除明顯的訂單號
+      if (qty > 0 && qty <= 999 && !isOrderNumber(qty, text)) {
         return qty;
       }
     }
   }
   
   return 0;
+}
+
+// 新增：檢查是否為訂單號
+function isOrderNumber(qty: number, text: string): boolean {
+  // 如果數量很大且出現在訂單號相關的上下文中，可能是訂單號
+  if (qty > 100) {
+    // 檢查是否在訂單號相關的上下文中
+    const orderContexts = [
+      /訂單號碼/,
+      /訂單號/,
+      /Order/,
+      /Invoice/,
+      /發票/
+    ];
+    
+    for (const context of orderContexts) {
+      if (context.test(text)) {
+        return true;
+      }
+    }
+    
+    // 檢查是否與商品代碼在同一行（可能是商品代碼的一部分）
+    if (codePattern.test(text)) {
+      return true;
+    }
+  }
+  
+  return false;
 }
 
 // 修改：WS-712系列商品的特殊匹配函數
