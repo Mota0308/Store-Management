@@ -163,141 +163,100 @@ async function updateByCodeVariants(rawCode: string, qty: number, locationId: st
   summary.updated++;
 }
 
-// 改進：PDF解析函數，修復尺寸提取
+// 改進：PDF解析函數，使用pdf-parse作為主要方法
 async function extractByPdfjs(buffer: Buffer): Promise<{ name: string; code: string; qty: number; purchaseType?: string; size?: string }[]> {
-  const loadingTask = getDocument({
-    data: new Uint8Array(buffer),
-    disableWorker: true,
-    disableFontFace: true,
-    isEvalSupported: false,
-    useSystemFonts: true,
-  });
-  
-  const doc = await loadingTask.promise;
   const rows: { name: string; code: string; qty: number; purchaseType?: string; size?: string }[] = [];
   
-  console.log(`調試: PDF總頁數: ${doc.numPages}`);
-  
-  // 處理每一頁
-  for (let pageNum = 1; pageNum <= doc.numPages; pageNum++) {
-    console.log(`調試: 處理第 ${pageNum} 頁`);
-    const page = await doc.getPage(pageNum);
-    const textContent = await page.getTextContent();
-    const items = textContent.items as any[];
+  try {
+    // 使用pdf-parse作為主要解析方法
+    const data = await pdf(buffer);
+    const text = data.text;
     
-    // 按Y坐標分組文本項目，保持行結構
-    const lineGroups: any[][] = [];
-    let currentLine: any[] = [];
-    let currentY = 0;
+    console.log(`調試: 使用pdf-parse解析，文本長度: ${text.length}`);
     
-    for (const item of items) {
-      if (Math.abs(item.transform[5] - currentY) > 5) {
-        if (currentLine.length > 0) {
-          lineGroups.push(currentLine);
-        }
-        currentLine = [item];
-        currentY = item.transform[5];
-      } else {
-        currentLine.push(item);
-      }
-    }
-    if (currentLine.length > 0) {
-      lineGroups.push(currentLine);
-    }
-    
-    // 將每行轉換為文本
-    const lines: string[] = [];
-    for (const line of lineGroups) {
-      const sortedLine = line.slice().sort(byX);
-      const rowText = sortedLine.map((t: any) => t.str).join('').trim();
-      if (rowText) {
-        lines.push(rowText);
-      }
-    }
-    
-    console.log(`調試: 第 ${pageNum} 頁有 ${lines.length} 行文本`);
-    
-    // 處理每一行，查找商品信息
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
+    if (text) {
+      const lines = text.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+      console.log(`調試: 總共 ${lines.length} 行文本`);
       
-      // 查找商品代碼 - 優先查找WS-開頭的商品
-      const wsCodeMatch = line.match(/(WS-\w+)/);
-      if (wsCodeMatch) {
-        const code = wsCodeMatch[1];
-        console.log(`調試: 第 ${pageNum} 頁找到商品代碼: ${code}`);
+      // 處理每一行，查找商品信息
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
         
-        // 查找數量 - 在商品代碼行中查找數量
-        let qty = 1; // 默認數量為1
-        const qtyMatch = line.match(/(\d+)HK\$/);
-        if (qtyMatch) {
-          // 如果找到價格，數量通常是1
-          qty = 1;
-        }
-        
-        // 查找尺寸和購買類型 - 在後續行中查找
-        let size: string | undefined;
-        let purchaseType: string | undefined;
-        
-        // 檢查後續幾行
-        for (let j = i + 1; j < Math.min(i + 5, lines.length); j++) {
-          const nextLine = lines[j];
-          console.log(`調試: 檢查行 ${j}: "${nextLine}"`);
+        // 查找商品代碼 - 優先查找WS-開頭的商品
+        const wsCodeMatch = line.match(/(WS-\w+)/);
+        if (wsCodeMatch) {
+          const code = wsCodeMatch[1];
+          console.log(`調試: 找到商品代碼: ${code}`);
           
-          // 查找尺寸 - 修復正則表達式
-          const sizePatterns = [
-            /尺寸[：:]\s*([^，,\s\n]+)/,
-            /- 尺寸[：:]\s*([^，,\s\n]+)/,
-            /尺寸[：:]\s*(\d+)/,
-            /- 尺寸[：:]\s*(\d+)/
-          ];
+          // 查找數量 - 在商品代碼行中查找數量
+          let qty = 1; // 默認數量為1
+          const qtyMatch = line.match(/(\d+)HK\$/);
+          if (qtyMatch) {
+            // 如果找到價格，數量通常是1
+            qty = 1;
+          }
           
-          for (const pattern of sizePatterns) {
-            const sizeMatch = nextLine.match(pattern);
-            if (sizeMatch) {
-              size = sizeMatch[1];
-              console.log(`調試: 找到尺寸: ${size} (使用模式: ${pattern})`);
+          // 查找尺寸和購買類型 - 在後續行中查找
+          let size: string | undefined;
+          let purchaseType: string | undefined;
+          
+          // 檢查後續幾行
+          for (let j = i + 1; j < Math.min(i + 5, lines.length); j++) {
+            const nextLine = lines[j];
+            console.log(`調試: 檢查行 ${j + 1}: "${nextLine}"`);
+            
+            // 查找尺寸 - 使用經過驗證的正則表達式
+            const sizePatterns = [
+              /- 尺寸[：:]\s*([^，,\s\n]+)/,
+              /尺寸[：:]\s*([^，,\s\n]+)/
+            ];
+            
+            for (const pattern of sizePatterns) {
+              const sizeMatch = nextLine.match(pattern);
+              if (sizeMatch) {
+                size = sizeMatch[1];
+                console.log(`調試: 找到尺寸: ${size} (使用模式: ${pattern})`);
+                break;
+              }
+            }
+            
+            // 查找購買類型 - 使用經過驗證的正則表達式
+            const purchaseTypePatterns = [
+              /- 購買類型[：:]\s*([^，,\s\n]+)/,
+              /購買類型[：:]\s*([^，,\s\n]+)/
+            ];
+            
+            for (const pattern of purchaseTypePatterns) {
+              const purchaseTypeMatch = nextLine.match(pattern);
+              if (purchaseTypeMatch) {
+                purchaseType = purchaseTypeMatch[1];
+                console.log(`調試: 找到購買類型: ${purchaseType} (使用模式: ${pattern})`);
+                break;
+              }
+            }
+            
+            // 如果遇到下一個商品代碼，停止搜索
+            if (nextLine.match(/(WS-\w+)/)) {
               break;
             }
           }
           
-          // 查找購買類型 - 修復正則表達式
-          const purchaseTypePatterns = [
-            /購買類型[：:]\s*([^，,\s\n]+)/,
-            /- 購買類型[：:]\s*([^，,\s\n]+)/,
-            /購買類型[：:]\s*(上衣|褲子|套裝)/,
-            /- 購買類型[：:]\s*(上衣|褲子|套裝)/
-          ];
+          rows.push({
+            name: '',
+            code: code,
+            qty: qty,
+            purchaseType: purchaseType,
+            size: size
+          });
           
-          for (const pattern of purchaseTypePatterns) {
-            const purchaseTypeMatch = nextLine.match(pattern);
-            if (purchaseTypeMatch) {
-              purchaseType = purchaseTypeMatch[1];
-              console.log(`調試: 找到購買類型: ${purchaseType} (使用模式: ${pattern})`);
-              break;
-            }
-          }
-          
-          // 如果遇到下一個商品代碼，停止搜索
-          if (nextLine.match(/(WS-\w+)/)) {
-            break;
-          }
+          console.log(`調試: 添加商品 - 代碼: ${code}, 數量: ${qty}, 尺寸: ${size}, 購買類型: ${purchaseType}`);
         }
-        
-        rows.push({
-          name: '',
-          code: code,
-          qty: qty,
-          purchaseType: purchaseType,
-          size: size
-        });
-        
-        console.log(`調試: 添加商品 - 代碼: ${code}, 數量: ${qty}, 尺寸: ${size}, 購買類型: ${purchaseType}`);
       }
     }
+  } catch (error) {
+    console.error('pdf-parse解析失敗:', error);
   }
-
-  try { await (doc as any).destroy(); } catch {}
+  
   console.log(`調試: 總共提取到 ${rows.length} 個商品`);
   return rows;
 }
@@ -340,7 +299,7 @@ router.post('/incoming', upload.array('files'), async (req, res) => {
         try { 
           rows = await extractByPdfjs(file.buffer); 
         } catch (pdfjsError) {
-          console.log('PDF.js 解析失敗，嘗試使用 pdf-parse:', pdfjsError);
+          console.log('PDF解析失敗:', pdfjsError);
         }
         
         if (rows.length === 0) {
@@ -421,7 +380,7 @@ router.post('/outgoing', upload.array('files'), async (req, res) => {
         try { 
           rows = await extractByPdfjs(file.buffer); 
         } catch (pdfjsError) {
-          console.log('PDF.js 解析失敗，嘗試使用 pdf-parse:', pdfjsError);
+          console.log('PDF解析失敗:', pdfjsError);
         }
         
         if (rows.length === 0) {
@@ -503,7 +462,7 @@ router.post('/transfer', upload.array('files'), async (req, res) => {
         try { 
           rows = await extractByPdfjs(file.buffer); 
         } catch (pdfjsError) {
-          console.log('PDF.js 解析失敗，嘗試使用 pdf-parse:', pdfjsError);
+          console.log('PDF解析失敗:', pdfjsError);
         }
         
         if (rows.length === 0) {
