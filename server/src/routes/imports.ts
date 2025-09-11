@@ -163,7 +163,7 @@ async function updateByCodeVariants(rawCode: string, qty: number, locationId: st
   summary.updated++;
 }
 
-// 改進：PDF解析函數，正確處理每一頁
+// 改進：PDF解析函數，修復尺寸提取
 async function extractByPdfjs(buffer: Buffer): Promise<{ name: string; code: string; qty: number; purchaseType?: string; size?: string }[]> {
   const loadingTask = getDocument({
     data: new Uint8Array(buffer),
@@ -242,19 +242,40 @@ async function extractByPdfjs(buffer: Buffer): Promise<{ name: string; code: str
         // 檢查後續幾行
         for (let j = i + 1; j < Math.min(i + 5, lines.length); j++) {
           const nextLine = lines[j];
+          console.log(`調試: 檢查行 ${j}: "${nextLine}"`);
           
-          // 查找尺寸
-          const sizeMatch = nextLine.match(/尺寸[：:]\s*([^，,\s]+)/);
-          if (sizeMatch) {
-            size = sizeMatch[1];
-            console.log(`調試: 找到尺寸: ${size}`);
+          // 查找尺寸 - 修復正則表達式
+          const sizePatterns = [
+            /尺寸[：:]\s*([^，,\s\n]+)/,
+            /- 尺寸[：:]\s*([^，,\s\n]+)/,
+            /尺寸[：:]\s*(\d+)/,
+            /- 尺寸[：:]\s*(\d+)/
+          ];
+          
+          for (const pattern of sizePatterns) {
+            const sizeMatch = nextLine.match(pattern);
+            if (sizeMatch) {
+              size = sizeMatch[1];
+              console.log(`調試: 找到尺寸: ${size} (使用模式: ${pattern})`);
+              break;
+            }
           }
           
-          // 查找購買類型
-          const purchaseTypeMatch = nextLine.match(/購買類型[：:]\s*([^，,\s]+)/);
-          if (purchaseTypeMatch) {
-            purchaseType = purchaseTypeMatch[1];
-            console.log(`調試: 找到購買類型: ${purchaseType}`);
+          // 查找購買類型 - 修復正則表達式
+          const purchaseTypePatterns = [
+            /購買類型[：:]\s*([^，,\s\n]+)/,
+            /- 購買類型[：:]\s*([^，,\s\n]+)/,
+            /購買類型[：:]\s*(上衣|褲子|套裝)/,
+            /- 購買類型[：:]\s*(上衣|褲子|套裝)/
+          ];
+          
+          for (const pattern of purchaseTypePatterns) {
+            const purchaseTypeMatch = nextLine.match(pattern);
+            if (purchaseTypeMatch) {
+              purchaseType = purchaseTypeMatch[1];
+              console.log(`調試: 找到購買類型: ${purchaseType} (使用模式: ${pattern})`);
+              break;
+            }
           }
           
           // 如果遇到下一個商品代碼，停止搜索
