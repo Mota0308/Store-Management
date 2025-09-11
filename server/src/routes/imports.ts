@@ -19,7 +19,7 @@ const upload = multer({
 
 // 輔助函數
 function normalizeCode(s: string) {
-  return (s || '').replace(/[]/g, '-').replace(/[^A-Za-z0-9_\/-]/g, '').toUpperCase();
+  return (s || '').replace(/[–]/g, '-').replace(/[^A-Za-z0-9_\/-]/g, '').toUpperCase();
 }
 
 function codeVariants(raw: string): string[] {
@@ -175,7 +175,7 @@ async function extractByPdfjs(buffer: Buffer): Promise<{ name: string; code: str
     console.log(`調試: 使用pdf-parse解析，文本長度: ${text.length}`);
     
     if (text) {
-      const lines = text.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+      const lines = text.split(/\r?\n/).map((line: string) => line.trim()).filter(Boolean);
       console.log(`調試: 總共 ${lines.length} 行文本`);
       
       // 處理每一行，查找商品信息
