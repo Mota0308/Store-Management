@@ -163,7 +163,7 @@ async function updateByCodeVariants(rawCode: string, qty: number, locationId: st
   summary.updated++;
 }
 
-// 改進：PDF解析函數，基於實際PDF結構
+// 改進：PDF解析函數，正確處理每一頁
 async function extractByPdfjs(buffer: Buffer): Promise<{ name: string; code: string; qty: number; purchaseType?: string; size?: string }[]> {
   const loadingTask = getDocument({
     data: new Uint8Array(buffer),
@@ -176,17 +176,48 @@ async function extractByPdfjs(buffer: Buffer): Promise<{ name: string; code: str
   const doc = await loadingTask.promise;
   const rows: { name: string; code: string; qty: number; purchaseType?: string; size?: string }[] = [];
   
+  console.log(`調試: PDF總頁數: ${doc.numPages}`);
+  
+  // 處理每一頁
   for (let pageNum = 1; pageNum <= doc.numPages; pageNum++) {
+    console.log(`調試: 處理第 ${pageNum} 頁`);
     const page = await doc.getPage(pageNum);
     const textContent = await page.getTextContent();
     const items = textContent.items as any[];
     
-    // 將所有文本項目轉換為文本
-    const fullText = items.map(item => item.str).join(' ');
+    // 按Y坐標分組文本項目，保持行結構
+    const lineGroups: any[][] = [];
+    let currentLine: any[] = [];
+    let currentY = 0;
     
-    // 使用正則表達式提取商品信息
-    const lines = fullText.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+    for (const item of items) {
+      if (Math.abs(item.transform[5] - currentY) > 5) {
+        if (currentLine.length > 0) {
+          lineGroups.push(currentLine);
+        }
+        currentLine = [item];
+        currentY = item.transform[5];
+      } else {
+        currentLine.push(item);
+      }
+    }
+    if (currentLine.length > 0) {
+      lineGroups.push(currentLine);
+    }
     
+    // 將每行轉換為文本
+    const lines: string[] = [];
+    for (const line of lineGroups) {
+      const sortedLine = line.slice().sort(byX);
+      const rowText = sortedLine.map((t: any) => t.str).join('').trim();
+      if (rowText) {
+        lines.push(rowText);
+      }
+    }
+    
+    console.log(`調試: 第 ${pageNum} 頁有 ${lines.length} 行文本`);
+    
+    // 處理每一行，查找商品信息
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
       
@@ -194,6 +225,7 @@ async function extractByPdfjs(buffer: Buffer): Promise<{ name: string; code: str
       const wsCodeMatch = line.match(/(WS-\w+)/);
       if (wsCodeMatch) {
         const code = wsCodeMatch[1];
+        console.log(`調試: 第 ${pageNum} 頁找到商品代碼: ${code}`);
         
         // 查找數量 - 在商品代碼行中查找數量
         let qty = 1; // 默認數量為1
@@ -215,12 +247,14 @@ async function extractByPdfjs(buffer: Buffer): Promise<{ name: string; code: str
           const sizeMatch = nextLine.match(/尺寸[：:]\s*([^，,\s]+)/);
           if (sizeMatch) {
             size = sizeMatch[1];
+            console.log(`調試: 找到尺寸: ${size}`);
           }
           
           // 查找購買類型
           const purchaseTypeMatch = nextLine.match(/購買類型[：:]\s*([^，,\s]+)/);
           if (purchaseTypeMatch) {
             purchaseType = purchaseTypeMatch[1];
+            console.log(`調試: 找到購買類型: ${purchaseType}`);
           }
           
           // 如果遇到下一個商品代碼，停止搜索
@@ -236,11 +270,14 @@ async function extractByPdfjs(buffer: Buffer): Promise<{ name: string; code: str
           purchaseType: purchaseType,
           size: size
         });
+        
+        console.log(`調試: 添加商品 - 代碼: ${code}, 數量: ${qty}, 尺寸: ${size}, 購買類型: ${purchaseType}`);
       }
     }
   }
 
   try { await (doc as any).destroy(); } catch {}
+  console.log(`調試: 總共提取到 ${rows.length} 個商品`);
   return rows;
 }
 
