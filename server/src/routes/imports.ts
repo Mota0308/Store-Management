@@ -163,7 +163,7 @@ async function updateByCodeVariants(rawCode: string, qty: number, locationId: st
   summary.updated++;
 }
 
-// 改進：PDF解析函數，使用更簡單但更有效的方法
+// 改進：PDF解析函數，基於實際PDF結構
 async function extractByPdfjs(buffer: Buffer): Promise<{ name: string; code: string; qty: number; purchaseType?: string; size?: string }[]> {
   const loadingTask = getDocument({
     data: new Uint8Array(buffer),
@@ -190,60 +190,53 @@ async function extractByPdfjs(buffer: Buffer): Promise<{ name: string; code: str
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
       
-      // 查找商品代碼
-      const codeMatch = line.match(codePattern);
-      if (!codeMatch) continue;
-      
-      const code = codeMatch[0];
-      
-      // 查找數量 - 優先查找明確標示的數量
-      let qty = 0;
-      const qtyPatterns = [
-        /數量[：:]\s*(\d{1,3})/,
-        /數目[：:]\s*(\d{1,3})/,
-        /總共數量[：:]\s*(\d{1,3})/,
-        /庫存數量[：:]\s*(\d{1,3})/,
-        /\b([1-9]\d{0,2})\b/ // 1-3位數字，但排除0開頭
-      ];
-      
-      for (const pattern of qtyPatterns) {
-        const match = line.match(pattern);
-        if (match) {
-          const num = parseInt(match[1], 10);
-          if (num > 0 && num <= 999) {
-            qty = num;
+      // 查找商品代碼 - 優先查找WS-開頭的商品
+      const wsCodeMatch = line.match(/(WS-\w+)/);
+      if (wsCodeMatch) {
+        const code = wsCodeMatch[1];
+        
+        // 查找數量 - 在商品代碼行中查找數量
+        let qty = 1; // 默認數量為1
+        const qtyMatch = line.match(/(\d+)HK\$/);
+        if (qtyMatch) {
+          // 如果找到價格，數量通常是1
+          qty = 1;
+        }
+        
+        // 查找尺寸和購買類型 - 在後續行中查找
+        let size: string | undefined;
+        let purchaseType: string | undefined;
+        
+        // 檢查後續幾行
+        for (let j = i + 1; j < Math.min(i + 5, lines.length); j++) {
+          const nextLine = lines[j];
+          
+          // 查找尺寸
+          const sizeMatch = nextLine.match(/尺寸[：:]\s*([^，,\s]+)/);
+          if (sizeMatch) {
+            size = sizeMatch[1];
+          }
+          
+          // 查找購買類型
+          const purchaseTypeMatch = nextLine.match(/購買類型[：:]\s*([^，,\s]+)/);
+          if (purchaseTypeMatch) {
+            purchaseType = purchaseTypeMatch[1];
+          }
+          
+          // 如果遇到下一個商品代碼，停止搜索
+          if (nextLine.match(/(WS-\w+)/)) {
             break;
           }
         }
+        
+        rows.push({
+          name: '',
+          code: code,
+          qty: qty,
+          purchaseType: purchaseType,
+          size: size
+        });
       }
-      
-      if (qty === 0) continue;
-      
-      // 查找尺寸
-      let size: string | undefined;
-      const sizeMatch = line.match(/尺寸[：:]\s*([^，,\s]+)/);
-      if (sizeMatch) {
-        size = sizeMatch[1];
-      }
-      
-      // 查找購買類型（僅WS-712系列）
-      let purchaseType: string | undefined;
-      if (code.includes('WS-712')) {
-        const purchaseTypeMatch = line.match(/購買類型[：:]\s*([^，,\s]+)/);
-        if (purchaseTypeMatch) {
-          const parsed = parsePurchaseTypeAndSize(purchaseTypeMatch[1]);
-          purchaseType = parsed.purchaseType;
-          if (parsed.size) size = parsed.size;
-        }
-      }
-      
-      rows.push({
-        name: '',
-        code: code,
-        qty: qty,
-        purchaseType: purchaseType,
-        size: size
-      });
     }
   }
 
