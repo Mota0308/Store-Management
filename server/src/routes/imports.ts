@@ -19,7 +19,7 @@ const upload = multer({
 
 // 輔助函數
 function normalizeCode(s: string) {
-  return (s || '').replace(/[–]/g, '-').replace(/[^A-Za-z0-9_\/-]/g, '').toUpperCase();
+  return (s || '').replace(/[]/g, '-').replace(/[^A-Za-z0-9_\/-]/g, '').toUpperCase();
 }
 
 function codeVariants(raw: string): string[] {
@@ -142,6 +142,74 @@ async function updateWS712Product(rawCode: string, qty: number, locationId: stri
   summary.updated++;
 }
 
+// 新增：處理有尺寸但沒有購買類型的商品（如WS-793BU）
+async function updateProductWithSize(rawCode: string, qty: number, locationId: string, summary: any, direction: 'out' | 'in', size?: string) {
+  const variants = codeVariants(rawCode);
+  if (variants.length === 0) return;
+  
+  console.log(`調試: 查找產品 ${rawCode} (有尺寸但無購買類型), 變體:`, variants);
+  
+  // 查找所有匹配的產品
+  const products = await Product.find({ productCode: { $in: variants } });
+  console.log(`調試: 找到 ${products.length} 個匹配的產品`);
+  
+  if (products.length === 0) { 
+    summary.notFound.push(normalizeCode(rawCode)); 
+    return; 
+  }
+  
+  // 如果有尺寸信息，嘗試匹配尺寸
+  if (size) {
+    console.log(`調試: 查找匹配的尺寸 - 尺寸: ${size}`);
+    
+    let matchedProduct = null;
+    for (const product of products) {
+      console.log(`調試: 檢查產品 ${product.productCode}, 尺寸:`, product.sizes);
+      
+      // 檢查產品的尺寸是否匹配
+      const hasMatchingSize = product.sizes.some(productSize => {
+        const sizeStr = productSize.replace(/[{}]/g, ''); // 移除大括號
+        const parts = sizeStr.split('|').map(p => p.trim());
+        
+        console.log(`調試: 檢查尺寸 "${productSize}" -> "${sizeStr}" -> parts:`, parts);
+        
+        // 檢查是否包含尺寸
+        const hasSize = parts.some(part => part.includes(size));
+        
+        console.log(`調試: 包含尺寸: ${hasSize}`);
+        
+        return hasSize;
+      });
+      
+      if (hasMatchingSize) {
+        matchedProduct = product;
+        console.log(`調試: 找到匹配的產品: ${product.productCode}`);
+        break;
+      }
+    }
+    
+    if (matchedProduct) {
+      summary.matched++;
+      const inv = matchedProduct.inventories.find(i => String(i.locationId) === String(locationId));
+      if (inv) inv.quantity = direction === 'out' ? Math.max(0, inv.quantity - qty) : inv.quantity + qty;
+      else matchedProduct.inventories.push({ locationId: new mongoose.Types.ObjectId(locationId), quantity: direction === 'out' ? 0 : qty });
+      await matchedProduct.save();
+      summary.updated++;
+      return;
+    }
+  }
+  
+  // 如果沒有尺寸匹配，使用第一個匹配的產品
+  console.log(`調試: 沒有尺寸匹配，使用第一個匹配的產品`);
+  const product = products[0];
+  summary.matched++;
+  const inv = product.inventories.find(i => String(i.locationId) === String(locationId));
+  if (inv) inv.quantity = direction === 'out' ? Math.max(0, inv.quantity - qty) : inv.quantity + qty;
+  else product.inventories.push({ locationId: new mongoose.Types.ObjectId(locationId), quantity: direction === 'out' ? 0 : qty });
+  await product.save();
+  summary.updated++;
+}
+
 // 修改：更新函數調用
 async function updateByCodeVariants(rawCode: string, qty: number, locationId: string, summary: any, direction: 'out' | 'in', purchaseType?: string, size?: string) {
   // 檢查是否為WS-712系列商品
@@ -150,7 +218,13 @@ async function updateByCodeVariants(rawCode: string, qty: number, locationId: st
     return;
   }
   
-  // 其他商品使用原來的邏輯
+  // 其他商品：如果有尺寸信息，使用尺寸匹配邏輯
+  if (size) {
+    await updateProductWithSize(rawCode, qty, locationId, summary, direction, size);
+    return;
+  }
+  
+  // 其他商品使用原來的邏輯（沒有尺寸信息）
   const variants = codeVariants(rawCode);
   if (variants.length === 0) return;
   const product = await Product.findOne({ productCode: { $in: variants } });
