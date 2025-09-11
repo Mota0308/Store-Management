@@ -73,8 +73,12 @@ async function updateWS712Product(rawCode: string, qty: number, locationId: stri
   const variants = codeVariants(rawCode);
   if (variants.length === 0) return;
   
+  console.log(`調試: 查找WS-712產品 ${rawCode}, 變體:`, variants);
+  
   // 查找所有匹配的WS-712產品
   const products = await Product.find({ productCode: { $in: variants } });
+  console.log(`調試: 找到 ${products.length} 個匹配的WS-712產品`);
+  
   if (products.length === 0) { 
     summary.notFound.push(normalizeCode(rawCode)); 
     return; 
@@ -82,6 +86,7 @@ async function updateWS712Product(rawCode: string, qty: number, locationId: stri
   
   // 如果沒有指定購買類型和尺寸，使用原來的邏輯
   if (!purchaseType || !size) {
+    console.log(`調試: 沒有購買類型和尺寸，使用第一個匹配的產品`);
     const product = products[0]; // 取第一個匹配的產品
     summary.matched++;
     const inv = product.inventories.find(i => String(i.locationId) === String(locationId));
@@ -92,29 +97,39 @@ async function updateWS712Product(rawCode: string, qty: number, locationId: stri
     return;
   }
   
+  console.log(`調試: 查找匹配的尺寸 - 購買類型: ${purchaseType}, 尺寸: ${size}`);
+  
   // 根據購買類型和尺寸匹配產品
   let matchedProduct = null;
   for (const product of products) {
+    console.log(`調試: 檢查產品 ${product.productCode}, 尺寸:`, product.sizes);
+    
     // 檢查產品的尺寸是否匹配
     const hasMatchingSize = product.sizes.some(productSize => {
       // 支持兩種格式：{上衣 | 1} 和 {1 | 上衣}
       const sizeStr = productSize.replace(/[{}]/g, ''); // 移除大括號
       const parts = sizeStr.split('|').map(p => p.trim());
       
+      console.log(`調試: 檢查尺寸 "${productSize}" -> "${sizeStr}" -> parts:`, parts);
+      
       // 檢查是否包含購買類型和尺寸
       const hasPurchaseType = parts.some(part => part.includes(purchaseType));
       const hasSize = parts.some(part => part.includes(size));
+      
+      console.log(`調試: 包含購買類型: ${hasPurchaseType}, 包含尺寸: ${hasSize}`);
       
       return hasPurchaseType && hasSize;
     });
     
     if (hasMatchingSize) {
       matchedProduct = product;
+      console.log(`調試: 找到匹配的產品: ${product.productCode}`);
       break;
     }
   }
   
   if (!matchedProduct) {
+    console.log(`調試: 沒有找到匹配的產品`);
     summary.notFound.push(`${normalizeCode(rawCode)} (${purchaseType}, 尺寸: ${size})`);
     return;
   }
