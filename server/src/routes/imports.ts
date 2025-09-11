@@ -36,86 +36,6 @@ function codeVariants(raw: string): string[] {
 
 const codePattern = /(?:[A-Z]{1,8}[\-]?\d{2,8}(?:[A-Z]+)?(?:\/[A-Z]+)?)|(?:\b\d{8,14}\b)/;
 
-// 新增：從PDF表格中提取商品信息
-function extractProductInfoFromTable(tableData: any[]): { code: string; size: string; purchaseType?: string; quantity: number }[] {
-  const products: { code: string; size: string; purchaseType?: string; quantity: number }[] = [];
-  
-  // 查找表頭行
-  let headerRowIndex = -1;
-  let modelColumnIndex = -1;
-  let sizeColumnIndex = -1;
-  let purchaseTypeColumnIndex = -1;
-  let quantityColumnIndex = -1;
-  
-  for (let i = 0; i < tableData.length; i++) {
-    const row = tableData[i];
-    const rowText = row.join(' ').toLowerCase();
-    
-    // 查找包含"型號"的行
-    if (rowText.includes('型號') || rowText.includes('model') || rowText.includes('代碼')) {
-      headerRowIndex = i;
-      
-      // 找到各列的索引
-      for (let j = 0; j < row.length; j++) {
-        const cellText = row[j].toLowerCase();
-        if (cellText.includes('型號') || cellText.includes('model') || cellText.includes('代碼')) {
-          modelColumnIndex = j;
-        } else if (cellText.includes('尺寸') || cellText.includes('size')) {
-          sizeColumnIndex = j;
-        } else if (cellText.includes('購買類型') || cellText.includes('類型') || cellText.includes('type')) {
-          purchaseTypeColumnIndex = j;
-        } else if (cellText.includes('數量') || cellText.includes('quantity') || cellText.includes('數目')) {
-          quantityColumnIndex = j;
-        }
-      }
-      break;
-    }
-  }
-  
-  if (headerRowIndex === -1 || modelColumnIndex === -1 || sizeColumnIndex === -1 || quantityColumnIndex === -1) {
-    return products;
-  }
-  
-  // 從表頭行之後開始提取數據
-  for (let i = headerRowIndex + 1; i < tableData.length; i++) {
-    const row = tableData[i];
-    
-    if (row.length <= Math.max(modelColumnIndex, sizeColumnIndex, quantityColumnIndex)) {
-      continue;
-    }
-    
-    const code = row[modelColumnIndex]?.trim();
-    const size = row[sizeColumnIndex]?.trim();
-    const purchaseType = purchaseTypeColumnIndex >= 0 ? row[purchaseTypeColumnIndex]?.trim() : undefined;
-    const quantityText = row[quantityColumnIndex]?.trim();
-    
-    // 驗證商品代碼
-    if (!code || !code.match(codePattern)) {
-      continue;
-    }
-    
-    // 提取數量
-    const quantityMatch = quantityText?.match(/\b(\d{1,3})\b/);
-    if (!quantityMatch) {
-      continue;
-    }
-    
-    const quantity = parseInt(quantityMatch[1], 10);
-    if (quantity <= 0 || quantity > 999) {
-      continue;
-    }
-    
-    products.push({
-      code: code,
-      size: size || '',
-      purchaseType: purchaseType,
-      quantity: quantity
-    });
-  }
-  
-  return products;
-}
-
 // 改進：從購買類型中提取尺寸和類型
 function parsePurchaseTypeAndSize(purchaseTypeText: string): { purchaseType?: string; size?: string } {
   if (!purchaseTypeText) {
@@ -228,10 +148,10 @@ async function updateByCodeVariants(rawCode: string, qty: number, locationId: st
   summary.updated++;
 }
 
-// 改進：PDF解析函數，使用表格結構解析
+// 改進：PDF解析函數，使用更簡單但更有效的方法
 async function extractByPdfjs(buffer: Buffer): Promise<{ name: string; code: string; qty: number; purchaseType?: string; size?: string }[]> {
   const loadingTask = getDocument({
-    data: buffer,
+    data: new Uint8Array(buffer),
     disableWorker: true,
     disableFontFace: true,
     isEvalSupported: false,
@@ -246,58 +166,66 @@ async function extractByPdfjs(buffer: Buffer): Promise<{ name: string; code: str
     const textContent = await page.getTextContent();
     const items = textContent.items as any[];
     
-    // 按Y坐標分組文本項目
-    const lineGroups: any[][] = [];
-    let currentLine: any[] = [];
-    let currentY = 0;
+    // 將所有文本項目轉換為文本
+    const fullText = items.map(item => item.str).join(' ');
     
-    for (const item of items) {
-      if (Math.abs(item.transform[5] - currentY) > 5) {
-        if (currentLine.length > 0) {
-          lineGroups.push(currentLine);
-        }
-        currentLine = [item];
-        currentY = item.transform[5];
-      } else {
-        currentLine.push(item);
-      }
-    }
-    if (currentLine.length > 0) {
-      lineGroups.push(currentLine);
-    }
+    // 使用正則表達式提取商品信息
+    const lines = fullText.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
     
-    // 將每行轉換為文本數組
-    const tableData: string[][] = [];
-    for (const line of lineGroups) {
-      const sortedLine = line.slice().sort(byX);
-      const rowText = sortedLine.map((t: any) => t.str).join('').trim();
-      if (rowText) {
-        // 簡單的列分割（基於空格或製表符）
-        const cells = rowText.split(/\s+/).filter(cell => cell.trim());
-        tableData.push(cells);
-      }
-    }
-    
-    // 使用表格解析函數提取商品信息
-    const products = extractProductInfoFromTable(tableData);
-    
-    for (const product of products) {
-      let purchaseType: string | undefined;
-      let size: string | undefined;
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
       
-      // 如果是WS-712系列，解析購買類型
-      if (product.code.includes('WS-712') && product.purchaseType) {
-        const parsed = parsePurchaseTypeAndSize(product.purchaseType);
-        purchaseType = parsed.purchaseType;
-        size = parsed.size;
-      } else {
-        size = product.size;
+      // 查找商品代碼
+      const codeMatch = line.match(codePattern);
+      if (!codeMatch) continue;
+      
+      const code = codeMatch[0];
+      
+      // 查找數量 - 優先查找明確標示的數量
+      let qty = 0;
+      const qtyPatterns = [
+        /數量[：:]\s*(\d{1,3})/,
+        /數目[：:]\s*(\d{1,3})/,
+        /總共數量[：:]\s*(\d{1,3})/,
+        /庫存數量[：:]\s*(\d{1,3})/,
+        /\b([1-9]\d{0,2})\b/ // 1-3位數字，但排除0開頭
+      ];
+      
+      for (const pattern of qtyPatterns) {
+        const match = line.match(pattern);
+        if (match) {
+          const num = parseInt(match[1], 10);
+          if (num > 0 && num <= 999) {
+            qty = num;
+            break;
+          }
+        }
+      }
+      
+      if (qty === 0) continue;
+      
+      // 查找尺寸
+      let size: string | undefined;
+      const sizeMatch = line.match(/尺寸[：:]\s*([^，,\s]+)/);
+      if (sizeMatch) {
+        size = sizeMatch[1];
+      }
+      
+      // 查找購買類型（僅WS-712系列）
+      let purchaseType: string | undefined;
+      if (code.includes('WS-712')) {
+        const purchaseTypeMatch = line.match(/購買類型[：:]\s*([^，,\s]+)/);
+        if (purchaseTypeMatch) {
+          const parsed = parsePurchaseTypeAndSize(purchaseTypeMatch[1]);
+          purchaseType = parsed.purchaseType;
+          if (parsed.size) size = parsed.size;
+        }
       }
       
       rows.push({
         name: '',
-        code: product.code,
-        qty: product.quantity,
+        code: code,
+        qty: qty,
         purchaseType: purchaseType,
         size: size
       });
@@ -357,7 +285,7 @@ router.post('/incoming', upload.array('files'), async (req, res) => {
             for (let i = 0; i < lines.length; i++) {
               const m = lines[i].match(codePattern);
               if (m) {
-                const qtyMatch = lines[i].match(/\b(\d{1,3})\b/);
+                const qtyMatch = lines[i].match(/\b([1-9]\d{0,2})\b/);
                 const qty = qtyMatch ? parseInt(qtyMatch[1], 10) : 0;
                 if (qty > 0) {
                   rows.push({ name: '', code: m[0], qty, purchaseType: undefined, size: undefined });
@@ -438,7 +366,7 @@ router.post('/outgoing', upload.array('files'), async (req, res) => {
             for (let i = 0; i < lines.length; i++) {
               const m = lines[i].match(codePattern);
               if (m) {
-                const qtyMatch = lines[i].match(/\b(\d{1,3})\b/);
+                const qtyMatch = lines[i].match(/\b([1-9]\d{0,2})\b/);
                 const qty = qtyMatch ? parseInt(qtyMatch[1], 10) : 0;
                 if (qty > 0) {
                   rows.push({ name: '', code: m[0], qty, purchaseType: undefined, size: undefined });
@@ -520,7 +448,7 @@ router.post('/transfer', upload.array('files'), async (req, res) => {
             for (let i = 0; i < lines.length; i++) {
               const m = lines[i].match(codePattern);
               if (m) {
-                const qtyMatch = lines[i].match(/\b(\d{1,3})\b/);
+                const qtyMatch = lines[i].match(/\b([1-9]\d{0,2})\b/);
                 const qty = qtyMatch ? parseInt(qtyMatch[1], 10) : 0;
                 if (qty > 0) {
                   rows.push({ name: '', code: m[0], qty, purchaseType: undefined, size: undefined });
