@@ -19,7 +19,7 @@ const upload = multer({
 
 // 輔助函數
 function normalizeCode(s: string) {
-  return (s || '').replace(/[—–‑–−]/g, '-').replace(/[^A-Za-z0-9_\/-]/g, '').toUpperCase();
+  return (s || '').replace(/[]/g, '-').replace(/[^A-Za-z0-9_\/-]/g, '').toUpperCase();
 }
 
 function codeVariants(raw: string): string[] {
@@ -28,41 +28,44 @@ function codeVariants(raw: string): string[] {
   const variants = [n];
   if (n.includes('-')) {
     variants.push(n.replace(/-/g, ''));
-    variants.push(n.replace(/-/g, '—'));
-    variants.push(n.replace(/-/g, '–'));
+    variants.push(n.replace(/-/g, ''));
+    variants.push(n.replace(/-/g, ''));
   }
   return [...new Set(variants)];
 }
 
-const codePattern = /(?:[A-Z]{1,8}[\-—–‑–−]?\d{2,8}(?:[A-Z]+)?(?:\/[A-Z]+)?)|(?:\b\d{8,14}\b)/;
+const codePattern = /(?:[A-Z]{1,8}[\-]?\d{2,8}(?:[A-Z]+)?(?:\/[A-Z]+)?)|(?:\b\d{8,14}\b)/;
 
-// 修改：同時提取購買類型和尺寸信息
+// 改進：更精確的購買類型和尺寸提取函數
 function extractPurchaseTypeAndSize(text: string): { purchaseType?: string; size?: string } {
-  // 匹配購買類型模式
+  // 更精確的購買類型匹配模式
   const purchaseTypePatterns = [
-    /購買類型[：:]\s*([^，,\s]+)/,
     /購買類型[：:]\s*([^，,\s]+)/,
     /類型[：:]\s*([^，,\s]+)/,
     /(上衣|褲子|套裝)/,
-    /(Top|Bottom|Set)/i
+    /(Top|Bottom|Set)/i,
+    // 新增：從商品名稱中提取購買類型
+    /(上衣|褲子|套裝).*?(\d+)/,
+    /(\d+).*?(上衣|褲子|套裝)/
   ];
   
-  // 匹配尺寸模式
+  // 更精確的尺寸匹配模式
   const sizePatterns = [
     /尺寸[：:]\s*([^，,\s]+)/,
     /尺碼[：:]\s*([^，,\s]+)/,
     /Size[：:]\s*([^，,\s]+)/i,
-    /\b(\d+)\b/  // 匹配數字作為尺寸
+    // 新增：匹配常見的尺寸格式（避免匹配訂單號等大數字）
+    /\b(0|1|2|3|4|5|6|7|8|9|10|11|12|14|16|18|20|22|24|26|28|30|32|34|36|38|40|42|44|46|48|50|52|54|56|58|60|62|64|66|68|70|72|74|76|78|80|82|84|86|88|90|92|94|96|98|100|102|104|106|108|110|112|114|116|118|120|122|124|126|128|130|132|134|136|138|140|142|144|146|148|150|152|154|156|158|160|162|164|166|168|170|172|174|176|178|180|182|184|186|188|190|192|194|196|198|200)\b/
   ];
   
   let purchaseType: string | undefined;
   let size: string | undefined;
   
+  // 提取購買類型
   for (const pattern of purchaseTypePatterns) {
     const match = text.match(pattern);
     if (match) {
       const type = match[1] || match[0];
-      // 標準化購買類型
       if (type.includes('上衣') || type.toLowerCase().includes('top')) {
         purchaseType = '上衣';
         break;
@@ -78,6 +81,7 @@ function extractPurchaseTypeAndSize(text: string): { purchaseType?: string; size
     }
   }
   
+  // 提取尺寸
   for (const pattern of sizePatterns) {
     const match = text.match(pattern);
     if (match) {
@@ -87,6 +91,33 @@ function extractPurchaseTypeAndSize(text: string): { purchaseType?: string; size
   }
   
   return { purchaseType, size };
+}
+
+// 改進：更精確的數量提取函數
+function extractQuantity(text: string): number {
+  // 避免匹配訂單號、尺寸等大數字，只匹配合理的商品數量
+  const quantityPatterns = [
+    // 匹配數量欄位中的數字（通常較小）
+    /數量[：:]\s*(\d{1,3})/,
+    /數目[：:]\s*(\d{1,3})/,
+    /總共數量[：:]\s*(\d{1,3})/,
+    /庫存數量[：:]\s*(\d{1,3})/,
+    // 匹配合理的商品數量範圍（1-999）
+    /\b([1-9]\d{0,2})\b/
+  ];
+  
+  for (const pattern of quantityPatterns) {
+    const match = text.match(pattern);
+    if (match) {
+      const qty = parseInt(match[1], 10);
+      // 只接受合理的商品數量範圍
+      if (qty > 0 && qty <= 999) {
+        return qty;
+      }
+    }
+  }
+  
+  return 0;
 }
 
 // 修改：WS-712系列商品的特殊匹配函數
@@ -169,7 +200,7 @@ async function updateByCodeVariants(rawCode: string, qty: number, locationId: st
   summary.updated++;
 }
 
-// 修改：PDF解析函數，支持提取尺寸信息
+// 改進：PDF解析函數，支持更精確的數量提取
 async function extractByPdfjs(buffer: Buffer): Promise<{ name: string; code: string; qty: number; purchaseType?: string; size?: string }[]> {
   const loadingTask = getDocument({
     data: buffer,
@@ -178,45 +209,48 @@ async function extractByPdfjs(buffer: Buffer): Promise<{ name: string; code: str
     isEvalSupported: false,
     useSystemFonts: true,
   });
+  
   const doc = await loadingTask.promise;
   const rows: { name: string; code: string; qty: number; purchaseType?: string; size?: string }[] = [];
-
-  for (let p = 1; p <= doc.numPages; p++) {
-    const page = await doc.getPage(p);
-    const content = await page.getTextContent();
-    const items = content.items as any[];
-    items.sort(byY);
-
-    const lines: any[][] = [];
-    const yTolerance = 2.5;
-    for (const it of items) {
-      const y = it.transform[5];
-      const line = lines.find(L => Math.abs((L as any)._y - y) <= yTolerance);
-      if (line) { line.push(it); (line as any)._y = ((line as any)._y + y) / 2; }
-      else { const L: any[] = [it]; (L as any)._y = y; lines.push(L); }
+  
+  for (let pageNum = 1; pageNum <= doc.numPages; pageNum++) {
+    const page = await doc.getPage(pageNum);
+    const textContent = await page.getTextContent();
+    const lines = textContent.items as any[];
+    
+    // 按Y坐標分組文本項目
+    const lineGroups: any[][] = [];
+    let currentLine: any[] = [];
+    let currentY = 0;
+    
+    for (const item of lines) {
+      if (Math.abs(item.transform[5] - currentY) > 5) {
+        if (currentLine.length > 0) {
+          lineGroups.push(currentLine);
+        }
+        currentLine = [item];
+        currentY = item.transform[5];
+      } else {
+        currentLine.push(item);
+      }
     }
-
+    if (currentLine.length > 0) {
+      lineGroups.push(currentLine);
+    }
+    
+    // 查找表頭
     let nameX: [number, number] | null = null;
     let codeX: [number, number] | null = null;
     let qtyX: [number, number] | null = null;
-
-    for (const L of lines) {
-      const text = L.map(t => t.str).join('');
-      // Expanded header synonyms based on provided PDF formats
-      const nameHeadRegex = /(商品詳情|產品描述|商品描述|商品名稱|品名)/;
-      const codeHeadRegex = /(型號|條碼號碼|條碼|條形碼|條碼編號|型號編號|貨號)/;
-      const qtyHeadRegex = /(數量|數目|總共數量|庫存數量)/;
-      const hasNameHead = nameHeadRegex.test(text);
-      const hasCodeHead = codeHeadRegex.test(text);
-      const hasQtyHead = qtyHeadRegex.test(text);
-      if ((hasNameHead && hasQtyHead) && (hasCodeHead || true)) {
-        L.sort(byX);
-        const parts = L.map(t => ({ x: t.transform[4], s: t.str }));
-        const nameHead = parts.find(p => nameHeadRegex.test(p.s));
-        const codeHead = parts.find(p => codeHeadRegex.test(p.s));
-        const qtyHead = parts.find(p => qtyHeadRegex.test(p.s));
+    
+    for (const line of lineGroups) {
+      const lineText = line.map((t: any) => t.str).join('').trim();
+      if (lineText.includes('商品') || lineText.includes('產品') || lineText.includes('品名')) {
+        const nameHead = line.find((t: any) => t.str.includes('商品') || t.str.includes('產品') || t.str.includes('品名'));
+        const codeHead = line.find((t: any) => t.str.includes('編號') || t.str.includes('型號') || t.str.includes('代碼'));
+        const qtyHead = line.find((t: any) => t.str.includes('數量') || t.str.includes('數目') || t.str.includes('總共數量'));
+        
         if (nameHead && qtyHead) {
-          // If 型號列缺失，codeX 可為 null，稍後從 name 中提取
           nameX = [nameHead.x - 2, (codeHead ? codeHead.x : qtyHead.x) - 2];
           codeX = codeHead ? [codeHead.x - 2, qtyHead.x - 2] : null as any;
           // 放寬數量欄寬，避免長數字被截斷
@@ -228,12 +262,13 @@ async function extractByPdfjs(buffer: Buffer): Promise<{ name: string; code: str
 
     if (!nameX || !qtyX) continue;
 
-    const headerIndex = lines.findIndex(L => {
+    const headerIndex = lineGroups.findIndex(L => {
       const t = L.map((t: any) => t.str).join('');
       return /(商品詳情|產品描述|商品描述|商品名稱|品名)/.test(t) && /(數量|數目|總共數量|庫存數量)/.test(t);
     });
-    for (let i = headerIndex + 1; i < lines.length; i++) {
-      const L = lines[i].slice().sort(byX);
+    
+    for (let i = headerIndex + 1; i < lineGroups.length; i++) {
+      const L = lineGroups[i].slice().sort(byX);
       const lineText = L.map((t: any) => t.str).join('').trim();
       if (!lineText || /小計|合計|金額|備註|--END--/i.test(lineText)) break;
 
@@ -247,9 +282,9 @@ async function extractByPdfjs(buffer: Buffer): Promise<{ name: string; code: str
       // 型號可出現在型號列或商品詳情列內文中
       const codeSource = `${codeText} ${name}`.trim();
       const codeMatch = codeSource.match(codePattern);
-      // 數量允許更大位數（最多5位），且優先取數量欄位的第一個整數
-      const qtyMatch = qtyText.match(/\b(\d{1,5})\b/);
-      const qty = qtyMatch ? parseInt(qtyMatch[1], 10) : 0;
+      
+      // 使用改進的數量提取函數
+      const qty = extractQuantity(qtyText);
       
       if (codeMatch && qty > 0) {
         // 提取購買類型和尺寸
@@ -277,7 +312,7 @@ router.post('/incoming', upload.array('files'), async (req, res) => {
     console.log('調試: 收到文件數量 =', files?.length || 0);
     
     if (!locationId) {
-      return res.status(400).json({ message: 'Missing locationId' });
+      return res.status(400).json({ message: 'locationId required' });
     }
     
     if (!files || files.length === 0) {
@@ -312,8 +347,7 @@ router.post('/incoming', upload.array('files'), async (req, res) => {
             for (let i = 0; i < lines.length; i++) {
               const m = lines[i].match(codePattern);
               if (m) {
-                const qtyMatch = lines[i].match(/\b(\d{1,5})\b/);
-                const qty = qtyMatch ? parseInt(qtyMatch[1], 10) : 0;
+                const qty = extractQuantity(lines[i]);
                 if (qty > 0) {
                   const { purchaseType, size } = extractPurchaseTypeAndSize(lines[i]);
                   rows.push({ name: '', code: m[0], qty, purchaseType, size });
@@ -336,7 +370,10 @@ router.post('/incoming', upload.array('files'), async (req, res) => {
     }
     
     console.log('調試: 處理完成，摘要:', summary);
-    res.json({ message: '進貨處理完成', summary });
+    
+    // 返回更新後的產品列表
+    const products = await Product.find().populate('inventories.locationId');
+    res.json({ message: '進貨處理完成', summary, products });
   } catch (error) {
     console.error('進貨處理錯誤:', error);
     res.status(500).json({ 
@@ -391,8 +428,7 @@ router.post('/outgoing', upload.array('files'), async (req, res) => {
             for (let i = 0; i < lines.length; i++) {
               const m = lines[i].match(codePattern);
               if (m) {
-                const qtyMatch = lines[i].match(/\b(\d{1,5})\b/);
-                const qty = qtyMatch ? parseInt(qtyMatch[1], 10) : 0;
+                const qty = extractQuantity(lines[i]);
                 if (qty > 0) {
                   const { purchaseType, size } = extractPurchaseTypeAndSize(lines[i]);
                   rows.push({ name: '', code: m[0], qty, purchaseType, size });
@@ -474,8 +510,7 @@ router.post('/transfer', upload.array('files'), async (req, res) => {
             for (let i = 0; i < lines.length; i++) {
               const m = lines[i].match(codePattern);
               if (m) {
-                const qtyMatch = lines[i].match(/\b(\d{1,5})\b/);
-                const qty = qtyMatch ? parseInt(qtyMatch[1], 10) : 0;
+                const qty = extractQuantity(lines[i]);
                 if (qty > 0) {
                   const { purchaseType, size } = extractPurchaseTypeAndSize(lines[i]);
                   rows.push({ name: '', code: m[0], qty, purchaseType, size });
@@ -489,9 +524,9 @@ router.post('/transfer', upload.array('files'), async (req, res) => {
         summary.processed += rows.length;
         
         for (const row of rows) {
-          // 先從源倉庫減少
+          // 從源門市減少庫存
           await updateByCodeVariants(row.code, row.qty, fromLocationId, summary, 'out', row.purchaseType, row.size);
-          // 再增加到目標倉庫
+          // 向目標門市增加庫存
           await updateByCodeVariants(row.code, row.qty, toLocationId, summary, 'in', row.purchaseType, row.size);
         }
       } catch (error) {
@@ -501,7 +536,10 @@ router.post('/transfer', upload.array('files'), async (req, res) => {
     }
     
     console.log('調試: 處理完成，摘要:', summary);
-    res.json({ message: '門市對調處理完成', summary });
+    
+    // 返回更新後的產品列表
+    const products = await Product.find().populate('inventories.locationId');
+    res.json({ message: '門市對調處理完成', summary, products });
   } catch (error) {
     console.error('門市對調處理錯誤:', error);
     res.status(500).json({ 
@@ -512,90 +550,107 @@ router.post('/transfer', upload.array('files'), async (req, res) => {
 });
 
 // Excel導入功能
-router.post('/excel', upload.array('files'), async (req, res) => {
+router.post('/excel', upload.single('file'), async (req, res) => {
   try {
     console.log('調試: 收到Excel導入請求');
     const { locationId } = req.body;
-    const files = req.files as Express.Multer.File[];
+    const file = req.file;
     console.log('調試: locationId =', locationId);
-    console.log('調試: 收到文件數量 =', files?.length || 0);
+    console.log('調試: 收到文件 =', file?.originalname);
     
     if (!locationId) {
-      return res.status(400).json({ message: 'Missing locationId' });
+      return res.status(400).json({ message: 'locationId required' });
     }
     
-    if (!files || files.length === 0) {
-      return res.status(400).json({ message: 'Missing files' });
+    if (!file) {
+      return res.status(400).json({ message: 'Missing file' });
     }
     
     const summary = { 
-      files: files.length, 
       processed: 0,
       matched: 0, 
       created: 0,
       updated: 0, 
       notFound: [] as string[], 
-      parsed: [] as any[],
       errors: [] as string[]
     };
     
-    for (const file of files) {
-      try {
-        const workbook = XLSX.read(file.buffer);
-        const sheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[sheetName];
-        const data = XLSX.utils.sheet_to_json(worksheet);
+    try {
+      const workbook = XLSX.read(file.buffer);
+      const sheetName = workbook.SheetNames[0];
+      const worksheet = workbook.Sheets[sheetName];
+      const data = XLSX.utils.sheet_to_json(worksheet);
+      
+      for (const row of data as any[]) {
+        const code = row['產品編號'] || row['編號'] || row['代碼'] || row['Code'] || row['code'];
+        const qty = parseInt(row['數量'] || row['數目'] || row['Quantity'] || row['quantity'] || '0', 10);
         
-        const rows: { name: string; code: string; qty: number; purchaseType?: string; size?: string }[] = [];
-        
-        for (const row of data as any[]) {
-          const code = row['型號'] || row['條碼'] || row['商品代碼'] || '';
-          const qty = parseInt(row['數量'] || row['庫存'] || '0', 10);
-          const name = row['商品名稱'] || row['品名'] || '';
-          
-          if (code && qty > 0) {
-            const { purchaseType, size } = extractPurchaseTypeAndSize(JSON.stringify(row));
-            rows.push({ name, code, qty, purchaseType, size });
-          }
+        if (code && qty > 0) {
+          summary.processed++;
+          await updateByCodeVariants(code, qty, locationId, summary, 'in');
         }
-        
-        summary.parsed.push(...rows);
-        summary.processed += rows.length;
-        
-        for (const row of rows) {
-          await updateByCodeVariants(row.code, row.qty, locationId, summary, 'in', row.purchaseType, row.size);
-        }
-      } catch (error) {
-        console.error('處理文件時出錯:', error);
-        summary.errors.push(`文件處理錯誤: ${error}`);
       }
+      
+      console.log('調試: Excel處理完成，摘要:', summary);
+      
+      // 返回更新後的產品列表
+      const products = await Product.find().populate('inventories.locationId');
+      res.json({ message: 'Excel導入完成', summary, products });
+    } catch (error) {
+      console.error('Excel處理錯誤:', error);
+      summary.errors.push(`Excel處理錯誤: ${error}`);
+      res.status(500).json({ 
+        message: 'Excel處理失敗', 
+        error: error instanceof Error ? error.message : String(error),
+        summary 
+      });
     }
-    
-    console.log('調試: 處理完成，摘要:', summary);
-    res.json({ message: 'Excel導入處理完成', summary });
   } catch (error) {
-    console.error('Excel導入處理錯誤:', error);
+    console.error('Excel導入錯誤:', error);
     res.status(500).json({ 
-      message: 'Excel導入處理失敗', 
+      message: 'Excel導入失敗', 
       error: error instanceof Error ? error.message : String(error) 
     });
   }
 });
 
 // 清零功能
-router.post('/clear-all', async (req, res) => {
+router.post('/clear', async (req, res) => {
   try {
     console.log('調試: 收到清零請求');
+    const { locationId } = req.body;
+    console.log('調試: locationId =', locationId);
     
-    // 將所有產品的庫存設為0
-    await Product.updateMany({}, { $set: { 'inventories.$[].quantity': 0 } });
+    if (!locationId) {
+      return res.status(400).json({ message: 'locationId required' });
+    }
     
-    console.log('調試: 清零完成');
-    res.json({ message: '所有庫存已清零' });
+    // 將指定門市的所有庫存設為0
+    const products = await Product.find();
+    let updatedCount = 0;
+    
+    for (const product of products) {
+      const inv = product.inventories.find(i => String(i.locationId) === String(locationId));
+      if (inv && inv.quantity > 0) {
+        inv.quantity = 0;
+        await product.save();
+        updatedCount++;
+      }
+    }
+    
+    console.log('調試: 清零完成，更新了', updatedCount, '個產品');
+    
+    // 返回更新後的產品列表
+    const updatedProducts = await Product.find().populate('inventories.locationId');
+    res.json({ 
+      message: '清零完成', 
+      updatedCount,
+      products: updatedProducts 
+    });
   } catch (error) {
-    console.error('清零處理錯誤:', error);
+    console.error('清零錯誤:', error);
     res.status(500).json({ 
-      message: '清零處理失敗', 
+      message: '清零失敗', 
       error: error instanceof Error ? error.message : String(error) 
     });
   }
