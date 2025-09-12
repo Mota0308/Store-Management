@@ -587,20 +587,14 @@ router.post('/transfer', upload.array('files'), async (req, res) => {
 });
 
 // Excel導入功能
-router.post('/excel', upload.single('file'), async (req, res) => {
+router.post('/excel', upload.array('files'), async (req, res) => {
   try {
     console.log('調試: 收到Excel導入請求');
-    const { locationId } = req.body;
-    const file = req.file;
-    console.log('調試: locationId =', locationId);
-    console.log('調試: 收到文件 =', file?.originalname);
+    const files = req.files as Express.Multer.File[];
+    console.log('調試: 收到文件數量 =', files?.length);
     
-    if (!locationId) {
-      return res.status(400).json({ message: 'locationId required' });
-    }
-    
-    if (!file) {
-      return res.status(400).json({ message: 'Missing file' });
+    if (!files || files.length === 0) {
+      return res.status(400).json({ message: 'Missing files' });
     }
     
     const summary = { 
@@ -612,36 +606,102 @@ router.post('/excel', upload.single('file'), async (req, res) => {
       errors: [] as string[]
     };
     
-    try {
-      const workbook = XLSX.read(file.buffer);
-      const sheetName = workbook.SheetNames[0];
-      const worksheet = workbook.Sheets[sheetName];
-      const data = XLSX.utils.sheet_to_json(worksheet);
+    // 處理每個Excel文件
+    for (const file of files) {
+      console.log('調試: 處理文件 =', file.originalname);
       
-      for (const row of data as any[]) {
-        const code = row['產品編號'] || row['編號'] || row['代碼'] || row['Code'] || row['code'];
-        const qty = parseInt(row['數量'] || row['數目'] || row['Quantity'] || row['quantity'] || '0', 10);
+      try {
+        const workbook = XLSX.read(file.buffer);
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        const data = XLSX.utils.sheet_to_json(worksheet);
         
-        if (code && qty > 0) {
-          summary.processed++;
-          await updateByCodeVariants(code, qty, locationId, summary, 'in');
+        console.log('調試: 文件數據行數 =', data.length);
+        
+        for (const row of data as any[]) {
+          // 支持多種列名變體
+          const productName = row['商品詳情'] || row['商品名稱'] || row['產品名稱'] || row['產品'] || row['名稱'] || row['商品'];
+          const productCode = row['型號'] || row['產品編號'] || row['編號'] || row['貨號'] || row['SKU'] || row['產品代碼'];
+          const size = row['商品選項'] || row['尺寸'] || row['規格'] || row['選項'] || row['尺碼'];
+          
+          // 獲取各門市的庫存數量
+          const locations = ['觀塘', '灣仔', '荔枝角', '元朗', '國内倉'];
+          const inventories: Array<{ locationId: string; quantity: number }> = [];
+          
+          for (const locationName of locations) {
+            const quantity = parseInt(row[locationName] || row[`${locationName}店`] || '0', 10);
+            if (quantity > 0) {
+              // 查找門市ID
+              const location = await Location.findOne({ name: locationName });
+              if (location) {
+                inventories.push({ locationId: (location._id as mongoose.Types.ObjectId).toString(), quantity });
+              }
+            }
+          }
+          
+          if (productName && productCode && inventories.length > 0) {
+            summary.processed++;
+            
+            // 查找或創建產品
+            let product = await Product.findOne({ 
+              name: productName, 
+              productCode: productCode 
+            });
+            
+            if (!product) {
+              // 創建新產品
+              product = new Product({
+                name: productName,
+                productCode: productCode,
+                productType: '未分類', // 默認類型
+                size: size || '',
+                price: 0,
+                inventories: []
+              });
+              summary.created++;
+            } else {
+              summary.matched++;
+            }
+            
+            // 更新庫存
+            for (const inv of inventories) {
+              const existingInv = product.inventories.find(
+                i => i.locationId.toString() === inv.locationId
+              );
+              
+              if (existingInv) {
+                existingInv.quantity = inv.quantity;
+                summary.updated++;
+              } else {
+                product.inventories.push({
+                  locationId: new mongoose.Types.ObjectId(inv.locationId),
+                  quantity: inv.quantity
+                });
+                summary.updated++;
+              }
+            }
+            
+            await product.save();
+          }
         }
+        
+        console.log('調試: 文件處理完成 =', file.originalname);
+      } catch (fileError) {
+        console.error('文件處理錯誤:', fileError);
+        summary.errors.push(`文件 ${file.originalname} 處理錯誤: ${fileError}`);
       }
-      
-      console.log('調試: Excel處理完成，摘要:', summary);
-      
-      // 返回更新後的產品列表
-      const products = await Product.find().populate('inventories.locationId');
-      res.json({ message: 'Excel導入完成', summary, products });
-    } catch (error) {
-      console.error('Excel處理錯誤:', error);
-      summary.errors.push(`Excel處理錯誤: ${error}`);
-      res.status(500).json({ 
-        message: 'Excel處理失敗', 
-        error: error instanceof Error ? error.message : String(error),
-        summary 
-      });
     }
+    
+    console.log('調試: Excel處理完成，摘要:', summary);
+    
+    res.json({ 
+      message: 'Excel導入完成', 
+      processed: summary.processed,
+      matched: summary.matched,
+      created: summary.created,
+      updated: summary.updated,
+      errors: summary.errors
+    });
   } catch (error) {
     console.error('Excel導入錯誤:', error);
     res.status(500).json({ 
