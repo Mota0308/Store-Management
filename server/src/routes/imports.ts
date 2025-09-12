@@ -800,39 +800,55 @@ router.post('/excel', upload.array('files'), async (req, res) => {
   }
 });
 
-// 清零功能
+// 清零功能 - 支持清零所有地点或指定地点
 router.post('/clear', async (req, res) => {
   try {
     console.log('調試: 收到清零請求');
     const { locationId } = req.body;
     console.log('調試: locationId =', locationId);
     
-    if (!locationId) {
-      return res.status(400).json({ message: 'locationId required' });
-    }
-    
-    // 將指定門市的所有庫存設為0
     const products = await Product.find();
     let updatedCount = 0;
+    const summary = { 
+      processed: products.length,
+      updated: 0, 
+      errors: [] as string[]
+    };
     
     for (const product of products) {
-      const inv = product.inventories.find(i => String(i.locationId) === String(locationId));
-      if (inv && inv.quantity > 0) {
-        inv.quantity = 0;
-        await product.save();
-        updatedCount++;
+      try {
+        let hasUpdate = false;
+        
+        if (locationId) {
+          // 清零指定门市
+          const inv = product.inventories.find(i => String(i.locationId) === String(locationId));
+          if (inv && inv.quantity > 0) {
+            inv.quantity = 0;
+            hasUpdate = true;
+          }
+        } else {
+          // 清零所有门市
+          product.inventories.forEach(inv => {
+            if (inv.quantity > 0) {
+              inv.quantity = 0;
+              hasUpdate = true;
+            }
+          });
+        }
+        
+        if (hasUpdate) {
+          await product.save();
+          summary.updated++;
+        }
+      } catch (productError) {
+        const errorMsg = `產品 ${product.name} (${product.productCode}) 清零失敗: ${productError}`;
+        console.error('調試:', errorMsg);
+        summary.errors.push(errorMsg);
       }
     }
     
-    console.log('調試: 清零完成，更新了', updatedCount, '個產品');
-    
-    // 返回更新後的產品列表
-    const updatedProducts = await Product.find().populate('inventories.locationId');
-    res.json({ 
-      message: '清零完成', 
-      updatedCount,
-      products: updatedProducts 
-    });
+    console.log('調試: 清零完成，更新了', summary.updated, '個產品');
+    res.json(summary);
   } catch (error) {
     console.error('清零錯誤:', error);
     res.status(500).json({ 
