@@ -59,6 +59,9 @@ export default function Inventory() {
   const [excelImportOpen, setExcelImportOpen] = useState(false)
   const [excelImportState, setExcelImportState] = useState<{ files: File[] }>({ files: [] })
 
+  // 清零狀態
+  const [clearOpen, setClearOpen] = useState(false)
+
   // 編輯狀態
   const [editingProduct, setEditingProduct] = useState<string | null>(null)
   const [editForm, setEditForm] = useState<{
@@ -196,8 +199,8 @@ export default function Inventory() {
   }
 
   function getSortIcon(column: string): string {
-    if (sortBy !== column) return '↕'
-    return sortOrder === 'asc' ? '↓' : '↑'
+    if (sortBy !== column) return ''
+    return sortOrder === 'asc' ? '' : ''
   }
 
   // 導入庫存功能
@@ -217,12 +220,12 @@ export default function Inventory() {
       importState.files.forEach(f => form.append('files', f))
       
       // 修復：根據type調用不同的API端點
-      const response = await api.post(`/import/${type}`, form)
-      alert(`${type === 'incoming' ? '進貨' : '出貨'}完成\n處理:${response.data.processed}  匹配:${response.data.matched}  新增:${response.data.created}  更新:${response.data.updated}\n未找到: ${response.data.notFound?.join(', ') || '無'}`)
+      const response = await api.post(/import/, form)
+      alert(${type === 'incoming' ? '進貨' : '出貨'}完成\n處理:  匹配:  新增:  更新:\n未找到: )
       setImportOpen(false)
       await load()
     } catch (error: any) {
-      alert(`${type === 'incoming' ? '進貨' : '出貨'}失敗：${error.response?.data?.message || error.message}`)
+      alert(${type === 'incoming' ? '進貨' : '出貨'}失敗：)
     }
   }
 
@@ -244,76 +247,131 @@ export default function Inventory() {
       transferState.files.forEach(f => form.append('files', f))
       
       const response = await api.post('/import/transfer', form)
-      alert(`門市對調完成\n處理:${response.data.processed}  匹配:${response.data.matched}  更新:${response.data.updated}\n未找到: ${response.data.notFound?.join(', ') || '無'}`)
+      alert(門市對調完成\n處理:  匹配:  更新:\n未找到: )
       setTransferOpen(false)
       await load()
     } catch (error: any) {
-      alert(`門市對調失敗：${error.response?.data?.message || error.message}`)
+      alert(門市對調失敗：)
     }
   }
 
-  // Excel導入功能
   // Excel導入功能 - 完全修復版本
-async function doExcelImport() {
-  if (excelImportState.files.length === 0) {
-    alert('請選擇Excel檔案')
-    return
-  }
-  
-  // 檢查文件大小
-  const totalSize = excelImportState.files.reduce((sum, file) => sum + file.size, 0)
-  if (totalSize > 10 * 1024 * 1024) { // 10MB限制
-    alert('文件總大小超過10MB，請使用較小的文件')
-    return
-  }
-  
-  try {
-    // 显示处理中提示
-    const processingMsg = '正在處理Excel文件，請稍候...\n這可能需要幾分鐘時間，請不要關閉頁面。'
-    alert(processingMsg)
-    
-    const form = new FormData()
-    excelImportState.files.forEach(f => form.append('files', f))
-    
-    // 使用更长的超时时间
-    const response = await api.post('/import/excel', form, {
-      timeout: 300000, // 5分钟超时
-      headers: {
-        'Content-Type': 'multipart/form-data'
-      }
-    })
-    
-    // 显示详细结果
-    const resultMsg = `Excel導入完成！
-    
-處理行數: ${response.data.processed}
-匹配產品: ${response.data.matched}
-新增產品: ${response.data.created}
-更新產品: ${response.data.updated}
-錯誤數量: ${response.data.errors?.length || 0}
-
-${response.data.errors?.length > 0 ? '錯誤詳情:\n' + response.data.errors.slice(0, 5).join('\n') + (response.data.errors.length > 5 ? '\n...' : '') : '無錯誤'}`
-    
-    alert(resultMsg)
-    setExcelImportOpen(false)
-    await load()
-  } catch (error: any) {
-    console.error('Excel導入錯誤:', error)
-    
-    let errorMsg = 'Excel導入失敗：'
-    if (error.code === 'ECONNABORTED') {
-      errorMsg += '處理超時，請嘗試使用較小的文件或檢查網絡連接'
-    } else if (error.response?.status === 413) {
-      errorMsg += '文件太大，請使用較小的文件'
-    } else if (error.response?.data?.message) {
-      errorMsg += error.response.data.message
-    } else {
-      errorMsg += error.message
+  async function doExcelImport() {
+    if (excelImportState.files.length === 0) {
+      alert('請選擇Excel檔案')
+      return
     }
     
-    alert(errorMsg)
+    // 檢查文件大小
+    const totalSize = excelImportState.files.reduce((sum, file) => sum + file.size, 0)
+    if (totalSize > 10 * 1024 * 1024) { // 10MB限制
+      alert('文件總大小超過10MB，請使用較小的文件')
+      return
+    }
+    
+    try {
+      // 显示处理中提示
+      const processingMsg = '正在處理Excel文件，請稍候...\n這可能需要幾分鐘時間，請不要關閉頁面。'
+      alert(processingMsg)
+      
+      const form = new FormData()
+      excelImportState.files.forEach(f => form.append('files', f))
+      
+      // 使用更长的超时时间
+      const response = await api.post('/import/excel', form, {
+        timeout: 300000, // 5分钟超时
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
+      })
+      
+      // 显示详细结果
+      const resultMsg = Excel導入完成！
+      
+處理行數: 
+匹配產品: 
+新增產品: 
+更新產品: 
+錯誤數量: 
+
+
+      
+      alert(resultMsg)
+      setExcelImportOpen(false)
+      await load()
+    } catch (error: any) {
+      console.error('Excel導入錯誤:', error)
+      
+      let errorMsg = 'Excel導入失敗：'
+      if (error.code === 'ECONNABORTED') {
+        errorMsg += '處理超時，請嘗試使用較小的文件或檢查網絡連接'
+      } else if (error.response?.status === 413) {
+        errorMsg += '文件太大，請使用較小的文件'
+      } else if (error.response?.data?.message) {
+        errorMsg += error.response.data.message
+      } else {
+        errorMsg += error.message
+      }
+      
+      alert(errorMsg)
+    }
   }
-}
+
+  // Excel導出功能
+  function exportToExcel() {
+    const exportData = [
+      ['產品名稱', '產品編號', '產品類型', '尺寸', '觀塘', '灣仔', '荔枝角', '元朗', '國内倉', '總計']
+    ]
+
+    products.forEach(product => {
+      const row = [
+        product.name,
+        product.productCode,
+        product.productType,
+        getProductSize(product),
+        getQuantity(product, locations.find(l => l.name === '觀塘')?._id || ''),
+        getQuantity(product, locations.find(l => l.name === '灣仔')?._id || ''),
+        getQuantity(product, locations.find(l => l.name === '荔枝角')?._id || ''),
+        getQuantity(product, locations.find(l => l.name === '元朗')?._id || ''),
+        getQuantity(product, locations.find(l => l.name === '國内倉')?._id || ''),
+        getTotalQuantity(product)
+      ]
+      exportData.push(row)
+    })
+
+    const ws = XLSX.utils.aoa_to_sheet(exportData)
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, '庫存報告')
+    
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
+    const filename = 庫存報告_.xlsx
+    
+    XLSX.writeFile(wb, filename)
+  }
+
+  // 清零功能
+  async function doClearAll() {
+    if (!confirm('確定要清零所有庫存嗎？')) return
+    
+    try {
+      const response = await api.post('/import/clear-all')
+      
+      const resultMsg = 清零完成！
+      
+處理產品: 
+更新產品: 
+錯誤數量: 
+
+
+      
+      alert(resultMsg)
+      setClearOpen(false)
+      await load()
+    } catch (error: any) {
+      console.error('清零錯誤:', error)
+      alert(清零失敗: )
+    }
+  }
 
   // 編輯和刪除處理函數
   function handleEdit(product: Product) {
@@ -345,30 +403,30 @@ ${response.data.errors?.length > 0 ? '錯誤詳情:\n' + response.data.errors.sl
 
   async function handleSaveEdit(productId: string) {
     try {
-      const response = await api.put(`/products/${productId}`, editForm)
+      const response = await api.put(/products/, editForm)
       alert('商品更新成功')
       setEditingProduct(null)
       await load()
     } catch (error: any) {
-      alert(`更新失敗：${error.response?.data?.message || error.message}`)
+      alert(更新失敗：)
     }
   }
 
   async function handleDelete(product: Product) {
-    if (confirm(`確定要刪除產品 "${product.name}" 嗎？`)) {
+    if (confirm(確定要刪除產品 "" 嗎？)) {
       try {
-        await api.delete(`/products/${product._id}`)
+        await api.delete(/products/)
         alert('商品刪除成功')
         await load()
       } catch (error: any) {
-        alert(`刪除失敗：${error.response?.data?.message || error.message}`)
+        alert(刪除失敗：)
       }
     }
   }
 
   // Group products by name and productCode
   const groupedProducts = (filteredProducts || []).reduce((groups, product) => {
-    const key = `${product.name}-${product.productCode}`
+    const key = ${product.name}-
     if (!groups[key]) {
       groups[key] = {
         key,
@@ -415,6 +473,8 @@ ${response.data.errors?.length > 0 ? '錯誤詳情:\n' + response.data.errors.sl
         </div>
         
         <div className="spacer" />
+        <button className="btn" onClick={exportToExcel}>導出Excel</button>
+        <button className="btn" onClick={() => setClearOpen(true)}>清零</button>
         <button className="btn" onClick={() => setExcelImportOpen(true)}>導入Excel</button>
         <button className="btn" onClick={() => setImportOpen(true)}>導入庫存</button>
         <button className="btn" onClick={() => setTransferOpen(true)}>門市對調</button>
@@ -442,8 +502,8 @@ ${response.data.errors?.length > 0 ? '錯誤詳情:\n' + response.data.errors.sl
             {Object.values(groupedProducts || {}).map((group: ProductGroup) => (
               <React.Fragment key={group.key}>
                 <tr className="group-header" onClick={() => toggleGroup(group.key)}>
-                  <td colSpan={locations.length + 4} style={{ cursor: 'pointer' }}>
-                    {expandedGroups.has(group.key) ? '▼' : '▶'} {group.name} ({group.productCode})
+                  <td colSpan={(locations || []).length + 4} style={{ cursor: 'pointer' }}>
+                    {expandedGroups.has(group.key) ? '' : ''} {group.name} ({group.productCode})
                   </td>
                 </tr>
                 {expandedGroups.has(group.key) && (group.products || []).map((product: Product) => (
@@ -622,12 +682,22 @@ ${response.data.errors?.length > 0 ? '錯誤詳情:\n' + response.data.errors.sl
           </div>
         </div>
       )}
+
+      {/* 清零確認對話框 */}
+      {clearOpen && (
+        <div className="modal-backdrop">
+          <div className="modal">
+            <div className="header">確認清零</div>
+            <div className="body">
+              <p>確定要清零所有庫存嗎？此操作無法撤銷。</p>
+            </div>
+            <div className="footer">
+              <button className="btn secondary" onClick={() => setClearOpen(false)}>取消</button>
+              <button className="btn danger" onClick={doClearAll}>確定清零</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
-
-
-
-
-
-
