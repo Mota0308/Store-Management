@@ -573,7 +573,7 @@ ${response.data.errors?.length > 0 ? '錯誤詳情:\n' + response.data.errors.sl
                     ) : (
                       // 顯示模式
                       <>
-                        <td>{product.name}</td>
+                        <td className="right">{product.name}</td>
                         <td>{product.productCode}</td>
                         <td>{getProductSize(product)}</td>
                         {(locations || []).map(location => (
@@ -583,7 +583,7 @@ ${response.data.errors?.length > 0 ? '錯誤詳情:\n' + response.data.errors.sl
                         <td>
                           <div className="actions">
                             <button className="btn ghost" onClick={() => handleEdit(product)}>編輯</button>
-                            <button className="btn danger" onClick={() => handleDelete(product)}>刪除</button>
+                            <button className="btn ghost" onClick={() => handleDelete(product)}>刪除</button>
                           </div>
                         </td>
                       </>
