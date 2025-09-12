@@ -1,5 +1,6 @@
 ﻿import React, { useState, useEffect } from 'react'
 import api from '../api'
+import * as XLSX from 'xlsx'
 
 // 定義類型接口
 interface Location {
@@ -624,5 +625,9 @@ ${response.data.errors?.length > 0 ? '錯誤詳情:\n' + response.data.errors.sl
     </div>
   )
 }
+
+
+
+
 
 
