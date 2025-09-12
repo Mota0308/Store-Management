@@ -507,12 +507,9 @@ router.post('/transfer', upload.array('files'), async (req, res) => {
     console.log('調試: 收到門市對調請求');
     const { fromLocationId, toLocationId } = req.body;
     const files = req.files as Express.Multer.File[];
-    console.log('調試: fromLocationId =', fromLocationId);
-    console.log('調試: toLocationId =', toLocationId);
-    console.log('調試: 收到文件數量 =', files?.length || 0);
     
     if (!fromLocationId || !toLocationId) {
-      return res.status(400).json({ message: 'Missing fromLocationId or toLocationId' });
+      return res.status(400).json({ message: 'Missing location IDs' });
     }
     
     if (!files || files.length === 0) {
@@ -523,20 +520,19 @@ router.post('/transfer', upload.array('files'), async (req, res) => {
       files: files.length, 
       processed: 0,
       matched: 0, 
-      created: 0,
       updated: 0, 
-      notFound: [] as string[], 
+      notFound: [] as string[],
       parsed: [] as any[],
       errors: [] as string[]
     };
     
     for (const file of files) {
       try {
-        let rows: { name: string; code: string; qty: number; purchaseType?: string; size?: string }[] = [];
+        let rows: { name: string; code: string; qty: number }[] = [];
         try { 
           rows = await extractByPdfjs(file.buffer); 
         } catch (pdfjsError) {
-          console.log('PDF解析失敗:', pdfjsError);
+          console.log('PDF.js 解析失敗，嘗試使用 pdf-parse:', pdfjsError);
         }
         
         if (rows.length === 0) {
@@ -546,43 +542,70 @@ router.post('/transfer', upload.array('files'), async (req, res) => {
             const lines = text.split(/\r?\n/).map((l: string) => l.trim()).filter(Boolean);
             for (let i = 0; i < lines.length; i++) {
               const m = lines[i].match(codePattern);
-              if (m) {
-                const qtyMatch = lines[i].match(/\b([1-9]\d{0,2})\b/);
-                const qty = qtyMatch ? parseInt(qtyMatch[1], 10) : 0;
-                if (qty > 0) {
-                  rows.push({ name: '', code: m[0], qty, purchaseType: undefined, size: undefined });
-                }
+              if (!m) continue;
+              for (let j = i; j <= i + 6 && j < lines.length; j++) {
+                const q = lines[j].match(/\b(\d{1,5})\b/);
+                if (q) { rows.push({ name: lines[i - 1] || '', code: m[0], qty: parseInt(q[1], 10) }); break; }
               }
             }
           }
         }
+
+        console.log(`調試: 從 PDF 提取到 ${rows.length} 行數據:`, rows);
+        summary.parsed.push(rows.map(r => ({ name: r.name, code: normalizeCode(r.code), qty: r.qty })));
         
-        summary.parsed.push(...rows);
-        summary.processed += rows.length;
-        
-        for (const row of rows) {
-          // 從源門市減少庫存
-          await updateByCodeVariants(row.code, row.qty, fromLocationId, summary, 'out', row.purchaseType, row.size);
-          // 向目標門市增加庫存
-          await updateByCodeVariants(row.code, row.qty, toLocationId, summary, 'in', row.purchaseType, row.size);
+        for (const r of rows) {
+          summary.processed++;
+          
+          // 查找現有產品
+          const variants = codeVariants(r.code);
+          if (variants.length === 0) continue;
+          
+          const product = await Product.findOne({ productCode: { $in: variants } });
+          if (!product) { 
+            summary.notFound.push(normalizeCode(r.code)); 
+            continue; 
+          }
+          
+          summary.matched++;
+          
+          // 減少來源門市庫存
+          let fromInventory = product.inventories.find((inv: any) => 
+            inv.locationId.toString() === fromLocationId
+          );
+          
+          if (fromInventory && fromInventory.quantity >= r.qty) {
+            fromInventory.quantity -= r.qty;
+            
+            // 增加目標門市庫存
+            let toInventory = product.inventories.find((inv: any) => 
+              inv.locationId.toString() === toLocationId
+            );
+            
+            if (toInventory) {
+              toInventory.quantity += r.qty;
+            } else {
+              product.inventories.push({
+                locationId: new mongoose.Types.ObjectId(toLocationId),
+                quantity: r.qty
+              });
+            }
+            
+            await product.save();
+            summary.updated++;
+          } else {
+            summary.notFound.push(`產品 ${r.code} 在來源門市庫存不足`);
+          }
         }
-      } catch (error) {
-        console.error('處理文件時出錯:', error);
-        summary.errors.push(`文件處理錯誤: ${error}`);
+      } catch (fileError) {
+        summary.notFound.push(`文件 ${file.originalname} 處理錯誤: ${fileError}`);
       }
     }
     
-    console.log('調試: 處理完成，摘要:', summary);
-    
-    // 返回更新後的產品列表
-    const products = await Product.find().populate('inventories.locationId');
-    res.json({ message: '門市對調處理完成', summary, products });
-  } catch (error) {
-    console.error('門市對調處理錯誤:', error);
-    res.status(500).json({ 
-      message: '門市對調處理失敗', 
-      error: error instanceof Error ? error.message : String(error) 
-    });
+    res.json(summary);
+  } catch (e) {
+    console.error('調試: 門市對調處理錯誤:', e);
+    res.status(500).json({ message: 'Failed to process transfer', error: String(e) });
   }
 });
 

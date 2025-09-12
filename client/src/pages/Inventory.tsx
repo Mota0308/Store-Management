@@ -14,7 +14,7 @@ interface ProductType {
 }
 
 interface Inventory {
-  locationId: string | { _id: string; name: string } // 支持 populate 後的對象
+  locationId: string | { _id: string; name: string } | null // 添加 null 支持
   quantity: number
 }
 
@@ -59,10 +59,8 @@ export default function Inventory() {
   const [excelImportOpen, setExcelImportOpen] = useState(false)
   const [excelImportState, setExcelImportState] = useState<{ files: File[] }>({ files: [] })
 
-  // 清零狀態 - 修復：添加門市選擇狀態
+  // 清零狀態
   const [clearOpen, setClearOpen] = useState(false)
-  const [clearLocationId, setClearLocationId] = useState<string>('all')
-
   // 編輯狀態
   const [editingProduct, setEditingProduct] = useState<string | null>(null)
   const [editForm, setEditForm] = useState<{
@@ -100,7 +98,7 @@ export default function Inventory() {
   }, [selectedType, searchTerm, sortBy, sortOrder])
 
   async function loadProductTypes() {
-    const response = await api.get('/product-types')
+      const response = await api.get('/product-types')
     setProductTypes(response.data || [])
   }
 
@@ -168,17 +166,54 @@ export default function Inventory() {
     return product.size || ''
   }
 
+  // 新增：按尺寸數字大小排序產品
+  function sortProductsBySize(products: Product[]): Product[] {
+    return products.sort((a, b) => {
+      const aSize = getProductSize(a)
+      const bSize = getProductSize(b)
+      
+      // 提取數字進行比較
+      const aNumbers = aSize.match(/\d+/g) || []
+      const bNumbers = bSize.match(/\d+/g) || []
+      
+      // 如果都有數字，比較第一個數字
+      if (aNumbers.length > 0 && bNumbers.length > 0) {
+        const aNum = parseInt(aNumbers[0] || '0')
+        const bNum = parseInt(bNumbers[0] || '0')
+        return aNum - bNum
+      }
+      
+      // 如果只有一個有數字，數字排在前面
+      if (aNumbers.length > 0 && bNumbers.length === 0) return -1
+      if (aNumbers.length === 0 && bNumbers.length > 0) return 1
+      
+      // 都沒有數字，按字母排序
+      return aSize.localeCompare(bSize)
+    })
+  }
+
+  // 修復：添加 null 檢查
   function getQuantity(product: Product, locationId: string): number {
     if (!product.inventories || !Array.isArray(product.inventories)) {
       return 0
     }
     const inventory = product.inventories.find(inv => {
+      // 檢查 locationId 是否為 null 或 undefined
+      if (!inv.locationId) {
+        return false
+      }
+      
       // 處理 populate 後的 locationId 對象
       if (typeof inv.locationId === 'object' && inv.locationId !== null) {
         return inv.locationId._id === locationId || inv.locationId._id.toString() === locationId
       }
-      // 處理原始的 ObjectId 字符串
-      return inv.locationId === locationId || inv.locationId.toString() === locationId
+      
+      // 處理原始的 ObjectId 字符串，添加 null 檢查
+      if (inv.locationId && typeof inv.locationId === 'string') {
+        return inv.locationId === locationId || inv.locationId.toString() === locationId
+      }
+      
+      return false
     })
     return inventory ? inventory.quantity : 0
   }
@@ -204,61 +239,53 @@ export default function Inventory() {
     return sortOrder === 'asc' ? '↓' : '↑'
   }
 
-  // Excel導出功能
+  // 新增：導出Excel功能
   function exportToExcel() {
-    const exportData = [
-      ['產品名稱', '產品編號', '產品類型', '尺寸', '觀塘', '灣仔', '荔枝角', '元朗', '國内倉', '總計']
-    ]
-
-    products.forEach(product => {
-      const row = [
-        product.name,
-        product.productCode,
-        product.productType,
-        getProductSize(product),
-        getQuantity(product, locations.find(l => l.name === '觀塘')?._id || '').toString(),
-        getQuantity(product, locations.find(l => l.name === '灣仔')?._id || '').toString(),
-        getQuantity(product, locations.find(l => l.name === '荔枝角')?._id || '').toString(),
-        getQuantity(product, locations.find(l => l.name === '元朗')?._id || '').toString(),
-        getQuantity(product, locations.find(l => l.name === '國内倉')?._id || '').toString(),
-        getTotalQuantity(product).toString()
-      ]
-      exportData.push(row)
-    })
-
-    const ws = XLSX.utils.aoa_to_sheet(exportData)
-    const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, ws, '庫存報告')
-    
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
-    const filename = `庫存報告_${timestamp}.xlsx`
-    
-    XLSX.writeFile(wb, filename)
-  }
-
-  // 清零功能 - 修復版本
-  async function doClearAll() {
-    if (!confirm('確定要清零所選門市的庫存嗎？')) return
-    
     try {
-      // 根據選擇決定發送的參數
-      const requestData = clearLocationId === 'all' ? {} : { locationId: clearLocationId }
-      const response = await api.post('/import/clear-all', requestData)
+      // 準備數據
+      const exportData = []
       
-      const resultMsg = `清零完成！
+      // 添加標題
+      const headers = ['編號', '商品', '尺寸', '觀塘', '灣仔', '荔枝角', '元朗', '國内倉']
+      exportData.push(headers)
       
-處理產品: ${response.data.processed || 0}
-更新產品: ${response.data.updatedCount || 0}
-錯誤數量: ${response.data.errors?.length || 0}
-
-${response.data.errors?.length ? '錯誤詳情:\n' + response.data.errors.join('\n') : ''}`
+      // 添加商品數據
+      Object.values(groupedProducts).forEach(group => {
+        // 對每個分組的商品按尺寸排序
+        const sortedProducts = sortProductsBySize([...group.products])
+        
+        sortedProducts.forEach(product => {
+          const row = [
+            product.productCode,
+            product.name,
+            getProductSize(product),
+            getQuantity(product, locations.find(l => l.name === '觀塘')?._id || ''),
+            getQuantity(product, locations.find(l => l.name === '灣仔')?._id || ''),
+            getQuantity(product, locations.find(l => l.name === '荔枝角')?._id || ''),
+            getQuantity(product, locations.find(l => l.name === '元朗')?._id || ''),
+            getQuantity(product, locations.find(l => l.name === '國内倉')?._id || '')
+          ]
+          exportData.push(row)
+        })
+      })
       
-      alert(resultMsg)
-      setClearOpen(false)
-      await load()
-    } catch (error: any) {
-      console.error('清零錯誤:', error)
-      alert(`清零失敗: ${error.response?.data?.message || error.message}`)
+      // 創建工作表
+      const ws = XLSX.utils.aoa_to_sheet(exportData)
+      const wb = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(wb, ws, '庫存報告')
+      
+      // 生成文件名
+      const now = new Date()
+      const timestamp = now.toISOString().slice(0, 19).replace(/:/g, '-')
+      const filename = `庫存報告_${timestamp}.xlsx`
+      
+      // 導出文件
+      XLSX.writeFile(wb, filename)
+      
+      alert('Excel導出成功！')
+    } catch (error) {
+      console.error('導出Excel錯誤:', error)
+      alert('導出Excel失敗，請重試')
     }
   }
 
@@ -376,7 +403,41 @@ ${response.data.errors?.length > 0 ? '錯誤詳情:\n' + response.data.errors.sl
     }
   }
 
-  // 編輯和刪除處理函數
+  // 清零所有庫存數量
+  async function doClearAll() {
+    if (!confirm('確定要清零所有庫存嗎？此操作無法撤銷！')) {
+      return
+    }
+    
+    try {
+      const response = await api.post('/import/clear')
+      
+      const resultMsg = `清零完成！
+      
+處理產品: ${response.data.processed}
+更新產品: ${response.data.updated}
+錯誤數量: ${response.data.errors?.length || 0}
+
+${response.data.errors?.length > 0 ? '錯誤詳情:\n' + response.data.errors.slice(0, 5).join('\n') + (response.data.errors.length > 5 ? '\n...' : '') : '無錯誤'}`
+      
+      alert(resultMsg)
+      setClearOpen(false)
+      await load()
+    } catch (error: any) {
+      console.error('清零錯誤:', error)
+      
+      let errorMsg = '清零失敗：'
+      if (error.response?.data?.message) {
+        errorMsg += error.response.data.message
+      } else {
+        errorMsg += error.message
+      }
+      
+      alert(errorMsg)
+    }
+  }
+
+  // 編輯和刪除處理函數 - 修復版本
   function handleEdit(product: Product) {
     setEditingProduct(product._id)
     setEditForm({
@@ -386,7 +447,9 @@ ${response.data.errors?.length > 0 ? '錯誤詳情:\n' + response.data.errors.sl
       size: getProductSize(product),
       price: product.price,
       inventories: (product.inventories || []).map(inv => ({
-        locationId: typeof inv.locationId === 'object' ? inv.locationId._id : inv.locationId.toString(),
+        locationId: typeof inv.locationId === 'object' && inv.locationId !== null 
+          ? inv.locationId._id 
+          : (inv.locationId ? inv.locationId.toString() : ''),
         quantity: inv.quantity
       }))
     })
@@ -427,7 +490,25 @@ ${response.data.errors?.length > 0 ? '錯誤詳情:\n' + response.data.errors.sl
     }
   }
 
-  // Group products by name and productCode
+  // 新增：刪除整個產品組
+  async function handleDeleteGroup(group: ProductGroup) {
+    if (confirm(`確定要刪除整個產品組 "${group.name}" (${group.productCode}) 嗎？\n這將刪除該產品組的所有尺寸規格，此操作無法撤銷！`)) {
+      try {
+        // 批量刪除該組的所有產品
+        const deletePromises = group.products.map(product => 
+          api.delete(`/products/${product._id}`)
+        )
+        
+        await Promise.all(deletePromises)
+        alert(`產品組 "${group.name}" 刪除成功，共刪除 ${group.products.length} 個產品`)
+        await load()
+      } catch (error: any) {
+        alert(`刪除失敗：${error.response?.data?.message || error.message}`)
+      }
+    }
+  }
+
+  // Group products by name and productCode，按尺寸排序
   const groupedProducts = (filteredProducts || []).reduce((groups, product) => {
     const key = `${product.name}-${product.productCode}`
     if (!groups[key]) {
@@ -441,6 +522,11 @@ ${response.data.errors?.length > 0 ? '錯誤詳情:\n' + response.data.errors.sl
     groups[key].products.push(product)
     return groups
   }, {} as Record<string, ProductGroup>)
+
+  // 對每個分組的產品按尺寸排序
+  Object.values(groupedProducts).forEach(group => {
+    group.products = sortProductsBySize(group.products)
+  })
 
   function toggleGroup(groupKey: string) {
     const newExpanded = new Set(expandedGroups)
@@ -462,7 +548,7 @@ ${response.data.errors?.length > 0 ? '錯誤詳情:\n' + response.data.errors.sl
         <div className="filters">
           <select value={selectedType} onChange={e => setSelectedType(e.target.value)}>
             <option value="">所有產品類型</option>
-            {(productTypes || []).map(type => (
+            {productTypes.map(type => (
               <option key={type._id} value={type.name}>{type.name}</option>
             ))}
           </select>
@@ -477,8 +563,8 @@ ${response.data.errors?.length > 0 ? '錯誤詳情:\n' + response.data.errors.sl
         
         <div className="spacer" />
         <button className="btn" onClick={exportToExcel}>導出Excel</button>
-        <button className="btn" onClick={() => setClearOpen(true)}>清零</button>
         <button className="btn" onClick={() => setExcelImportOpen(true)}>導入Excel</button>
+        <button className="btn" onClick={() => setClearOpen(true)}>清零</button>
         <button className="btn" onClick={() => setImportOpen(true)}>導入庫存</button>
         <button className="btn" onClick={() => setTransferOpen(true)}>門市對調</button>
       </div>
@@ -490,7 +576,7 @@ ${response.data.errors?.length > 0 ? '錯誤詳情:\n' + response.data.errors.sl
               <th>產品</th>
               <th>編號</th>
               <th>尺寸</th>
-              {(locations || []).map(location => (
+              {locations.map(location => (
                 <th key={location._id} onClick={() => handleSort(location._id)} style={{ cursor: 'pointer' }}>
                   {location.name} {getSortIcon(location._id)}
                 </th>
@@ -502,16 +588,36 @@ ${response.data.errors?.length > 0 ? '錯誤詳情:\n' + response.data.errors.sl
             </tr>
           </thead>
           <tbody>
-            {Object.values(groupedProducts || {}).map((group: ProductGroup, groupIndex) => (
+            {Object.values(groupedProducts).map((group: ProductGroup, groupIndex) => (
               <React.Fragment key={group.key}>
-                <tr className="group-header" style={{ borderBottom: '2px solid #dc2626' }} onClick={() => toggleGroup(group.key)}>
-                  <td colSpan={(locations || []).length + 4} style={{ cursor: 'pointer' }}>
+                <tr className="group-header" style={{ borderBottom: '2px solid #dc2626' }}>
+                  <td colSpan={locations.length + 3} style={{ cursor: 'pointer' }} onClick={() => toggleGroup(group.key)}>
                     {expandedGroups.has(group.key) ? '▼' : '▶'} {group.name} ({group.productCode})
                   </td>
+                  <td style={{ textAlign: 'center' }}>
+                    <button 
+                      className="btn danger" 
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handleDeleteGroup(group)
+                      }}
+                      style={{ 
+                        backgroundColor: '#dc2626', 
+                        color: 'white', 
+                        border: 'none',
+                        padding: '4px 8px',
+                        borderRadius: '4px',
+                        cursor: 'pointer',
+                        fontSize: '12px'
+                      }}
+                    >
+                      刪除
+                    </button>
+                  </td>
                 </tr>
-                {expandedGroups.has(group.key) && (group.products || []).map((product: Product, productIndex) => (
+                {expandedGroups.has(group.key) && group.products.map((product: Product, productIndex) => (
                   <tr 
-                    key={product._id}
+                    key={product._id} 
                     style={{ 
                       borderBottom: productIndex === group.products.length - 1 ? '2px solid #dc2626' : '1px solid #dc2626'
                     }}
@@ -543,7 +649,7 @@ ${response.data.errors?.length > 0 ? '錯誤詳情:\n' + response.data.errors.sl
                             style={{ width: '100%', padding: '4px 8px', border: '1px solid #d1d5db', borderRadius: '4px' }}
                           />
                         </td>
-                        {(locations || []).map(location => {
+                        {locations.map(location => {
                           const inventory = editForm.inventories.find(inv => inv.locationId === location._id)
                           return (
                             <td key={location._id}>
@@ -576,7 +682,7 @@ ${response.data.errors?.length > 0 ? '錯誤詳情:\n' + response.data.errors.sl
                         <td className="right">{product.name}</td>
                         <td>{product.productCode}</td>
                         <td>{getProductSize(product)}</td>
-                        {(locations || []).map(location => (
+                        {locations.map(location => (
                           <td key={location._id}>{getQuantity(product, location._id)}</td>
                         ))}
                         <td>{getTotalQuantity(product)}</td>
@@ -606,7 +712,7 @@ ${response.data.errors?.length > 0 ? '錯誤詳情:\n' + response.data.errors.sl
                 <p>選擇門市：</p>
                 <select value={importState.locationId} onChange={e => setImportState(s => ({ ...s, locationId: e.target.value }))}>
                   <option value="">請選擇門市</option>
-                  {(locations || []).map(location => (
+                  {locations.map(location => (
                     <option key={location._id} value={location._id}>{location.name}</option>
                   ))}
                 </select>
@@ -635,7 +741,7 @@ ${response.data.errors?.length > 0 ? '錯誤詳情:\n' + response.data.errors.sl
                 <p>來源門市：</p>
                 <select value={transferState.fromLocationId} onChange={e => setTransferState(s => ({ ...s, fromLocationId: e.target.value }))}>
                   <option value="">請選擇來源門市</option>
-                  {(locations || []).map(location => (
+                  {locations.map(location => (
                     <option key={location._id} value={location._id}>{location.name}</option>
                   ))}
                 </select>
@@ -644,7 +750,7 @@ ${response.data.errors?.length > 0 ? '錯誤詳情:\n' + response.data.errors.sl
                 <p>目標門市：</p>
                 <select value={transferState.toLocationId} onChange={e => setTransferState(s => ({ ...s, toLocationId: e.target.value }))}>
                   <option value="">請選擇目標門市</option>
-                  {(locations || []).map(location => (
+                  {locations.map(location => (
                     <option key={location._id} value={location._id}>{location.name}</option>
                   ))}
                 </select>
@@ -695,18 +801,10 @@ ${response.data.errors?.length > 0 ? '錯誤詳情:\n' + response.data.errors.sl
       {clearOpen && (
         <div className="modal-backdrop">
           <div className="modal">
-            <div className="header">確認清零</div>
+            <div className="header">清零所有庫存數量</div>
             <div className="body">
-              <div style={{ marginBottom: '16px' }}>
-                <p>選擇要清零的門市：</p>
-                <select value={clearLocationId} onChange={e => setClearLocationId(e.target.value)} style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px' }}>
-                  <option value="all">所有門市</option>
-                  {(locations || []).map(location => (
-                    <option key={location._id} value={location._id}>{location.name}</option>
-                  ))}
-                </select>
-              </div>
-              <p>確定要清零所選門市的庫存嗎？此操作無法撤銷。</p>
+              <p>⚠️ 警告：此操作將把所有庫存數量設為0，此操作無法撤銷！</p>
+              <p>確定要繼續嗎？</p>
             </div>
             <div className="footer">
               <button className="btn secondary" onClick={() => setClearOpen(false)}>取消</button>
