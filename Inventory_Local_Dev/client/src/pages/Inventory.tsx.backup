@@ -1,6 +1,5 @@
 ﻿import React, { useState, useEffect } from 'react'
 import api from '../api'
-import * as XLSX from 'xlsx'
 
 // 定義類型接口
 interface Location {
@@ -58,10 +57,6 @@ export default function Inventory() {
   // Excel導入狀態
   const [excelImportOpen, setExcelImportOpen] = useState(false)
   const [excelImportState, setExcelImportState] = useState<{ files: File[] }>({ files: [] })
-
-  // 清零狀態 - 修復：添加門市選擇狀態
-  const [clearOpen, setClearOpen] = useState(false)
-  const [clearLocationId, setClearLocationId] = useState<string>('all')
 
   // 編輯狀態
   const [editingProduct, setEditingProduct] = useState<string | null>(null)
@@ -204,64 +199,6 @@ export default function Inventory() {
     return sortOrder === 'asc' ? '↓' : '↑'
   }
 
-  // Excel導出功能
-  function exportToExcel() {
-    const exportData = [
-      ['產品名稱', '產品編號', '產品類型', '尺寸', '觀塘', '灣仔', '荔枝角', '元朗', '國内倉', '總計']
-    ]
-
-    products.forEach(product => {
-      const row = [
-        product.name,
-        product.productCode,
-        product.productType,
-        getProductSize(product),
-        getQuantity(product, locations.find(l => l.name === '觀塘')?._id || '').toString(),
-        getQuantity(product, locations.find(l => l.name === '灣仔')?._id || '').toString(),
-        getQuantity(product, locations.find(l => l.name === '荔枝角')?._id || '').toString(),
-        getQuantity(product, locations.find(l => l.name === '元朗')?._id || '').toString(),
-        getQuantity(product, locations.find(l => l.name === '國内倉')?._id || '').toString(),
-        getTotalQuantity(product).toString()
-      ]
-      exportData.push(row)
-    })
-
-    const ws = XLSX.utils.aoa_to_sheet(exportData)
-    const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, ws, '庫存報告')
-    
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
-    const filename = `庫存報告_${timestamp}.xlsx`
-    
-    XLSX.writeFile(wb, filename)
-  }
-
-  // 清零功能 - 修復：根據選擇發送正確的參數
-  async function doClearAll() {
-    if (!confirm('確定要清零所選門市的庫存嗎？')) return
-    
-    try {
-      // 根據選擇決定發送的參數
-      const requestData = clearLocationId === 'all' ? {} : { locationId: clearLocationId }
-      const response = await api.post('/import/clear-all', requestData)
-      
-      const resultMsg = `清零完成！
-      
-處理產品: ${response.data.processed || 0}
-更新產品: ${response.data.updatedCount || 0}
-錯誤數量: ${response.data.errors?.length || 0}
-
-${response.data.errors?.length ? '錯誤詳情:\n' + response.data.errors.join('\n') : ''}`
-      
-      alert(resultMsg)
-      setClearOpen(false)
-      await load()
-    } catch (error: any) {
-      console.error('清零錯誤:', error)
-      alert(`清零失敗: ${error.response?.data?.message || error.message}`)
-    }
-  }
-
   // 導入庫存功能
   async function doImport(type: 'incoming' | 'outgoing') {
     if (importState.locationId === '') {
@@ -314,39 +251,40 @@ ${response.data.errors?.length ? '錯誤詳情:\n' + response.data.errors.join('
     }
   }
 
+  // Excel導入功能
   // Excel導入功能 - 完全修復版本
-  async function doExcelImport() {
-    if (excelImportState.files.length === 0) {
-      alert('請選擇Excel檔案')
-      return
-    }
+async function doExcelImport() {
+  if (excelImportState.files.length === 0) {
+    alert('請選擇Excel檔案')
+    return
+  }
+  
+  // 檢查文件大小
+  const totalSize = excelImportState.files.reduce((sum, file) => sum + file.size, 0)
+  if (totalSize > 10 * 1024 * 1024) { // 10MB限制
+    alert('文件總大小超過10MB，請使用較小的文件')
+    return
+  }
+  
+  try {
+    // 显示处理中提示
+    const processingMsg = '正在處理Excel文件，請稍候...\n這可能需要幾分鐘時間，請不要關閉頁面。'
+    alert(processingMsg)
     
-    // 檢查文件大小
-    const totalSize = excelImportState.files.reduce((sum, file) => sum + file.size, 0)
-    if (totalSize > 10 * 1024 * 1024) { // 10MB限制
-      alert('文件總大小超過10MB，請使用較小的文件')
-      return
-    }
+    const form = new FormData()
+    excelImportState.files.forEach(f => form.append('files', f))
     
-    try {
-      // 显示处理中提示
-      const processingMsg = '正在處理Excel文件，請稍候...\n這可能需要幾分鐘時間，請不要關閉頁面。'
-      alert(processingMsg)
-      
-      const form = new FormData()
-      excelImportState.files.forEach(f => form.append('files', f))
-      
-      // 使用更长的超时时间
-      const response = await api.post('/import/excel', form, {
-        timeout: 300000, // 5分钟超时
-        headers: {
-          'Content-Type': 'multipart/form-data'
-        }
-      })
-      
-      // 显示详细结果
-      const resultMsg = `Excel導入完成！
-      
+    // 使用更长的超时时间
+    const response = await api.post('/import/excel', form, {
+      timeout: 300000, // 5分钟超时
+      headers: {
+        'Content-Type': 'multipart/form-data'
+      }
+    })
+    
+    // 显示详细结果
+    const resultMsg = `Excel導入完成！
+    
 處理行數: ${response.data.processed}
 匹配產品: ${response.data.matched}
 新增產品: ${response.data.created}
@@ -354,27 +292,27 @@ ${response.data.errors?.length ? '錯誤詳情:\n' + response.data.errors.join('
 錯誤數量: ${response.data.errors?.length || 0}
 
 ${response.data.errors?.length > 0 ? '錯誤詳情:\n' + response.data.errors.slice(0, 5).join('\n') + (response.data.errors.length > 5 ? '\n...' : '') : '無錯誤'}`
-      
-      alert(resultMsg)
-      setExcelImportOpen(false)
-      await load()
-    } catch (error: any) {
-      console.error('Excel導入錯誤:', error)
-      
-      let errorMsg = 'Excel導入失敗：'
-      if (error.code === 'ECONNABORTED') {
-        errorMsg += '處理超時，請嘗試使用較小的文件或檢查網絡連接'
-      } else if (error.response?.status === 413) {
-        errorMsg += '文件太大，請使用較小的文件'
-      } else if (error.response?.data?.message) {
-        errorMsg += error.response.data.message
-      } else {
-        errorMsg += error.message
-      }
-      
-      alert(errorMsg)
+    
+    alert(resultMsg)
+    setExcelImportOpen(false)
+    await load()
+  } catch (error: any) {
+    console.error('Excel導入錯誤:', error)
+    
+    let errorMsg = 'Excel導入失敗：'
+    if (error.code === 'ECONNABORTED') {
+      errorMsg += '處理超時，請嘗試使用較小的文件或檢查網絡連接'
+    } else if (error.response?.status === 413) {
+      errorMsg += '文件太大，請使用較小的文件'
+    } else if (error.response?.data?.message) {
+      errorMsg += error.response.data.message
+    } else {
+      errorMsg += error.message
     }
+    
+    alert(errorMsg)
   }
+}
 
   // 編輯和刪除處理函數
   function handleEdit(product: Product) {
@@ -462,7 +400,7 @@ ${response.data.errors?.length > 0 ? '錯誤詳情:\n' + response.data.errors.sl
         <div className="filters">
           <select value={selectedType} onChange={e => setSelectedType(e.target.value)}>
             <option value="">所有產品類型</option>
-            {(productTypes || []).map(type => (
+            {productTypes.map(type => (
               <option key={type._id} value={type.name}>{type.name}</option>
             ))}
           </select>
@@ -476,8 +414,6 @@ ${response.data.errors?.length > 0 ? '錯誤詳情:\n' + response.data.errors.sl
         </div>
         
         <div className="spacer" />
-        <button className="btn" onClick={exportToExcel}>導出Excel</button>
-        <button className="btn" onClick={() => setClearOpen(true)}>清零</button>
         <button className="btn" onClick={() => setExcelImportOpen(true)}>導入Excel</button>
         <button className="btn" onClick={() => setImportOpen(true)}>導入庫存</button>
         <button className="btn" onClick={() => setTransferOpen(true)}>門市對調</button>
@@ -490,7 +426,7 @@ ${response.data.errors?.length > 0 ? '錯誤詳情:\n' + response.data.errors.sl
               <th>產品</th>
               <th>編號</th>
               <th>尺寸</th>
-              {(locations || []).map(location => (
+              {locations.map(location => (
                 <th key={location._id} onClick={() => handleSort(location._id)} style={{ cursor: 'pointer' }}>
                   {location.name} {getSortIcon(location._id)}
                 </th>
@@ -502,14 +438,14 @@ ${response.data.errors?.length > 0 ? '錯誤詳情:\n' + response.data.errors.sl
             </tr>
           </thead>
           <tbody>
-            {Object.values(groupedProducts || {}).map((group: ProductGroup) => (
+            {Object.values(groupedProducts).map((group: ProductGroup) => (
               <React.Fragment key={group.key}>
                 <tr className="group-header" onClick={() => toggleGroup(group.key)}>
-                  <td colSpan={(locations || []).length + 4} style={{ cursor: 'pointer' }}>
+                  <td colSpan={locations.length + 4} style={{ cursor: 'pointer' }}>
                     {expandedGroups.has(group.key) ? '▼' : '▶'} {group.name} ({group.productCode})
                   </td>
                 </tr>
-                {expandedGroups.has(group.key) && (group.products || []).map((product: Product) => (
+                {expandedGroups.has(group.key) && group.products.map((product: Product) => (
                   <tr key={product._id}>
                     {editingProduct === product._id ? (
                       // 編輯模式
@@ -538,7 +474,7 @@ ${response.data.errors?.length > 0 ? '錯誤詳情:\n' + response.data.errors.sl
                             style={{ width: '100%', padding: '4px 8px', border: '1px solid #d1d5db', borderRadius: '4px' }}
                           />
                         </td>
-                        {(locations || []).map(location => {
+                        {locations.map(location => {
                           const inventory = editForm.inventories.find(inv => inv.locationId === location._id)
                           return (
                             <td key={location._id}>
@@ -571,7 +507,7 @@ ${response.data.errors?.length > 0 ? '錯誤詳情:\n' + response.data.errors.sl
                         <td>{product.name}</td>
                         <td>{product.productCode}</td>
                         <td>{getProductSize(product)}</td>
-                        {(locations || []).map(location => (
+                        {locations.map(location => (
                           <td key={location._id}>{getQuantity(product, location._id)}</td>
                         ))}
                         <td>{getTotalQuantity(product)}</td>
@@ -601,7 +537,7 @@ ${response.data.errors?.length > 0 ? '錯誤詳情:\n' + response.data.errors.sl
                 <p>選擇門市：</p>
                 <select value={importState.locationId} onChange={e => setImportState(s => ({ ...s, locationId: e.target.value }))}>
                   <option value="">請選擇門市</option>
-                  {(locations || []).map(location => (
+                  {locations.map(location => (
                     <option key={location._id} value={location._id}>{location.name}</option>
                   ))}
                 </select>
@@ -630,7 +566,7 @@ ${response.data.errors?.length > 0 ? '錯誤詳情:\n' + response.data.errors.sl
                 <p>來源門市：</p>
                 <select value={transferState.fromLocationId} onChange={e => setTransferState(s => ({ ...s, fromLocationId: e.target.value }))}>
                   <option value="">請選擇來源門市</option>
-                  {(locations || []).map(location => (
+                  {locations.map(location => (
                     <option key={location._id} value={location._id}>{location.name}</option>
                   ))}
                 </select>
@@ -639,7 +575,7 @@ ${response.data.errors?.length > 0 ? '錯誤詳情:\n' + response.data.errors.sl
                 <p>目標門市：</p>
                 <select value={transferState.toLocationId} onChange={e => setTransferState(s => ({ ...s, toLocationId: e.target.value }))}>
                   <option value="">請選擇目標門市</option>
-                  {(locations || []).map(location => (
+                  {locations.map(location => (
                     <option key={location._id} value={location._id}>{location.name}</option>
                   ))}
                 </select>
@@ -681,31 +617,6 @@ ${response.data.errors?.length > 0 ? '錯誤詳情:\n' + response.data.errors.sl
             <div className="footer">
               <button className="btn secondary" onClick={() => setExcelImportOpen(false)}>取消</button>
               <button className="btn" onClick={doExcelImport}>進行導入</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 清零確認對話框 - 修復：添加門市選擇 */}
-      {clearOpen && (
-        <div className="modal-backdrop">
-          <div className="modal">
-            <div className="header">確認清零</div>
-            <div className="body">
-              <div style={{ marginBottom: '16px' }}>
-                <p>選擇要清零的門市：</p>
-                <select value={clearLocationId} onChange={e => setClearLocationId(e.target.value)} style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '4px' }}>
-                  <option value="all">所有門市</option>
-                  {(locations || []).map(location => (
-                    <option key={location._id} value={location._id}>{location.name}</option>
-                  ))}
-                </select>
-              </div>
-              <p>確定要清零所選門市的庫存嗎？此操作無法撤銷。</p>
-            </div>
-            <div className="footer">
-              <button className="btn secondary" onClick={() => setClearOpen(false)}>取消</button>
-              <button className="btn danger" onClick={doClearAll}>確定清零</button>
             </div>
           </div>
         </div>
