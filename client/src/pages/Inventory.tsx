@@ -199,8 +199,64 @@ export default function Inventory() {
   }
 
   function getSortIcon(column: string): string {
-    if (sortBy !== column) return ''
-    return sortOrder === 'asc' ? '' : ''
+    if (sortBy !== column) return '↕'
+    return sortOrder === 'asc' ? '↓' : '↑'
+  }
+
+  // Excel導出功能
+  function exportToExcel() {
+    const exportData = [
+      ['產品名稱', '產品編號', '產品類型', '尺寸', '觀塘', '灣仔', '荔枝角', '元朗', '國内倉', '總計']
+    ]
+
+    products.forEach(product => {
+      const row = [
+        product.name,
+        product.productCode,
+        product.productType,
+        getProductSize(product),
+        getQuantity(product, locations.find(l => l.name === '觀塘')?._id || '').toString(),
+        getQuantity(product, locations.find(l => l.name === '灣仔')?._id || '').toString(),
+        getQuantity(product, locations.find(l => l.name === '荔枝角')?._id || '').toString(),
+        getQuantity(product, locations.find(l => l.name === '元朗')?._id || '').toString(),
+        getQuantity(product, locations.find(l => l.name === '國内倉')?._id || '').toString(),
+        getTotalQuantity(product).toString()
+      ]
+      exportData.push(row)
+    })
+
+    const ws = XLSX.utils.aoa_to_sheet(exportData)
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, '庫存報告')
+    
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
+    const filename = `庫存報告_${timestamp}.xlsx`
+    
+    XLSX.writeFile(wb, filename)
+  }
+
+  // 清零功能
+  async function doClearAll() {
+    if (!confirm('確定要清零所有庫存嗎？')) return
+    
+    try {
+      const response = await api.post('/import/clear-all')
+      
+      const resultMsg = `清零完成！
+      
+處理產品: ${response.data.processed || 0}
+更新產品: ${response.data.updatedCount || 0}
+錯誤數量: ${response.data.errors?.length || 0}
+
+${response.data.errors?.length ? '錯誤詳情:\n' + response.data.errors.join('\n') : ''}`
+      
+      alert(resultMsg)
+      setClearOpen(false)
+      await load()
+    } catch (error: any) {
+      console.error('清零錯誤:', error)
+      alert(`清零失敗: ${error.response?.data?.message || error.message}`)
+    }
   }
 
   // 導入庫存功能
@@ -220,12 +276,12 @@ export default function Inventory() {
       importState.files.forEach(f => form.append('files', f))
       
       // 修復：根據type調用不同的API端點
-      const response = await api.post(/import/, form)
-      alert(${type === 'incoming' ? '進貨' : '出貨'}完成\n處理:  匹配:  新增:  更新:\n未找到: )
+      const response = await api.post(`/import/${type}`, form)
+      alert(`${type === 'incoming' ? '進貨' : '出貨'}完成\n處理:${response.data.processed}  匹配:${response.data.matched}  新增:${response.data.created}  更新:${response.data.updated}\n未找到: ${response.data.notFound?.join(', ') || '無'}`)
       setImportOpen(false)
       await load()
     } catch (error: any) {
-      alert(${type === 'incoming' ? '進貨' : '出貨'}失敗：)
+      alert(`${type === 'incoming' ? '進貨' : '出貨'}失敗：${error.response?.data?.message || error.message}`)
     }
   }
 
@@ -247,11 +303,11 @@ export default function Inventory() {
       transferState.files.forEach(f => form.append('files', f))
       
       const response = await api.post('/import/transfer', form)
-      alert(門市對調完成\n處理:  匹配:  更新:\n未找到: )
+      alert(`門市對調完成\n處理:${response.data.processed}  匹配:${response.data.matched}  更新:${response.data.updated}\n未找到: ${response.data.notFound?.join(', ') || '無'}`)
       setTransferOpen(false)
       await load()
     } catch (error: any) {
-      alert(門市對調失敗：)
+      alert(`門市對調失敗：${error.response?.data?.message || error.message}`)
     }
   }
 
@@ -286,15 +342,15 @@ export default function Inventory() {
       })
       
       // 显示详细结果
-      const resultMsg = Excel導入完成！
+      const resultMsg = `Excel導入完成！
       
-處理行數: 
-匹配產品: 
-新增產品: 
-更新產品: 
-錯誤數量: 
+處理行數: ${response.data.processed}
+匹配產品: ${response.data.matched}
+新增產品: ${response.data.created}
+更新產品: ${response.data.updated}
+錯誤數量: ${response.data.errors?.length || 0}
 
-
+${response.data.errors?.length > 0 ? '錯誤詳情:\n' + response.data.errors.slice(0, 5).join('\n') + (response.data.errors.length > 5 ? '\n...' : '') : '無錯誤'}`
       
       alert(resultMsg)
       setExcelImportOpen(false)
@@ -314,62 +370,6 @@ export default function Inventory() {
       }
       
       alert(errorMsg)
-    }
-  }
-
-  // Excel導出功能
-  function exportToExcel() {
-    const exportData = [
-      ['產品名稱', '產品編號', '產品類型', '尺寸', '觀塘', '灣仔', '荔枝角', '元朗', '國内倉', '總計']
-    ]
-
-    products.forEach(product => {
-      const row = [
-        product.name,
-        product.productCode,
-        product.productType,
-        getProductSize(product),
-        getQuantity(product, locations.find(l => l.name === '觀塘')?._id || ''),
-        getQuantity(product, locations.find(l => l.name === '灣仔')?._id || ''),
-        getQuantity(product, locations.find(l => l.name === '荔枝角')?._id || ''),
-        getQuantity(product, locations.find(l => l.name === '元朗')?._id || ''),
-        getQuantity(product, locations.find(l => l.name === '國内倉')?._id || ''),
-        getTotalQuantity(product)
-      ]
-      exportData.push(row)
-    })
-
-    const ws = XLSX.utils.aoa_to_sheet(exportData)
-    const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, ws, '庫存報告')
-    
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
-    const filename = 庫存報告_.xlsx
-    
-    XLSX.writeFile(wb, filename)
-  }
-
-  // 清零功能
-  async function doClearAll() {
-    if (!confirm('確定要清零所有庫存嗎？')) return
-    
-    try {
-      const response = await api.post('/import/clear-all')
-      
-      const resultMsg = 清零完成！
-      
-處理產品: 
-更新產品: 
-錯誤數量: 
-
-
-      
-      alert(resultMsg)
-      setClearOpen(false)
-      await load()
-    } catch (error: any) {
-      console.error('清零錯誤:', error)
-      alert(清零失敗: )
     }
   }
 
@@ -403,30 +403,30 @@ export default function Inventory() {
 
   async function handleSaveEdit(productId: string) {
     try {
-      const response = await api.put(/products/, editForm)
+      const response = await api.put(`/products/${productId}`, editForm)
       alert('商品更新成功')
       setEditingProduct(null)
       await load()
     } catch (error: any) {
-      alert(更新失敗：)
+      alert(`更新失敗：${error.response?.data?.message || error.message}`)
     }
   }
 
   async function handleDelete(product: Product) {
-    if (confirm(確定要刪除產品 "" 嗎？)) {
+    if (confirm(`確定要刪除產品 "${product.name}" 嗎？`)) {
       try {
-        await api.delete(/products/)
+        await api.delete(`/products/${product._id}`)
         alert('商品刪除成功')
         await load()
       } catch (error: any) {
-        alert(刪除失敗：)
+        alert(`刪除失敗：${error.response?.data?.message || error.message}`)
       }
     }
   }
 
   // Group products by name and productCode
   const groupedProducts = (filteredProducts || []).reduce((groups, product) => {
-    const key = ${product.name}-
+    const key = `${product.name}-${product.productCode}`
     if (!groups[key]) {
       groups[key] = {
         key,
@@ -503,7 +503,7 @@ export default function Inventory() {
               <React.Fragment key={group.key}>
                 <tr className="group-header" onClick={() => toggleGroup(group.key)}>
                   <td colSpan={(locations || []).length + 4} style={{ cursor: 'pointer' }}>
-                    {expandedGroups.has(group.key) ? '' : ''} {group.name} ({group.productCode})
+                    {expandedGroups.has(group.key) ? '▼' : '▶'} {group.name} ({group.productCode})
                   </td>
                 </tr>
                 {expandedGroups.has(group.key) && (group.products || []).map((product: Product) => (
@@ -701,3 +701,4 @@ export default function Inventory() {
     </div>
   )
 }
+
