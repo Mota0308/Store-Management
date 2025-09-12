@@ -693,4 +693,48 @@ router.post('/clear', async (req, res) => {
   }
 });
 
+
+// 清零功能別名（向後兼容）
+router.post('/clear-all', async (req, res) => {
+  try {
+    console.log('調試: 收到清零請求 (clear-all端點)');
+    const { locationId } = req.body;
+    console.log('調試: locationId =', locationId);
+    
+    if (!locationId) {
+      return res.status(400).json({ message: 'locationId required' });
+    }
+    
+    // 將指定門市的所有庫存設為0
+    const products = await Product.find();
+    let updatedCount = 0;
+    
+    for (const product of products) {
+      const inv = product.inventories.find(i => String(i.locationId) === String(locationId));
+      if (inv && inv.quantity > 0) {
+        inv.quantity = 0;
+        await product.save();
+        updatedCount++;
+      }
+    }
+    
+    console.log('調試: 清零完成，更新了', updatedCount, '個產品');
+    
+    // 返回更新後的產品列表
+    const updatedProducts = await Product.find().populate('inventories.locationId');
+    res.json({ 
+      message: '清零完成', 
+      updatedCount,
+      products: updatedProducts 
+    });
+  } catch (error) {
+    console.error('清零錯誤:', error);
+    res.status(500).json({ 
+      message: '清零失敗', 
+      error: error instanceof Error ? error.message : String(error) 
+    });
+  }
+});
+
 export default router;
+
