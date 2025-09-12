@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react'
+ï»¿import React, { useState, useEffect } from 'react'
 import api from '../api'
 import * as XLSX from 'xlsx'
 
-// ©w¸qÃş«¬±µ¤f
+// å®šç¾©é¡å‹æ¥å£
 interface Location {
   _id: string
   name: string
@@ -13,806 +13,314 @@ interface ProductType {
   name: string
 }
 
-interface Inventory {
-  locationId: string | { _id: string; name: string } | null // ²K¥[ null ¤ä«ù
-  quantity: number
-}
-
 interface Product {
   _id: string
   name: string
   productCode: string
-  productType: string
-  sizes?: string[]
-  size?: string
-  price: number
-  inventories: Inventory[]
+  productType: ProductType
+  sizes: string[]
+  inventories: {
+    locationId: Location
+    quantity: number
+  }[]
 }
 
-interface ProductGroup {
-  key: string
-  name: string
-  productCode: string
-  products: Product[]
+interface ExcelImportState {
+  files: File[]
+  locationId: string
+  processing: boolean
 }
 
 export default function Inventory() {
+  const [products, setProducts] = useState<Product[]>([])
   const [locations, setLocations] = useState<Location[]>([])
   const [productTypes, setProductTypes] = useState<ProductType[]>([])
-  const [products, setProducts] = useState<Product[]>([])
-  const [filteredProducts, setFilteredProducts] = useState<Product[]>([])
-  const [selectedType, setSelectedType] = useState<string>('')
-  const [searchTerm, setSearchTerm] = useState('')
-  const [sortBy, setSortBy] = useState<string>('')
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
-  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
-  
-  // ¾É¤J®w¦sª¬ºA
-  const [importOpen, setImportOpen] = useState(false)
-  const [importState, setImportState] = useState<{ locationId: string; files: File[] }>({ locationId: '', files: [] })
-  
-  // ªù¥«¹ï½Õª¬ºA
-  const [transferOpen, setTransferOpen] = useState(false)
-  const [transferState, setTransferState] = useState<{ fromLocationId: string; toLocationId: string; files: File[] }>({ fromLocationId: '', toLocationId: '', files: [] })
-  
-  // Excel¾É¤Jª¬ºA
-  const [excelImportOpen, setExcelImportOpen] = useState(false)
-  const [excelImportState, setExcelImportState] = useState<{ files: File[] }>({ files: [] })
-
-  // ²M¹sª¬ºA
-  const [clearOpen, setClearOpen] = useState(false)
-  // ½s¿èª¬ºA
+  const [loading, setLoading] = useState(true)
   const [editingProduct, setEditingProduct] = useState<string | null>(null)
-  const [editForm, setEditForm] = useState<{
-    name: string
-    productCode: string
-    productType: string
-    size: string
-    price: number
-    inventories: Array<{ locationId: string; quantity: number }>
-  }>({
-    name: '',
-    productCode: '',
-    productType: '',
-    size: '',
-    price: 0,
-    inventories: []
+  const [editForm, setEditForm] = useState<{ [key: string]: number }>({})
+  const [excelImportState, setExcelImportState] = useState<ExcelImportState>({
+    files: [],
+    locationId: '',
+    processing: false
   })
+  const [clearOpen, setClearOpen] = useState(false)
 
-  useEffect(() => {
-    api.get('/locations').then((r: any) => {
-      // «ö·Ó«ü©w¶¶§Ç±Æ§Ç¡GÆ[¶í¡AÆW¥J¡A¯ïªK¨¤¡A¤¸®Ô¡A°ê?­Ü
-      const order = ['Æ[¶í', 'ÆW¥J', '¯ïªK¨¤', '¤¸®Ô', '°ê?­Ü'];
-      const sortedLocations = r.data.sort((a: Location, b: Location) => {
-        const aIndex = order.indexOf(a.name);
-        const bIndex = order.indexOf(b.name);
-        return aIndex - bIndex;
-      });
-      setLocations(sortedLocations);
-    })
-    loadProductTypes()
-  }, [])
+  // è¼‰å…¥æ•¸æ“š
+  async function load() {
+    try {
+      setLoading(true)
+      const [productsRes, locationsRes, productTypesRes] = await Promise.all([
+        api.get('/products'),
+        api.get('/locations'),
+        api.get('/product-types')
+      ])
+      setProducts(productsRes.data)
+      setLocations(locationsRes.data)
+      setProductTypes(productTypesRes.data)
+    } catch (error) {
+      console.error('è¼‰å…¥æ•¸æ“šå¤±æ•—:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
 
   useEffect(() => {
     load()
-  }, [selectedType, searchTerm, sortBy, sortOrder])
+  }, [])
 
-  async function loadProductTypes() {
-      const response = await api.get('/product-types')
-    setProductTypes(response.data || [])
-  }
-
-  async function load() {
-    const response = await api.get('/products')
-    // ­×´_¡G«áºİªğ¦^ªº¬O { products: [...], pagination: {...} }
-    setProducts(response.data.products || [])
-  }
-
-  useEffect(() => {
-    let filtered = products || [] // ²K¥[¦w¥şÀË¬d
-
-    // Filter by product type
-    if (selectedType) {
-      filtered = filtered.filter(p => p.productType === selectedType)
-    }
-
-    // Filter by search term
-    if (searchTerm) {
-      filtered = filtered.filter(p => 
-        p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        p.productCode.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        getProductSize(p).toLowerCase().includes(searchTerm.toLowerCase())
-      )
-    }
-
-    // Sort products
-    if (sortBy) {
-      filtered.sort((a, b) => {
-        let aValue: any, bValue: any
-        
-        if (sortBy === 'total') {
-          aValue = getTotalQuantity(a)
-          bValue = getTotalQuantity(b)
-        } else if (sortBy === 'name') {
-          aValue = a.name
-          bValue = b.name
-        } else if (sortBy === 'productCode') {
-          aValue = a.productCode
-          bValue = b.productCode
-        } else if (sortBy === 'size') {
-          aValue = getProductSize(a)
-          bValue = getProductSize(b)
-        } else {
-          // Location sorting
-          aValue = getQuantity(a, sortBy)
-          bValue = getQuantity(b, sortBy)
-        }
-        
-        if (typeof aValue === 'string') {
-          return sortOrder === 'asc' ? aValue.localeCompare(bValue) : bValue.localeCompare(aValue)
-        } else {
-          return sortOrder === 'asc' ? aValue - bValue : bValue - aValue
-        }
-      })
-    }
-
-    setFilteredProducts(filtered)
-  }, [products, selectedType, searchTerm, sortBy, sortOrder])
-
-  function getProductSize(product: Product): string {
-    if (product.sizes && product.sizes.length > 0) {
-      return product.sizes.join(', ')
-    }
-    return product.size || ''
-  }
-
-  // ·s¼W¡G«ö¤Ø¤o¤j¤p±Æ§Çªº¨ç¼Æ
+  // æ’åºå‡½æ•¸ - æŒ‰å°ºå¯¸æ•¸å­—æ’åº
   function sortProductsBySize(products: Product[]): Product[] {
-    return products.sort((a, b) => {
-      const aSize = getProductSize(a)
-      const bSize = getProductSize(b)
-      
-      // ´£¨ú¼Æ¦r¶i¦æ¤ñ¸û
-      const aNumbers = aSize.match(/\d+/g) || []
-      const bNumbers = bSize.match(/\d+/g) || []
-      
-      // ¦pªG³£¦³¼Æ¦r¡A«ö²Ä¤@­Ó¼Æ¦r¤ñ¸û
-      if (aNumbers.length > 0 && bNumbers.length > 0) {
-        const aNum = parseInt(aNumbers[0] || '0')
-        const bNum = parseInt(bNumbers[0] || '0')
-        return aNum - bNum
-      }
-      
-      // ¦pªG¥u¦³¤@­Ó¦³¼Æ¦r¡A¦³¼Æ¦rªº±Æ¦b«e­±
-      if (aNumbers.length > 0 && bNumbers.length === 0) return -1
-      if (aNumbers.length === 0 && bNumbers.length > 0) return 1
-      
-      // ³£¨S¦³¼Æ¦r¡A«ö¦r²Å¦ê¤ñ¸û
-      return aSize.localeCompare(bSize)
-    })
+    return products.map(product => ({
+      ...product,
+      sizes: product.sizes.sort((a, b) => {
+        // æå–å°ºå¯¸ä¸­çš„æ•¸å­—é€²è¡Œæ¯”è¼ƒ
+        const getSizeNumber = (size: string) => {
+          const match = size.match(/\d+/)
+          return match ? parseInt(match[0], 10) : 0
+        }
+        return getSizeNumber(a) - getSizeNumber(b)
+      })
+    }))
   }
 
-  // ­×´_ª©¥»¡G²K¥[§¹¾ãªº null ÀË¬d
-  function getQuantity(product: Product, locationId: string): number {
-    if (!product.inventories || !Array.isArray(product.inventories)) {
-      return 0
-    }
-    const inventory = product.inventories.find(inv => {
-      // ÀË¬d locationId ¬O§_¬° null ©Î undefined
-      if (!inv.locationId) {
-        return false
-      }
-      
-      // ³B²z populate «áªº locationId ¹ï¶H
-      if (typeof inv.locationId === 'object' && inv.locationId !== null) {
-        return inv.locationId._id === locationId || inv.locationId._id.toString() === locationId
-      }
-      
-      // ³B²z­ì©lªº ObjectId ¦r²Å¦ê¡A²K¥[ null ÀË¬d
-      if (inv.locationId && typeof inv.locationId === 'string') {
-        return inv.locationId === locationId || inv.locationId.toString() === locationId
-      }
-      
-      return false
-    })
-    return inventory ? inventory.quantity : 0
-  }
-
-  function getTotalQuantity(product: Product): number {
-    if (!product.inventories || !Array.isArray(product.inventories)) {
-      return 0
-    }
-    return product.inventories.reduce((sum, inv) => sum + inv.quantity, 0)
-  }
-
-  function handleSort(column: string) {
-    if (sortBy === column) {
-      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')
-    } else {
-      setSortBy(column)
-      setSortOrder('desc')
-    }
-  }
-
-  function getSortIcon(column: string): string {
-    if (sortBy !== column) return '?'
-    return sortOrder === 'asc' ? '¡õ' : '¡ô'
-  }
-
-  // ·s¼W¡G¾É¥XExcel¥\¯à
+  // å°å‡ºExcelåŠŸèƒ½
   function exportToExcel() {
-    try {
-      // ·Ç³Æ¼Æ¾Ú
-      const exportData = []
-      
-      // ²K¥[ªíÀY
-      const headers = ['½s¸¹', '²£«~', '¤Ø¤o', 'Æ[¶í', 'ÆW¥J', '¯ïªK¨¤', '¤¸®Ô', '°ê?­Ü']
-      exportData.push(headers)
-      
-      // ²K¥[²£«~¼Æ¾Ú
-      Object.values(groupedProducts).forEach(group => {
-        // ¹ï¨C­Ó²Õ¤ºªº²£«~«ö¤Ø¤o±Æ§Ç
-        const sortedProducts = sortProductsBySize([...group.products])
-        
-        sortedProducts.forEach(product => {
-          const row = [
-            product.productCode,
+    const exportData = [
+      ['ç”¢å“åç¨±', 'ç”¢å“ç·¨è™Ÿ', 'ç”¢å“é¡å‹', 'å°ºå¯¸', 'é–€å¸‚', 'æ•¸é‡']
+    ]
+
+    products.forEach(product => {
+      product.inventories.forEach(inv => {
+        product.sizes.forEach(size => {
+          exportData.push([
             product.name,
-            getProductSize(product),
-            getQuantity(product, locations.find(l => l.name === 'Æ[¶í')?._id || ''),
-            getQuantity(product, locations.find(l => l.name === 'ÆW¥J')?._id || ''),
-            getQuantity(product, locations.find(l => l.name === '¯ïªK¨¤')?._id || ''),
-            getQuantity(product, locations.find(l => l.name === '¤¸®Ô')?._id || ''),
-            getQuantity(product, locations.find(l => l.name === '°ê?­Ü')?._id || '')
-          ]
-          exportData.push(row)
+            product.productCode,
+            product.productType.name,
+            size,
+            inv.locationId.name,
+            inv.quantity.toString()
+          ])
         })
       })
-      
-      // ³Ğ«Ø¤u§@Ã¯
-      const ws = XLSX.utils.aoa_to_sheet(exportData)
-      const wb = XLSX.utils.book_new()
-      XLSX.utils.book_append_sheet(wb, ws, '®w¦s³øªí')
-      
-      // ¥Í¦¨¤å¥ó¦W
-      const now = new Date()
-      const timestamp = now.toISOString().slice(0, 19).replace(/:/g, '-')
-      const filename = `®w¦s³øªí_${timestamp}.xlsx`
-      
-      // ¾É¥X¤å¥ó
-      XLSX.writeFile(wb, filename)
-      
-      alert('Excel¤å¥ó¾É¥X¦¨¥\¡I')
-    } catch (error) {
-      console.error('¾É¥XExcel¥¢±Ñ:', error)
-      alert('¾É¥XExcel¥¢±Ñ¡A½Ğ­«¸Õ')
-    }
-  }
-
-  // ¾É¤J®w¦s¥\¯à
-  async function doImport(type: 'incoming' | 'outgoing') {
-    if (importState.locationId === '') {
-      alert('½Ğ¿ï¾Üªù¥«')
-      return
-    }
-    if (importState.files.length === 0) {
-      alert('½Ğ¿ï¾ÜPDFÀÉ®×')
-      return
-    }
-    
-    try {
-      const form = new FormData()
-      form.append('locationId', importState.locationId)
-      importState.files.forEach(f => form.append('files', f))
-      
-      // ­×´_¡G®Ú¾Útype½Õ¥Î¤£¦PªºAPIºİÂI
-      const response = await api.post(`/import/${type}`, form)
-      alert(`${type === 'incoming' ? '¶i³f' : '¥X³f'}§¹¦¨\n³B²z:${response.data.processed}  ¤Ç°t:${response.data.matched}  ·s¼W:${response.data.created}  §ó·s:${response.data.updated}\n¥¼§ä¨ì: ${response.data.notFound?.join(', ') || 'µL'}`)
-      setImportOpen(false)
-      await load()
-    } catch (error: any) {
-      alert(`${type === 'incoming' ? '¶i³f' : '¥X³f'}¥¢±Ñ¡G${error.response?.data?.message || error.message}`)
-    }
-  }
-
-  // ªù¥«¹ï½Õ¥\¯à
-  async function doTransfer() {
-    if (transferState.fromLocationId === '' || transferState.toLocationId === '') {
-      alert('½Ğ¿ï¾Ü¨Ó·½ªù¥«©M¥Ø¼Ğªù¥«')
-      return
-    }
-    if (transferState.files.length === 0) {
-      alert('½Ğ¿ï¾ÜPDFÀÉ®×')
-      return
-    }
-    
-    try {
-      const form = new FormData()
-      form.append('fromLocationId', transferState.fromLocationId)
-      form.append('toLocationId', transferState.toLocationId)
-      transferState.files.forEach(f => form.append('files', f))
-      
-      const response = await api.post('/import/transfer', form)
-      alert(`ªù¥«¹ï½Õ§¹¦¨\n³B²z:${response.data.processed}  ¤Ç°t:${response.data.matched}  §ó·s:${response.data.updated}\n¥¼§ä¨ì: ${response.data.notFound?.join(', ') || 'µL'}`)
-      setTransferOpen(false)
-      await load()
-    } catch (error: any) {
-      alert(`ªù¥«¹ï½Õ¥¢±Ñ¡G${error.response?.data?.message || error.message}`)
-    }
-  }
-
-  // Excel¾É¤J¥\¯à - §¹¥ş­×´_ª©¥»
-async function doExcelImport() {
-  if (excelImportState.files.length === 0) {
-    alert('½Ğ¿ï¾ÜExcelÀÉ®×')
-    return
-  }
-  
-  // ÀË¬d¤å¥ó¤j¤p
-  const totalSize = excelImportState.files.reduce((sum, file) => sum + file.size, 0)
-  if (totalSize > 10 * 1024 * 1024) { // 10MB­­¨î
-    alert('¤å¥óÁ`¤j¤p¶W¹L10MB¡A½Ğ¨Ï¥Î¸û¤pªº¤å¥ó')
-    return
-  }
-  
-  try {
-    // ?¥Ü?²z¤¤´£¥Ü
-    const processingMsg = '¥¿¦b³B²zExcel¤å¥ó¡A½Ğµy­Ô...\n³o¥i¯à»İ­n´X¤ÀÄÁ®É¶¡¡A½Ğ¤£­nÃö³¬­¶­±¡C'
-    alert(processingMsg)
-    
-    const form = new FormData()
-    excelImportState.files.forEach(f => form.append('files', f))
-    
-    // ¨Ï¥Î§ó?ªº¶W???
-    const response = await api.post('/import/excel', form, {
-      timeout: 300000, // 5¤À?¶W?
-      headers: {
-        'Content-Type': 'multipart/form-data'
-      }
     })
-    
-    // ?¥Ü???ªG
-    const resultMsg = `Excel¾É¤J§¹¦¨¡I
-    
-³B²z¦æ¼Æ: ${response.data.processed}
-¤Ç°t²£«~: ${response.data.matched}
-·s¼W²£«~: ${response.data.created}
-§ó·s²£«~: ${response.data.updated}
-¿ù»~¼Æ¶q: ${response.data.errors?.length || 0}
 
-${response.data.errors?.length > 0 ? '¿ù»~¸Ô±¡:\n' + response.data.errors.slice(0, 5).join('\n') + (response.data.errors.length > 5 ? '\n...' : '') : 'µL¿ù»~'}`
+    const ws = XLSX.utils.aoa_to_sheet(exportData)
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'åº«å­˜å ±å‘Š')
     
-    alert(resultMsg)
-    setExcelImportOpen(false)
-    await load()
-  } catch (error: any) {
-    console.error('Excel¾É¤J¿ù»~:', error)
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
+    const filename = `åº«å­˜å ±å‘Š_${timestamp}.xlsx`
     
-    let errorMsg = 'Excel¾É¤J¥¢±Ñ¡G'
-    if (error.code === 'ECONNABORTED') {
-      errorMsg += '³B²z¶W®É¡A½Ğ¹Á¸Õ¨Ï¥Î¸û¤pªº¤å¥ó©ÎÀË¬dºôµ¸³s±µ'
-    } else if (error.response?.status === 413) {
-      errorMsg += '¤å¥ó¤Ó¤j¡A½Ğ¨Ï¥Î¸û¤pªº¤å¥ó'
-    } else if (error.response?.data?.message) {
-      errorMsg += error.response.data.message
-    } else {
-      errorMsg += error.message
-    }
-    
-    alert(errorMsg)
+    XLSX.writeFile(wb, filename)
   }
-}
 
-// ²M¹s©Ò¦³°Ó«~¼Æ¶q
-async function doClearAll() {
-  if (!confirm('½T©w­n²M¹s©Ò¦³°Ó«~ªº¼Æ¶q¶Ü¡H¦¹¾Ş§@¤£¥iºM¾P¡I')) {
-    return
-  }
-  
-  try {
-    const response = await api.post('/import/clear')
+  // æ¸…é›¶åŠŸèƒ½
+  async function doClearAll() {
+    if (!confirm('ç¢ºå®šè¦æ¸…é›¶æ‰€æœ‰åº«å­˜å—ï¼Ÿ')) return
     
-    const resultMsg = `²M¹s§¹¦¨¡I
-    
-³B²z²£«~: ${response.data.processed}
-§ó·s²£«~: ${response.data.updated}
-¿ù»~¼Æ¶q: ${response.data.errors?.length || 0}
-
-${response.data.errors?.length > 0 ? '¿ù»~¸Ô±¡:\n' + response.data.errors.slice(0, 5).join('\n') + (response.data.errors.length > 5 ? '\n...' : '') : 'µL¿ù»~'}`
-    
-    alert(resultMsg)
-    setClearOpen(false)
-    await load()
-  } catch (error: any) {
-    console.error('²M¹s¿ù»~:', error)
-    
-    let errorMsg = '²M¹s¥¢±Ñ¡G'
-    if (error.response?.data?.message) {
-      errorMsg += error.response.data.message
-    } else {
-      errorMsg += error.message
-    }
-    
-    alert(errorMsg)
-  }
-}
-
-// ½s¿è©M§R°£³B²z¨ç¼Æ - ­×´_ª©¥»
-function handleEdit(product: Product) {
-  setEditingProduct(product._id)
-  setEditForm({
-    name: product.name,
-    productCode: product.productCode,
-    productType: product.productType,
-    size: getProductSize(product),
-    price: product.price,
-    inventories: (product.inventories || []).map(inv => ({
-      locationId: typeof inv.locationId === 'object' && inv.locationId !== null 
-        ? inv.locationId._id 
-        : (inv.locationId ? inv.locationId.toString() : ''),
-      quantity: inv.quantity
-    }))
-  })
-}
-
-function handleCancelEdit() {
-  setEditingProduct(null)
-  setEditForm({
-    name: '',
-    productCode: '',
-    productType: '',
-    size: '',
-    price: 0,
-    inventories: []
-  })
-}
-
-async function handleSaveEdit(productId: string) {
-  try {
-    const response = await api.put(`/products/${productId}`, editForm)
-    alert('°Ó«~§ó·s¦¨¥\')
-    setEditingProduct(null)
-    await load()
-  } catch (error: any) {
-    alert(`§ó·s¥¢±Ñ¡G${error.response?.data?.message || error.message}`)
-  }
-}
-
-async function handleDelete(product: Product) {
-  if (confirm(`½T©w­n§R°£²£«~ "${product.name}" ¶Ü¡H`)) {
     try {
-      await api.delete(`/products/${product._id}`)
-      alert('°Ó«~§R°£¦¨¥\')
-  await load()
-    } catch (error: any) {
-      alert(`§R°£¥¢±Ñ¡G${error.response?.data?.message || error.message}`)
-    }
-  }
-}
-
-// ·s¼W¡G§R°£¾ã­Ó°Ó«~²Õªº¨ç¼Æ
-async function handleDeleteGroup(group: ProductGroup) {
-  if (confirm(`½T©w­n§R°£¾ã­Ó°Ó«~²Õ "${group.name}" (${group.productCode}) ¶Ü¡H\n³o±N§R°£¸Ó°Ó«~ªº©Ò¦³¤Ø¤oÅÜÅé¡A¦¹¾Ş§@¤£¥iºM¾P¡I`)) {
-    try {
-      // §å¶q§R°£¸Ó²Õªº©Ò¦³°Ó«~
-      const deletePromises = group.products.map(product => 
-        api.delete(`/products/${product._id}`)
-      )
+      const response = await api.post('/import/clear-all')
       
-      await Promise.all(deletePromises)
-      alert(`°Ó«~²Õ "${group.name}" §R°£¦¨¥\¡A¦@§R°£ ${group.products.length} ­Ó°Ó«~`)
+      const resultMsg = `æ¸…é›¶å®Œæˆï¼
+      
+è™•ç†ç”¢å“: ${response.data.processed || 0}
+æ›´æ–°ç”¢å“: ${response.data.updatedCount || 0}
+éŒ¯èª¤æ•¸é‡: ${response.data.errors?.length || 0}
+
+${response.data.errors?.length ? 'éŒ¯èª¤è©³æƒ…:\n' + response.data.errors.join('\n') : ''}`
+      
+      alert(resultMsg)
+      setClearOpen(false)
       await load()
     } catch (error: any) {
-      alert(`§R°£¥¢±Ñ¡G${error.response?.data?.message || error.message}`)
+      console.error('æ¸…é›¶éŒ¯èª¤:', error)
+      alert(`æ¸…é›¶å¤±æ•—: ${error.response?.data?.message || error.message}`)
     }
   }
-}
 
-// Group products by name and productCode¡A¨Ã«ö¤Ø¤o±Æ§Ç
-const groupedProducts = (filteredProducts || []).reduce((groups, product) => {
-  const key = `${product.name}-${product.productCode}`
-  if (!groups[key]) {
-    groups[key] = {
-      key,
-      name: product.name,
-      productCode: product.productCode,
-      products: []
+  // ä¿å­˜ç·¨è¼¯
+  async function handleSaveEdit(productId: string) {
+    try {
+      const response = await api.put(`/products/${productId}`, editForm)
+      alert('ç”¢å“æ›´æ–°æˆåŠŸï¼')
+      setEditingProduct(null)
+      await load()
+    } catch (error: any) {
+      alert(`æ›´æ–°å¤±æ•—: ${error.response?.data?.message || error.message}`)
     }
   }
-  groups[key].products.push(product)
-  return groups
-}, {} as Record<string, ProductGroup>)
 
-// ¹ï¨C­Ó²Õ¤ºªº²£«~«ö¤Ø¤o±Æ§Ç
-Object.values(groupedProducts).forEach(group => {
-  group.products = sortProductsBySize(group.products)
-})
-
-function toggleGroup(groupKey: string) {
-  const newExpanded = new Set(expandedGroups)
-  if (newExpanded.has(groupKey)) {
-    newExpanded.delete(groupKey)
-  } else {
-    newExpanded.add(groupKey)
+  // åˆªé™¤ç”¢å“
+  async function handleDelete(product: Product) {
+    if (confirm(`ç¢ºå®šè¦åˆªé™¤ç”¢å“ "${product.name}" å—ï¼Ÿ`)) {
+      try {
+        await api.delete(`/products/${product._id}`)
+        alert('ç”¢å“åˆªé™¤æˆåŠŸï¼')
+        await load()
+      } catch (error: any) {
+        alert(`åˆªé™¤å¤±æ•—: ${error.response?.data?.message || error.message}`)
+      }
+    }
   }
-  setExpandedGroups(newExpanded)
-}
 
-return (
-  <div className="page">
-    <div className="header">
-      <h1>®w¦sºŞ²z</h1>
-    </div>
+  // Excelå°å…¥è™•ç†
+  async function handleExcelImport() {
+    if (!excelImportState.locationId || excelImportState.files.length === 0) {
+      alert('è«‹é¸æ“‡é–€å¸‚å’ŒExcelæ–‡ä»¶')
+      return
+    }
 
-    <div className="toolbar">
-      <div className="filters">
-        <select value={selectedType} onChange={e => setSelectedType(e.target.value)}>
-          <option value="">©Ò¦³²£«~Ãş«¬</option>
-          {productTypes.map(type => (
-            <option key={type._id} value={type.name}>{type.name}</option>
-          ))}
-        </select>
-        
-        <input
-          type="text"
-          placeholder="·j´M²£«~..."
-          value={searchTerm}
-          onChange={e => setSearchTerm(e.target.value)}
-        />
+    setExcelImportState(prev => ({ ...prev, processing: true }))
+    
+    try {
+      const formData = new FormData()
+      formData.append('locationId', excelImportState.locationId)
+      excelImportState.files.forEach(file => {
+        formData.append('files', file)
+      })
+
+      const response = await api.post('/import/excel', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      })
+
+      alert(`Excelå°å…¥å®Œæˆï¼è™•ç†äº† ${response.data.summary?.processed || 0} å€‹ç”¢å“`)
+      await load()
+    } catch (error: any) {
+      alert(`Excelå°å…¥å¤±æ•—: ${error.response?.data?.message || error.message}`)
+    } finally {
+      setExcelImportState({ files: [], locationId: '', processing: false })
+    }
+  }
+
+  if (loading) return <div className="loading">è¼‰å…¥ä¸­...</div>
+
+  const sortedProducts = sortProductsBySize(products)
+
+  return (
+    <div className="inventory-page">
+      <div className="page-header">
+        <h1>åº«å­˜ç®¡ç†</h1>
+        <div className="header-actions">
+          <button className="btn" onClick={exportToExcel}>å°å‡ºExcel</button>
+          <button className="btn" onClick={() => setClearOpen(true)}>æ¸…é›¶</button>
+        </div>
       </div>
-      
-      <div className="spacer" />
-      <button className="btn" onClick={exportToExcel}>¾É¥XExcel</button>
-      <button className="btn" onClick={() => setExcelImportOpen(true)}>¾É¤JExcel</button>
-      <button className="btn" onClick={() => setClearOpen(true)}>²M¹s</button>
-      <button className="btn" onClick={() => setImportOpen(true)}>¾É¤J®w¦s</button>
-      <button className="btn" onClick={() => setTransferOpen(true)}>ªù¥«¹ï½Õ</button>
-    </div>
 
-    <div className="table-container">
-      <table>
-        <thead>
-          <tr>
-            <th>²£«~</th>
-            <th>½s¸¹</th>
-            <th>¤Ø¤o</th>
-            {locations.map(location => (
-              <th key={location._id} onClick={() => handleSort(location._id)} style={{ cursor: 'pointer' }}>
-                {location.name} {getSortIcon(location._id)}
-              </th>
+      {/* Excelå°å…¥å€åŸŸ */}
+      <div className="import-section">
+        <h3>Excelå°å…¥</h3>
+        <div className="import-controls">
+          <select 
+            value={excelImportState.locationId} 
+            onChange={e => setExcelImportState(s => ({ ...s, locationId: e.target.value }))}
+          >
+            <option value="">é¸æ“‡é–€å¸‚</option>
+            {locations.map(loc => (
+              <option key={loc._id} value={loc._id}>{loc.name}</option>
             ))}
-            <th onClick={() => handleSort('total')} style={{ cursor: 'pointer' }}>
-              Á`­p {getSortIcon('total')}
-            </th>
-            <th>¾Ş§@</th>
-          </tr>
-        </thead>
-        <tbody>
-          {Object.values(groupedProducts).map((group: ProductGroup, groupIndex) => (
-            <React.Fragment key={group.key}>
-              <tr className="group-header" style={{ borderBottom: '2px solid #dc2626' }}>
-                <td colSpan={locations.length + 3} style={{ cursor: 'pointer' }} onClick={() => toggleGroup(group.key)}>
-                  {expandedGroups.has(group.key) ? '¡¿' : '?'} {group.name} ({group.productCode})
-                </td>
-                <td style={{ textAlign: 'center' }}>
-                  <button 
-                    className="btn danger" 
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      handleDeleteGroup(group)
-                    }}
-                    style={{ 
-                      backgroundColor: '#dc2626', 
-                      color: 'white', 
-                      border: 'none',
-                      padding: '4px 8px',
-                      borderRadius: '4px',
-                      cursor: 'pointer',
-                      fontSize: '12px'
-                    }}
-                  >
-                    §R°£
-                  </button>
-                </td>
-              </tr>
-              {expandedGroups.has(group.key) && group.products.map((product: Product, productIndex) => (
-                <tr 
-                  key={product._id} 
-                  style={{ 
-                    borderBottom: productIndex === group.products.length - 1 ? '2px solid #dc2626' : '1px solid #dc2626'
+          </select>
+          <input 
+            multiple 
+            type="file" 
+            accept=".xlsx,.xls" 
+            onChange={e => setExcelImportState(s => ({ ...s, files: Array.from(e.target.files || []) }))} 
+          />
+          <button 
+            className="btn" 
+            onClick={handleExcelImport}
+            disabled={excelImportState.processing}
+          >
+            {excelImportState.processing ? 'è™•ç†ä¸­...' : 'å°å…¥Excel'}
+          </button>
+        </div>
+      </div>
+
+      {/* ç”¢å“åˆ—è¡¨ */}
+      <div className="products-container">
+        {sortedProducts.map(product => (
+          <div key={product._id} className="product-group">
+            <div className="product-header">
+              <h3>{product.name} ({product.productCode})</h3>
+              <div className="product-actions">
+                <button 
+                  className="btn small" 
+                  onClick={() => setEditingProduct(product._id)}
+                >
+                  ç·¨è¼¯
+                </button>
+                <button 
+                  className="btn small danger" 
+                  onClick={() => handleDelete(product)}
+                >
+                  åˆªé™¤
+                </button>
+              </div>
+            </div>
+            
+            <div className="sizes-container">
+              {product.sizes.map((size, index) => (
+                <div key={index} className="size-group">
+                  <h4>{size}</h4>
+                  <div className="inventories-grid">
+                    {product.inventories.map(inv => (
+                      <div key={inv.locationId._id} className="inventory-item">
+                        <span className="location-name">{inv.locationId.name}</span>
+                        {editingProduct === product._id ? (
+                          <input
+                            type="number"
+                            value={editForm[`${product._id}-${size}-${inv.locationId._id}`] ?? inv.quantity}
+                            onChange={e => setEditForm(prev => ({
+                              ...prev,
+                              [`${product._id}-${size}-${inv.locationId._id}`]: parseInt(e.target.value) || 0
+                            }))}
+                            className="quantity-input"
+                          />
+                        ) : (
+                          <span className="quantity">{inv.quantity}</span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+            
+            {editingProduct === product._id && (
+              <div className="edit-actions">
+                <button 
+                  className="btn" 
+                  onClick={() => handleSaveEdit(product._id)}
+                >
+                  ä¿å­˜
+                </button>
+                <button 
+                  className="btn secondary" 
+                  onClick={() => {
+                    setEditingProduct(null)
+                    setEditForm({})
                   }}
                 >
-                  {editingProduct === product._id ? (
-                    // ½s¿è¼Ò¦¡
-                    <>
-                      <td>
-                        <input
-                          type="text"
-                          value={editForm.name}
-                          onChange={e => setEditForm(prev => ({ ...prev, name: e.target.value }))}
-                          style={{ width: '100%', padding: '4px 8px', border: '1px solid #d1d5db', borderRadius: '4px' }}
-                        />
-                  </td>
-                      <td>
-                        <input
-                          type="text"
-                          value={editForm.productCode}
-                          onChange={e => setEditForm(prev => ({ ...prev, productCode: e.target.value }))}
-                          style={{ width: '100%', padding: '4px 8px', border: '1px solid #d1d5db', borderRadius: '4px' }}
-                        />
-                  </td>
-                      <td>
-                        <input
-                          type="text"
-                          value={editForm.size}
-                          onChange={e => setEditForm(prev => ({ ...prev, size: e.target.value }))}
-                          style={{ width: '100%', padding: '4px 8px', border: '1px solid #d1d5db', borderRadius: '4px' }}
-                        />
-                      </td>
-                      {locations.map(location => {
-                        const inventory = editForm.inventories.find(inv => inv.locationId === location._id)
-                        return (
-                          <td key={location._id}>
-                            <input
-                              type="number"
-                              value={inventory?.quantity || 0}
-                              onChange={e => {
-                                const newInventories = editForm.inventories.filter(inv => inv.locationId !== location._id)
-                                if (parseInt(e.target.value) > 0) {
-                                  newInventories.push({ locationId: location._id, quantity: parseInt(e.target.value) })
-                                }
-                                setEditForm(prev => ({ ...prev, inventories: newInventories }))
-                              }}
-                              style={{ width: '100%', padding: '4px 8px', border: '1px solid #d1d5db', borderRadius: '4px' }}
-                            />
-                          </td>
-                        )
-                      })}
-                      <td>{(editForm.inventories || []).reduce((sum, inv) => sum + inv.quantity, 0)}</td>
-                      <td>
-                        <div className="actions">
-                          <button className="btn" onClick={() => handleSaveEdit(product._id)}>«O¦s</button>
-                          <button className="btn secondary" onClick={handleCancelEdit}>¨ú®ø</button>
-                        </div>
-                      </td>
-                    </>
-                  ) : (
-                    // Åã¥Ü¼Ò¦¡
-                    <>
-                      <td>{product.name}</td>
-                      <td>{product.productCode}</td>
-                      <td>{getProductSize(product)}</td>
-                      {locations.map(location => (
-                        <td key={location._id}>{getQuantity(product, location._id)}</td>
-                      ))}
-                      <td>{getTotalQuantity(product)}</td>
-                      <td>
-                        <div className="actions">
-                          <button className="btn ghost" onClick={() => handleEdit(product)}>½s¿è</button>
-                          <button className="btn ghost" onClick={() => handleDelete(product)}>§R°£</button>
-                    </div>
-                  </td>
-                    </>
-                  )}
-                </tr>
-              ))}
-            </React.Fragment>
-          ))}
-        </tbody>
-      </table>
+                  å–æ¶ˆ
+                </button>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {/* æ¸…é›¶ç¢ºèªå°è©±æ¡† */}
+      {clearOpen && (
+        <div className="modal-overlay">
+          <div className="modal">
+            <h3>ç¢ºèªæ¸…é›¶</h3>
+            <p>ç¢ºå®šè¦æ¸…é›¶æ‰€æœ‰åº«å­˜å—ï¼Ÿæ­¤æ“ä½œç„¡æ³•æ’¤éŠ·ã€‚</p>
+            <div className="modal-actions">
+              <button className="btn secondary" onClick={() => setClearOpen(false)}>å–æ¶ˆ</button>
+              <button className="btn danger" onClick={doClearAll}>ç¢ºå®šæ¸…é›¶</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
-
-    {/* ¾É¤J®w¦s¼uµ¡ */}
-    {importOpen && (
-      <div className="modal-backdrop">
-        <div className="modal">
-          <div className="header">¾É¤J®w¦s</div>
-          <div className="body">
-            <div>
-              <p>¿ï¾Üªù¥«¡G</p>
-              <select value={importState.locationId} onChange={e => setImportState(s => ({ ...s, locationId: e.target.value }))}>
-                <option value="">½Ğ¿ï¾Üªù¥«</option>
-                {locations.map(location => (
-                  <option key={location._id} value={location._id}>{location.name}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <p>¿ï¾ÜPDFÀÉ®×¡G</p>
-              <input multiple type="file" accept=".pdf" onChange={e => setImportState(s => ({ ...s, files: Array.from(e.target.files || []) }))} />
-            </div>
-          </div>
-          <div className="footer">
-            <button className="btn secondary" onClick={() => setImportOpen(false)}>¨ú®ø</button>
-            <button className="btn" onClick={() => doImport('incoming')}>¶i³f</button>
-            <button className="btn" onClick={() => doImport('outgoing')}>¥X³f</button>
-          </div>
-        </div>
-      </div>
-    )}
-
-    {/* ªù¥«¹ï½Õ¼uµ¡ */}
-    {transferOpen && (
-      <div className="modal-backdrop">
-        <div className="modal">
-          <div className="header">ªù¥«¹ï½Õ</div>
-          <div className="body">
-            <div>
-              <p>¨Ó·½ªù¥«¡G</p>
-              <select value={transferState.fromLocationId} onChange={e => setTransferState(s => ({ ...s, fromLocationId: e.target.value }))}>
-                <option value="">½Ğ¿ï¾Ü¨Ó·½ªù¥«</option>
-                {locations.map(location => (
-                  <option key={location._id} value={location._id}>{location.name}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <p>¥Ø¼Ğªù¥«¡G</p>
-              <select value={transferState.toLocationId} onChange={e => setTransferState(s => ({ ...s, toLocationId: e.target.value }))}>
-                <option value="">½Ğ¿ï¾Ü¥Ø¼Ğªù¥«</option>
-                {locations.map(location => (
-                  <option key={location._id} value={location._id}>{location.name}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <p>¿ï¾ÜPDFÀÉ®×¡G</p>
-              <input multiple type="file" accept=".pdf" onChange={e => setTransferState(s => ({ ...s, files: Array.from(e.target.files || []) }))} />
-            </div>
-          </div>
-          <div className="footer">
-            <button className="btn secondary" onClick={() => setTransferOpen(false)}>¨ú®ø</button>
-            <button className="btn" onClick={doTransfer}>¶i¦æ</button>
-          </div>
-        </div>
-      </div>
-    )}
-
-    {/* Excel¾É¤J¼uµ¡ */}
-    {excelImportOpen && (
-      <div className="modal-backdrop">
-        <div className="modal">
-          <div className="header">¾É¤JExcel</div>
-          <div className="body">
-            <div style={{ marginBottom: '16px' }}>
-              <p><strong>Excel®æ¦¡­n¨D¡G</strong></p>
-              <ul style={{ margin: '8px 0', paddingLeft: '20px' }}>
-                <li>¥²¶·¥]§t¦C¡G°Ó«~¸Ô±¡¡B«¬¸¹¡B°Ó«~¿ï¶µ¡BÆ[¶í¡BÆW¥J¡B¯ïªK¨¤¡B¤¸®Ô¡B°ê?­Ü</li>
-                <li>°Ó«~¸Ô±¡¡G²£«~¦WºÙ¡]¤ä«ùÅÜÅé¡G°Ó«~¦WºÙ¡B²£«~¦WºÙ¡B²£«~¡B¦WºÙ¡B°Ó«~¡^</li>
-                <li>«¬¸¹¡G²£«~½s¸¹¡]¤ä«ùÅÜÅé¡G²£«~½s¸¹¡B½s¸¹¡B³f¸¹¡BSKU¡B²£«~¥N½X¡^</li>
-                <li>°Ó«~¿ï¶µ¡G¤Ø¤o¡]¤ä«ùÅÜÅé¡G¤Ø¤o¡B³W®æ¡B¿ï¶µ¡B¤Ø½X¡^</li>
-                <li>¦Uªù¥«¦C¡G¹ïÀ³ªº®w¦s¼Æ¶q¡]¤ä«ùÅÜÅé¡GÆ[¶í©±¡BÆW¥J©±µ¥¡^</li>
-              </ul>
-            </div>
-            <div>
-              <p>¿ï¾ÜExcelÀÉ®×¡G</p>
-              <input multiple type="file" accept=".xlsx,.xls" onChange={e => setExcelImportState(s => ({ ...s, files: Array.from(e.target.files || []) }))} />
-            </div>
-          </div>
-          <div className="footer">
-            <button className="btn secondary" onClick={() => setExcelImportOpen(false)}>¨ú®ø</button>
-            <button className="btn" onClick={doExcelImport}>¶i¦æ¾É¤J</button>
-          </div>
-        </div>
-      </div>
-    )}
-
-    {/* ²M¹s½T»{¹ï¸Ü®Ø */}
-    {clearOpen && (
-      <div className="modal-backdrop">
-        <div className="modal">
-          <div className="header">²M¹s©Ò¦³°Ó«~¼Æ¶q</div>
-          <div className="body">
-            <p>?? Äµ§i¡G¦¹¾Ş§@±N§â©Ò¦³°Ó«~ªº®w¦s¼Æ¶q³]¬°0¡A¦¹¾Ş§@¤£¥iºM¾P¡I</p>
-            <p>½T©w­nÄ~Äò¶Ü¡H</p>
-          </div>
-          <div className="footer">
-            <button className="btn secondary" onClick={() => setClearOpen(false)}>¨ú®ø</button>
-            <button className="btn danger" onClick={doClearAll}>½T»{²M¹s</button>
-          </div>
-        </div>
-      </div>
-    )}
-  </div>
-)
+  )
 }
