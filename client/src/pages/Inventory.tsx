@@ -236,7 +236,7 @@ export default function Inventory() {
     XLSX.writeFile(wb, filename)
   }
 
-  // 清零功能 - 修復：根據選擇發送正確的參數
+  // 清零功能 - 修復版本
   async function doClearAll() {
     if (!confirm('確定要清零所選門市的庫存嗎？')) return
     
@@ -502,15 +502,20 @@ ${response.data.errors?.length > 0 ? '錯誤詳情:\n' + response.data.errors.sl
             </tr>
           </thead>
           <tbody>
-            {Object.values(groupedProducts || {}).map((group: ProductGroup) => (
+            {Object.values(groupedProducts || {}).map((group: ProductGroup, groupIndex) => (
               <React.Fragment key={group.key}>
-                <tr className="group-header" onClick={() => toggleGroup(group.key)}>
+                <tr className="group-header" style={{ borderBottom: '2px solid #dc2626' }} onClick={() => toggleGroup(group.key)}>
                   <td colSpan={(locations || []).length + 4} style={{ cursor: 'pointer' }}>
                     {expandedGroups.has(group.key) ? '▼' : '▶'} {group.name} ({group.productCode})
                   </td>
                 </tr>
-                {expandedGroups.has(group.key) && (group.products || []).map((product: Product) => (
-                  <tr key={product._id}>
+                {expandedGroups.has(group.key) && (group.products || []).map((product: Product, productIndex) => (
+                  <tr 
+                    key={product._id}
+                    style={{ 
+                      borderBottom: productIndex === group.products.length - 1 ? '2px solid #dc2626' : '1px solid #dc2626'
+                    }}
+                  >
                     {editingProduct === product._id ? (
                       // 編輯模式
                       <>
@@ -578,7 +583,7 @@ ${response.data.errors?.length > 0 ? '錯誤詳情:\n' + response.data.errors.sl
                         <td>
                           <div className="actions">
                             <button className="btn ghost" onClick={() => handleEdit(product)}>編輯</button>
-                            <button className="btn ghost" onClick={() => handleDelete(product)}>刪除</button>
+                            <button className="btn danger" onClick={() => handleDelete(product)}>刪除</button>
                           </div>
                         </td>
                       </>
@@ -686,7 +691,7 @@ ${response.data.errors?.length > 0 ? '錯誤詳情:\n' + response.data.errors.sl
         </div>
       )}
 
-      {/* 清零確認對話框 - 修復：添加門市選擇 */}
+      {/* 清零確認對話框 */}
       {clearOpen && (
         <div className="modal-backdrop">
           <div className="modal">
