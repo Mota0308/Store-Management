@@ -670,7 +670,7 @@ router.post('/excel', upload.array('files'), async (req, res) => {
               );
               
               if (existingInv) {
-                existingInv.quantity = inv.quantity;
+                existingInv.quantity += inv.quantity; // 改为累加模式
                 summary.updated++;
               } else {
                 product.inventories.push({
