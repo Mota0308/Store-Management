@@ -199,7 +199,7 @@ body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Ro
   
   .filters select, 
   .filters input {
-    min-width: 1200px;
+    min-width: 100%;
     width: 100%;
   }
 }
@@ -226,7 +226,7 @@ body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Ro
 /* 固定表頭樣式 */
 table { 
   width: 100%; 
-  min-width: 1200px; 
+  min-width: 100%; 
   border-collapse: collapse; table-layout: fixed; 
   position: relative;
 }
@@ -234,14 +234,14 @@ table {
 /* 平板端表格調整 */
 @media (max-width: 1024px) and (min-width: 769px) {
   table {
-    min-width: 1200px;
+    min-width: 100%;
   }
 }
 
 /* 移動端表格調整 */
 @media (max-width: 768px) {
   table {
-    min-width: 1200px;
+    min-width: 100%;
     font-size: 14px;
   }
 }
