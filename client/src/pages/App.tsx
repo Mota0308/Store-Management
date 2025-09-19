@@ -7,48 +7,61 @@ type Location = { _id: string; name: string }
 export default function App() {
   const [locations, setLocations] = useState<Location[]>([])
   const location = useLocation()
+  const [menuOpen, setMenuOpen] = useState(false)
 
   useEffect(() => {
     api.get('/locations').then(r => setLocations(r.data))
   }, [])
 
+  // Close mobile menu on route change
+  useEffect(() => {
+    setMenuOpen(false)
+  }, [location.pathname])
+
   return (
-    <div style={{ display: 'flex', minHeight: '100vh' }}>
-      {/* 左側導航欄 */}
-      <div style={{
-        width: '200px',
-        backgroundColor: '#3b82f6',
-        padding: '20px',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '12px'
-      }}>
+    <div className="app">
+      {/* Mobile toggle button */}
+      <button
+        className="mobile-menu-btn"
+        onClick={() => setMenuOpen(prev => !prev)}
+        aria-label="Open menu"
+      >
+        ☰
+      </button>
+
+      {/* Overlay for mobile */}
+      <div className={`mobile-overlay ${menuOpen ? 'show' : ''}`} onClick={() => setMenuOpen(false)} />
+
+      {/* Sidebar */}
+      <div className={`sidebar ${menuOpen ? 'open' : ''}`}>
         <h2 style={{ color: 'white', margin: '0 0 20px 0', fontSize: '18px' }}>庫存管理系統</h2>
-        
+
         <Link 
           to="/" 
+          className="nav-link"
           style={{
             padding: '12px 16px',
             backgroundColor: location.pathname === '/' ? 'white' : 'transparent',
             color: location.pathname === '/' ? '#3b82f6' : 'white',
             textDecoration: 'none',
             borderRadius: '8px',
-            fontWeight: '500',
+            fontWeight: 500,
             transition: 'all 0.2s'
           }}
         >
           庫存
         </Link>
-        
+
         <Link 
           to="/add-product" 
+          className="nav-link"
           style={{
             padding: '12px 16px',
             backgroundColor: location.pathname === '/add-product' ? 'white' : 'transparent',
             color: location.pathname === '/add-product' ? '#3b82f6' : 'white',
             textDecoration: 'none',
             borderRadius: '8px',
-            fontWeight: '500',
+            fontWeight: 500,
             transition: 'all 0.2s'
           }}
         >
@@ -56,8 +69,8 @@ export default function App() {
         </Link>
       </div>
 
-      {/* 主內容區域 */}
-      <div style={{ flex: 1, padding: '20px' }}>
+      {/* Content area */}
+      <div className="content">
         <Outlet />
       </div>
     </div>
