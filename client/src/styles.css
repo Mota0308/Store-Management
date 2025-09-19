@@ -247,7 +247,7 @@ table {
 }
 
 table thead {
-  position: sticky;
+  position: relative;
   top: 0;
   z-index: 10;
   background: white;
@@ -277,7 +277,7 @@ table th {
   color: #374151; 
   cursor: pointer; 
   user-select: none; 
-  position: sticky;
+  position: relative;
   top: 0;
   z-index: 10;
 }
@@ -536,5 +536,29 @@ table thead::after {
   .filters select, 
   .filters input {
     min-width: 180px;
+  }
+}
+
+ 
+ / *   Kb_jÔzåTs^gÔzÅy(u  s t i c k y   ö[MO  * / 
+ @ m e d i a   ( m a x - w i d t h :   1 0 2 4 p x )   { 
+     t a b l e   t h e a d   { 
+         p o s i t i o n :   r e l a t i v e   ! i m p o r t a n t ; 
+     } 
+     
+     t a b l e   t h   { 
+         p o s i t i o n :   r e l a t i v e   ! i m p o r t a n t ; 
+     } 
+ }  
+ 
+
+/* §‚æ˜∫›©M•≠™O∫›∏T•Œ sticky ©w¶Ï */
+@media (max-width: 1024px) {
+  table thead {
+    position: relative !important;
+  }
+  
+  table th {
+    position: relative !important;
   }
 }
