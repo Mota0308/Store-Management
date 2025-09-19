@@ -46,6 +46,22 @@ export default function Inventory() {
   const [sortBy, setSortBy] = useState<string>('')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
+
+  // Mobile detection & controls
+  const [isMobile, setIsMobile] = useState<boolean>(false)
+  const [mobileControlsOpen, setMobileControlsOpen] = useState<boolean>(false)
+
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 768px)')
+    const handler = (e: MediaQueryListEvent | MediaQueryList) => setIsMobile((e as MediaQueryList).matches ?? (e as any).matches)
+    // initialize
+    setIsMobile(mq.matches)
+    // subscribe
+    mq.addEventListener ? mq.addEventListener('change', handler as any) : mq.addListener(handler as any)
+    return () => {
+      mq.removeEventListener ? mq.removeEventListener('change', handler as any) : mq.removeListener(handler as any)
+    }
+  }, [])
   
   // 導入庫存狀態
   const [importOpen, setImportOpen] = useState(false)
@@ -239,21 +255,14 @@ export default function Inventory() {
     return sortOrder === 'asc' ? '↓' : '↑'
   }
 
-  // 新增：導出Excel功能
+  // Excel導出功能（保持不變）
   function exportToExcel() {
     try {
-      // 準備數據
       const exportData = []
-      
-      // 添加標題
       const headers = ['編號', '商品', '尺寸', '觀塘', '灣仔', '荔枝角', '元朗', '國内倉']
       exportData.push(headers)
-      
-      // 添加商品數據
       Object.values(groupedProducts).forEach(group => {
-        // 對每個分組的商品按尺寸排序
         const sortedProducts = sortProductsBySize([...group.products])
-        
         sortedProducts.forEach(product => {
           const row = [
             product.productCode,
@@ -268,20 +277,13 @@ export default function Inventory() {
           exportData.push(row)
         })
       })
-      
-      // 創建工作表
       const ws = XLSX.utils.aoa_to_sheet(exportData)
       const wb = XLSX.utils.book_new()
       XLSX.utils.book_append_sheet(wb, ws, '庫存報告')
-      
-      // 生成文件名
       const now = new Date()
       const timestamp = now.toISOString().slice(0, 19).replace(/:/g, '-')
       const filename = `庫存報告_${timestamp}.xlsx`
-      
-      // 導出文件
       XLSX.writeFile(wb, filename)
-      
       alert('Excel導出成功！')
     } catch (error) {
       console.error('導出Excel錯誤:', error)
@@ -289,7 +291,7 @@ export default function Inventory() {
     }
   }
 
-  // 導入庫存功能
+  // 其餘函數（doImport / doTransfer / doExcelImport / doClearAll / 編輯）保持不變
   async function doImport(type: 'incoming' | 'outgoing') {
     if (importState.locationId === '') {
       alert('請選擇門市')
@@ -542,165 +544,210 @@ ${response.data.errors?.length > 0 ? '錯誤詳情:\n' + response.data.errors.sl
     <div className="page">
       <div className="header">
         <h1>庫存管理</h1>
+        {isMobile && (
+          <div style={{ marginTop: 12 }}>
+            <button className="btn" onClick={() => setMobileControlsOpen(o => !o)}>
+              {mobileControlsOpen ? '隱藏操作' : '顯示操作'}
+            </button>
+          </div>
+        )}
       </div>
 
-      <div className="toolbar">
-        <div className="filters">
-          <select value={selectedType} onChange={e => setSelectedType(e.target.value)}>
-            <option value="">所有產品類型</option>
-            {productTypes.map(type => (
-              <option key={type._id} value={type.name}>{type.name}</option>
-            ))}
-          </select>
-          
-          <input
-            type="text"
-            placeholder="搜尋產品..."
-            value={searchTerm}
-            onChange={e => setSearchTerm(e.target.value)}
-          />
-        </div>
-        
-        <div className="spacer" />
-        <button className="btn" onClick={exportToExcel}>導出Excel</button>
-        <button className="btn" onClick={() => setExcelImportOpen(true)}>導入Excel</button>
-        <button className="btn" onClick={() => setClearOpen(true)}>清零</button>
-        <button className="btn" onClick={() => setImportOpen(true)}>導入庫存</button>
-        <button className="btn" onClick={() => setTransferOpen(true)}>門市對調</button>
-      </div>
-
-      <div className="table-container">
-        <table>
-          <thead>
-            <tr>
-              <th>產品</th>
-              <th>編號</th>
-              <th>尺寸</th>
-              {locations.map(location => (
-                <th key={location._id} onClick={() => handleSort(location._id)} style={{ cursor: 'pointer' }}>
-                  {location.name} {getSortIcon(location._id)}
-                </th>
+      {(!isMobile || mobileControlsOpen) && (
+        <div className="toolbar">
+          <div className="filters">
+            <select value={selectedType} onChange={e => setSelectedType(e.target.value)}>
+              <option value="">所有產品類型</option>
+              {productTypes.map(type => (
+                <option key={type._id} value={type.name}>{type.name}</option>
               ))}
-              <th onClick={() => handleSort('total')} style={{ cursor: 'pointer' }}>
-                總計 {getSortIcon('total')}
-              </th>
-              <th>操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            {Object.values(groupedProducts).map((group: ProductGroup, groupIndex) => (
-              <React.Fragment key={group.key}>
-                <tr className="group-header" style={{ borderBottom: '2px solid #dc2626' }}>
-                  <td colSpan={locations.length + 3} style={{ cursor: 'pointer' }} onClick={() => toggleGroup(group.key)}>
-                    {expandedGroups.has(group.key) ? '▼' : '▶'} {group.name} ({group.productCode})
-                  </td>
-                  <td style={{ textAlign: 'center' }}>
-                    <button 
-                      className="btn danger" 
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        handleDeleteGroup(group)
-                      }}
+            </select>
+            
+            <input
+              type="text"
+              placeholder="搜尋產品..."
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+            />
+          </div>
+          
+          <div className="spacer" />
+          <button className="btn" onClick={exportToExcel}>導出Excel</button>
+          <button className="btn" onClick={() => setExcelImportOpen(true)}>導入Excel</button>
+          <button className="btn" onClick={() => setClearOpen(true)}>清零</button>
+          <button className="btn" onClick={() => setImportOpen(true)}>導入庫存</button>
+          <button className="btn" onClick={() => setTransferOpen(true)}>門市對調</button>
+        </div>
+      )}
+
+      {/* 列表區域：手機用卡片視圖，桌面用表格 */}
+      {isMobile ? (
+        <div style={{ display: 'grid', gap: 12 }}>
+          {Object.values(groupedProducts).map((group: ProductGroup) => (
+            <div key={group.key} style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12 }}>
+              <div className="group-header" style={{ padding: '10px 12px' }} onClick={() => toggleGroup(group.key)}>
+                {expandedGroups.has(group.key) ? '▼' : '▶'} {group.name} ({group.productCode})
+              </div>
+              {expandedGroups.has(group.key) && group.products.map((product: Product) => (
+                <div key={product._id} style={{ borderTop: '1px solid #f3f4f6', padding: '10px 12px', display: 'grid', gap: 8 }}>
+                  <div style={{ fontWeight: 600 }}>{product.name}</div>
+                  <div>編號：{product.productCode}</div>
+                  <div>尺寸：{getProductSize(product)}</div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                    {locations.map(loc => (
+                      <div key={loc._id} style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <span>{loc.name}</span>
+                        <span>{getQuantity(product, loc._id)}</span>
+                      </div>
+                    ))}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px dashed #e5e7eb', paddingTop: 6, marginTop: 4 }}>
+                      <span>總計</span>
+                      <span>{getTotalQuantity(product)}</span>
+                    </div>
+                  </div>
+                  <div className="actions" style={{ justifyContent: 'flex-end' }}>
+                    <button className="btn ghost" onClick={() => handleEdit(product)}>編輯</button>
+                    <button className="btn ghost" onClick={() => handleDelete(product)}>刪除</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>產品</th>
+                <th>編號</th>
+                <th>尺寸</th>
+                {locations.map(location => (
+                  <th key={location._id} onClick={() => handleSort(location._id)} style={{ cursor: 'pointer' }}>
+                    {location.name} {getSortIcon(location._id)}
+                  </th>
+                ))}
+                <th onClick={() => handleSort('total')} style={{ cursor: 'pointer' }}>
+                  總計 {getSortIcon('total')}
+                </th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              {Object.values(groupedProducts).map((group: ProductGroup, groupIndex) => (
+                <React.Fragment key={group.key}>
+                  <tr className="group-header" style={{ borderBottom: '2px solid #dc2626' }}>
+                    <td colSpan={locations.length + 3} style={{ cursor: 'pointer' }} onClick={() => toggleGroup(group.key)}>
+                      {expandedGroups.has(group.key) ? '▼' : '▶'} {group.name} ({group.productCode})
+                    </td>
+                    <td style={{ textAlign: 'center' }}>
+                      <button 
+                        className="btn danger" 
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleDeleteGroup(group)
+                        }}
+                        style={{ 
+                          backgroundColor: '#dc2626', 
+                          color: 'white', 
+                          border: 'none',
+                          padding: '4px 8px',
+                          borderRadius: '4px',
+                          cursor: 'pointer',
+                          fontSize: '12px'
+                        }}
+                      >
+                        刪除
+                      </button>
+                    </td>
+                  </tr>
+                  {expandedGroups.has(group.key) && group.products.map((product: Product, productIndex) => (
+                    <tr 
+                      key={product._id} 
                       style={{ 
-                        backgroundColor: '#dc2626', 
-                        color: 'white', 
-                        border: 'none',
-                        padding: '4px 8px',
-                        borderRadius: '4px',
-                        cursor: 'pointer',
-                        fontSize: '12px'
+                        borderBottom: productIndex === group.products.length - 1 ? '2px solid #dc2626' : '1px solid #dc2626'
                       }}
                     >
-                      刪除
-                    </button>
-                  </td>
-                </tr>
-                {expandedGroups.has(group.key) && group.products.map((product: Product, productIndex) => (
-                  <tr 
-                    key={product._id} 
-                    style={{ 
-                      borderBottom: productIndex === group.products.length - 1 ? '2px solid #dc2626' : '1px solid #dc2626'
-                    }}
-                  >
-                    {editingProduct === product._id ? (
-                      // 編輯模式
-                      <>
-                        <td>
-                          <input
-                            type="text"
-                            value={editForm.name}
-                            onChange={e => setEditForm(prev => ({ ...prev, name: e.target.value }))}
-                            style={{ width: '100%', padding: '4px 8px', border: '1px solid #d1d5db', borderRadius: '4px' }}
-                          />
-                        </td>
-                        <td>
-                          <input
-                            type="text"
-                            value={editForm.productCode}
-                            onChange={e => setEditForm(prev => ({ ...prev, productCode: e.target.value }))}
-                            style={{ width: '100%', padding: '4px 8px', border: '1px solid #d1d5db', borderRadius: '4px' }}
-                          />
-                        </td>
-                        <td>
-                          <input
-                            type="text"
-                            value={editForm.size}
-                            onChange={e => setEditForm(prev => ({ ...prev, size: e.target.value }))}
-                            style={{ width: '100%', padding: '4px 8px', border: '1px solid #d1d5db', borderRadius: '4px' }}
-                          />
-                        </td>
-                        {locations.map(location => {
-                          const inventory = editForm.inventories.find(inv => inv.locationId === location._id)
-                          return (
-                            <td key={location._id}>
-                              <input
-                                type="number"
-                                value={inventory?.quantity || 0}
-                                onChange={e => {
-                                  const newInventories = editForm.inventories.filter(inv => inv.locationId !== location._id)
-                                  if (parseInt(e.target.value) > 0) {
-                                    newInventories.push({ locationId: location._id, quantity: parseInt(e.target.value) })
-                                  }
-                                  setEditForm(prev => ({ ...prev, inventories: newInventories }))
-                                }}
-                                style={{ width: '100%', padding: '4px 8px', border: '1px solid #d1d5db', borderRadius: '4px' }}
-                              />
-                            </td>
-                          )
-                        })}
-                        <td>{(editForm.inventories || []).reduce((sum, inv) => sum + inv.quantity, 0)}</td>
-                        <td>
-                          <div className="actions">
-                            <button className="btn" onClick={() => handleSaveEdit(product._id)}>保存</button>
-                            <button className="btn secondary" onClick={handleCancelEdit}>取消</button>
-                          </div>
-                        </td>
-                      </>
-                    ) : (
-                      // 顯示模式
-                      <>
-                        <td className="right">{product.name}</td>
-                        <td>{product.productCode}</td>
-                        <td>{getProductSize(product)}</td>
-                        {locations.map(location => (
-                          <td key={location._id}>{getQuantity(product, location._id)}</td>
-                        ))}
-                        <td>{getTotalQuantity(product)}</td>
-                        <td>
-                          <div className="actions">
-                            <button className="btn ghost" onClick={() => handleEdit(product)}>編輯</button>
-                            <button className="btn ghost" onClick={() => handleDelete(product)}>刪除</button>
-                          </div>
-                        </td>
-                      </>
-                    )}
-                  </tr>
-                ))}
-              </React.Fragment>
-            ))}
-          </tbody>
-        </table>
-      </div>
+                      {editingProduct === product._id ? (
+                        // 編輯模式
+                        <>
+                          <td>
+                            <input
+                              type="text"
+                              value={editForm.name}
+                              onChange={e => setEditForm(prev => ({ ...prev, name: e.target.value }))}
+                              style={{ width: '100%', padding: '4px 8px', border: '1px solid #d1d5db', borderRadius: '4px' }}
+                            />
+                          </td>
+                          <td>
+                            <input
+                              type="text"
+                              value={editForm.productCode}
+                              onChange={e => setEditForm(prev => ({ ...prev, productCode: e.target.value }))}
+                              style={{ width: '100%', padding: '4px 8px', border: '1px solid #d1d5db', borderRadius: '4px' }}
+                            />
+                          </td>
+                          <td>
+                            <input
+                              type="text"
+                              value={editForm.size}
+                              onChange={e => setEditForm(prev => ({ ...prev, size: e.target.value }))}
+                              style={{ width: '100%', padding: '4px 8px', border: '1px solid #d1d5db', borderRadius: '4px' }}
+                            />
+                          </td>
+                          {locations.map(location => {
+                            const inventory = editForm.inventories.find(inv => inv.locationId === location._id)
+                            return (
+                              <td key={location._id}>
+                                <input
+                                  type="number"
+                                  value={inventory?.quantity || 0}
+                                  onChange={e => {
+                                    const newInventories = editForm.inventories.filter(inv => inv.locationId !== location._id)
+                                    if (parseInt(e.target.value) > 0) {
+                                      newInventories.push({ locationId: location._id, quantity: parseInt(e.target.value) })
+                                    }
+                                    setEditForm(prev => ({ ...prev, inventories: newInventories }))
+                                  }}
+                                  style={{ width: '100%', padding: '4px 8px', border: '1px solid #d1d5db', borderRadius: '4px' }}
+                                />
+                              </td>
+                            )
+                          })}
+                          <td>{(editForm.inventories || []).reduce((sum, inv) => sum + inv.quantity, 0)}</td>
+                          <td>
+                            <div className="actions">
+                              <button className="btn" onClick={() => handleSaveEdit(product._id)}>保存</button>
+                              <button className="btn secondary" onClick={handleCancelEdit}>取消</button>
+                            </div>
+                          </td>
+                        </>
+                      ) : (
+                        // 顯示模式
+                        <>
+                          <td className="right">{product.name}</td>
+                          <td>{product.productCode}</td>
+                          <td>{getProductSize(product)}</td>
+                          {locations.map(location => (
+                            <td key={location._id}>{getQuantity(product, location._id)}</td>
+                          ))}
+                          <td>{getTotalQuantity(product)}</td>
+                          <td>
+                            <div className="actions">
+                              <button className="btn ghost" onClick={() => handleEdit(product)}>編輯</button>
+                              <button className="btn ghost" onClick={() => handleDelete(product)}>刪除</button>
+                            </div>
+                          </td>
+                        </>
+                      )}
+                    </tr>
+                  ))}
+                </React.Fragment>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {/* 導入庫存彈窗 */}
       {importOpen && (
