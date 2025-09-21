@@ -704,14 +704,22 @@ ${response.data.errors?.length > 0 ? '錯誤詳情:\n' + response.data.errors.sl
                         </td>
                       </>
                     ) : (
-                      // 顯示模式
+                      // 顯示模式 - 包含高光顯示功能
                       <>
                         <td className="right">{product.name}</td>
                         <td>{product.productCode}</td>
                         <td>{getProductSize(product)}</td>
-                        {locations.map(location => (
-                          <td key={location._id}>{getQuantity(product, location._id)}</td>
-                        ))}
+                        {locations.map(location => {
+                          const quantity = getQuantity(product, location._id)
+                          return (
+                            <td 
+                              key={location._id} 
+                              className={quantity > 0 ? 'highlight-cell' : ''}
+                            >
+                              {quantity}
+                            </td>
+                          )
+                        })}
                         <td>{getTotalQuantity(product)}</td>
                         <td>
                           <div className="actions">
