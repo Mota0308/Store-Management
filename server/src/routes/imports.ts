@@ -43,12 +43,12 @@ function extractPurchaseTypeAndSize(text: string): { purchaseType?: string; size
     /(Top|Bottom|Set)/i
   ];
   
-  // 匹配尺寸模式
+  // 匹配尺寸模式 - 改為字符串匹配
   const sizePatterns = [
     /尺寸[：:]\s*([^，,\s]+)/,
     /尺碼[：:]\s*([^，,\s]+)/,
     /Size[：:]\s*([^，,\s]+)/i,
-    /\b(\d+)\b/  // 匹配數字作為尺寸
+    /\b([^\s，,\n\r]+)\b/  // 匹配字符串作為尺寸
   ];
   
   let purchaseType: string | undefined;
@@ -267,13 +267,10 @@ async function extractByPdfjs(buffer: Buffer): Promise<{ name: string; code: str
             
             // 方法1：查找明確的尺寸和購買類型標籤
             // 匹配格式：- 尺寸: 1 或 - 購買類型: 上衣
-            const sizeMatch = nextLine.match(/-?\s*尺寸[：:]\s*(\d+)/);
+            const sizeMatch = nextLine.match(/-?\s*尺寸[：:]\s*([^\s，,\n\r]+)/);
             if (sizeMatch) {
-              const sizeNum = parseInt(sizeMatch[1], 10);
-              if (!isNaN(sizeNum) && sizeNum >= 0 && sizeNum <= 20) {
-                size = sizeMatch[1];
-                console.log(`調試: 找到尺寸: ${size}`);
-              }
+              size = sizeMatch[1].trim();
+              console.log(`調試: 找到尺寸: ${size}`);
             }
             
             const purchaseTypeMatch = nextLine.match(/-?\s*購買類型[：:]\s*([^，,\s]+)/);
@@ -300,11 +297,8 @@ async function extractByPdfjs(buffer: Buffer): Promise<{ name: string; code: str
                 // 從產品描述中提取尺寸和購買類型
                 const extracted = extractPurchaseTypeAndSize(nextLine);
                 if (extracted.size) {
-                  const sizeNum = parseInt(extracted.size, 10);
-                  if (!isNaN(sizeNum) && sizeNum >= 0 && sizeNum <= 20) {
-                    size = extracted.size;
-                    console.log(`調試: 從描述中提取尺寸: ${size}`);
-                  }
+                  size = extracted.size;
+                  console.log(`調試: 從描述中提取尺寸: ${size}`);
                 }
                 if (extracted.purchaseType) {
                   purchaseType = extracted.purchaseType;
@@ -315,13 +309,10 @@ async function extractByPdfjs(buffer: Buffer): Promise<{ name: string; code: str
             
             // 方法3：查找套裝優惠行，可能包含尺寸信息
             if (!size && nextLine.includes('套裝優惠')) {
-              const setSizeMatch = nextLine.match(/(\d+)/);
+              const setSizeMatch = nextLine.match(/-?\s*套裝優惠.*?(\d+)/);
               if (setSizeMatch) {
-                const sizeNum = parseInt(setSizeMatch[1], 10);
-                if (!isNaN(sizeNum) && sizeNum >= 0 && sizeNum <= 20) {
-                  size = setSizeMatch[1];
-                  console.log(`調試: 從套裝優惠中提取尺寸: ${size}`);
-                }
+                size = setSizeMatch[1].trim();
+                console.log(`調試: 從套裝優惠中提取尺寸: ${size}`);
               }
             }
             
