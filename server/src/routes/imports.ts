@@ -205,7 +205,7 @@ async function updateByCodeVariants(code: string, qty: number, locationId: strin
   }
 }
 
-// 改進：PDF解析函數，使用pdf-parse作為主要方法
+// 改進：PDF解析函數，靈活處理不同格式的產品信息
 async function extractByPdfjs(buffer: Buffer): Promise<{ name: string; code: string; qty: number; purchaseType?: string; size?: string }[]> {
   const rows: { name: string; code: string; qty: number; purchaseType?: string; size?: string }[] = [];
   
@@ -238,8 +238,8 @@ async function extractByPdfjs(buffer: Buffer): Promise<{ name: string; code: str
           let size: string | undefined;
           let purchaseType: string | undefined;
           
-          // 檢查後續幾行
-          for (let j = i + 1; j < Math.min(i + 5, lines.length); j++) {
+          // 檢查後續幾行，尋找產品描述和相關信息
+          for (let j = i + 1; j < Math.min(i + 15, lines.length); j++) {
             const nextLine = lines[j];
             
             // 先查找數量 - 查找純數字行
@@ -248,17 +248,58 @@ async function extractByPdfjs(buffer: Buffer): Promise<{ name: string; code: str
               qty = parseInt(qtyInLine[0].trim(), 10);
             }
             
-            // 使用新的組合提取函數
-            const extracted = extractPurchaseTypeAndSize(nextLine);
-            if (extracted.size) {
-              // 驗證尺寸是否在合理範圍內 (0-20)
-              const sizeNum = parseInt(extracted.size, 10);
+            // 方法1：查找明確的尺寸和購買類型標籤
+            // 匹配格式：尺寸:6 或 購買類型: 褲子
+            const sizeMatch = nextLine.match(/尺寸[：:]\s*(\d+)/);
+            if (sizeMatch) {
+              const sizeNum = parseInt(sizeMatch[1], 10);
               if (!isNaN(sizeNum) && sizeNum >= 0 && sizeNum <= 20) {
-                size = extracted.size;
+                size = sizeMatch[1];
               }
             }
-            if (extracted.purchaseType) {
-              purchaseType = extracted.purchaseType;
+            
+            const purchaseTypeMatch = nextLine.match(/購買類型[：:]\s*([^，,\s]+)/);
+            if (purchaseTypeMatch) {
+              const type = purchaseTypeMatch[1].trim();
+              // 標準化購買類型
+              if (type.includes('上衣') || type.toLowerCase().includes('top')) {
+                purchaseType = '上衣';
+              } else if (type.includes('褲子') || type.toLowerCase().includes('bottom')) {
+                purchaseType = '褲子';
+              } else if (type.includes('套裝') || type.toLowerCase().includes('set')) {
+                purchaseType = '套裝';
+              } else {
+                purchaseType = type;
+              }
+            }
+            
+            // 方法2：如果沒有明確標籤，嘗試從產品描述中提取
+            if (!size && !purchaseType) {
+              // 查找產品描述行（通常包含產品名稱）
+              if (nextLine.includes('mm') || nextLine.includes('兒童') || nextLine.includes('保暖') || nextLine.includes('上衣') || nextLine.includes('褲子')) {
+                // 從產品描述中提取尺寸和購買類型
+                const extracted = extractPurchaseTypeAndSize(nextLine);
+                if (extracted.size) {
+                  const sizeNum = parseInt(extracted.size, 10);
+                  if (!isNaN(sizeNum) && sizeNum >= 0 && sizeNum <= 20) {
+                    size = extracted.size;
+                  }
+                }
+                if (extracted.purchaseType) {
+                  purchaseType = extracted.purchaseType;
+                }
+              }
+            }
+            
+            // 方法3：查找套裝優惠行，可能包含尺寸信息
+            if (!size && nextLine.includes('套裝優惠')) {
+              const setSizeMatch = nextLine.match(/(\d+)/);
+              if (setSizeMatch) {
+                const sizeNum = parseInt(setSizeMatch[1], 10);
+                if (!isNaN(sizeNum) && sizeNum >= 0 && sizeNum <= 20) {
+                  size = setSizeMatch[1];
+                }
+              }
             }
             
             // 如果遇到下一個商品代碼，停止搜索
