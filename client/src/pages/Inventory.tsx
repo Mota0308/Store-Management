@@ -142,10 +142,10 @@ export default function Inventory() {
       )
     }
 
-    // Filter by size search term - 新添加這個邏輯
+    // Filter by size search term - 完全匹配邏輯
     if (sizeSearchTerm) {
       filtered = filtered.filter(p => 
-        getProductSize(p).toLowerCase().includes(sizeSearchTerm.toLowerCase())
+        getProductSize(p).toLowerCase().split(',').map(s => s.trim()).includes(sizeSearchTerm.toLowerCase())
       )
     }
 
@@ -391,7 +391,7 @@ export default function Inventory() {
 錯誤數量: ${response.data.errors?.length || 0}
 
 ${response.data.errors?.length > 0 ? '錯誤詳情:\n' + response.data.errors.slice(0, 5).join('\n') + (response.data.errors.length > 5 ? '\n...' : '') : '無錯誤'}`
-      
+
       alert(resultMsg)
       setExcelImportOpen(false)
       await load()
@@ -429,7 +429,7 @@ ${response.data.errors?.length > 0 ? '錯誤詳情:\n' + response.data.errors.sl
 錯誤數量: ${response.data.errors?.length || 0}
 
 ${response.data.errors?.length > 0 ? '錯誤詳情:\n' + response.data.errors.slice(0, 5).join('\n') + (response.data.errors.length > 5 ? '\n...' : '') : '無錯誤'}`
-      
+
       alert(resultMsg)
       setClearOpen(false)
       await load()
