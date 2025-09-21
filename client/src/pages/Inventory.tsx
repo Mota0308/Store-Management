@@ -14,7 +14,7 @@ interface ProductType {
 }
 
 interface Inventory {
-  locationId: string | { _id: string; name: string } | null // 添加 null 類型
+  locationId: string | { _id: string; name: string } | null // 加入 null 類型
   quantity: number
 }
 
@@ -74,11 +74,11 @@ export default function Inventory() {
     }
   }, [])
   
-  // 導入庫存狀態
+  // 導入狀態
   const [importOpen, setImportOpen] = useState(false)
   const [importState, setImportState] = useState<{ locationId: string; files: File[] }>({ locationId: '', files: [] })
   
-  // 轉移庫存狀態
+  // 轉移狀態
   const [transferOpen, setTransferOpen] = useState(false)
   const [transferState, setTransferState] = useState<{ fromLocationId: string; toLocationId: string; files: File[] }>({ fromLocationId: '', toLocationId: '', files: [] })
   
@@ -86,7 +86,7 @@ export default function Inventory() {
   const [excelImportOpen, setExcelImportOpen] = useState(false)
   const [excelImportState, setExcelImportState] = useState<{ files: File[] }>({ files: [] })
 
-  // 清零狀態
+  // 清除狀態
   const [clearOpen, setClearOpen] = useState(false)
   // 編輯狀態
   const [editingProduct, setEditingProduct] = useState<string | null>(null)
@@ -115,6 +115,7 @@ export default function Inventory() {
         const bIndex = order.indexOf(b.name);
         return aIndex - bIndex;
       });
+      console.log("原始地點:", r.data.map((l: Location) => l.name));
       console.log("排序後的地點:", sortedLocations.map((l: Location) => l.name));
       setLocations(sortedLocations);
     })
@@ -132,7 +133,7 @@ export default function Inventory() {
 
   async function load() {
     const response = await api.get('/products')
-    // 確保返回的數據結構是 { products: [...], pagination: {...} }
+    // 假設返回的數據結構是 { products: [...], pagination: {...} }
     setProducts(response.data.products || [])
   }
 
@@ -201,7 +202,7 @@ export default function Inventory() {
     return product.size || ''
   }
 
-  // 新增產品尺寸排序邏輯
+  // 新增產品尺寸排序函數
   function sortProductsBySize(products: Product[]): Product[] {
     return products.sort((a, b) => {
       const aSize = getProductSize(a)
@@ -227,7 +228,7 @@ export default function Inventory() {
     })
   }
 
-  // 確保添加 null 檢查
+  // 加入 null 檢查
   function getQuantity(product: Product, locationId: string): number {
     if (!product.inventories || !Array.isArray(product.inventories)) {
       return 0
@@ -243,7 +244,7 @@ export default function Inventory() {
         return inv.locationId._id === locationId || inv.locationId._id.toString() === locationId
       }
       
-      // 處理字符串 ObjectId 的情況，添加 null 檢查
+      // 處理字符串 ObjectId 的比較，加入 null 檢查
       if (inv.locationId && typeof inv.locationId === 'string') {
         return inv.locationId === locationId || inv.locationId.toString() === locationId
       }
@@ -320,7 +321,7 @@ export default function Inventory() {
     }
   }
 
-  // Excel導出功能（包含分組和排序）
+  // Excel匯出功能（包含群組和排序）
   function exportToExcel() {
     try {
       const exportData = []
@@ -353,10 +354,10 @@ export default function Inventory() {
       const timestamp = now.toISOString().slice(0, 19).replace(/:/g, '-')
       const filename = `庫存管理_${timestamp}.xlsx`
       XLSX.writeFile(wb, filename)
-      alert('Excel導出成功！')
+      alert('Excel匯出成功')
     } catch (error) {
-      console.error('導出Excel錯誤:', error)
-      alert('導出Excel失敗，請重試')
+      console.error('匯出Excel錯誤:', error)
+      alert('匯出Excel失敗，請重試')
     }
   }
 
@@ -376,9 +377,9 @@ export default function Inventory() {
       form.append('locationId', importState.locationId)
       importState.files.forEach(f => form.append('files', f))
       
-      // 確保根據type調用正確的API端點
+      // 假設根據type調用不同API端點
       const response = await api.post(`/import/${type}`, form)
-      alert(`${type === 'incoming' ? '進貨' : '出貨'}成功！\n處理:${response.data.processed}  匹配:${response.data.matched}  新增:${response.data.created}  更新:${response.data.updated}\n未找到: ${response.data.notFound?.join(', ') || '無'}`)
+      alert(`${type === 'incoming' ? '進貨' : '出貨'}成功\n處理:${response.data.processed}  匹配:${response.data.matched}  新增:${response.data.created}  更新:${response.data.updated}\n未找到: ${response.data.notFound?.join(', ') || '無'}`)
       setImportOpen(false)
       await load()
     } catch (error: any) {
@@ -404,7 +405,7 @@ export default function Inventory() {
       transferState.files.forEach(f => form.append('files', f))
       
       const response = await api.post('/import/transfer', form)
-      alert(`轉移庫存成功！\n處理:${response.data.processed}  匹配:${response.data.matched}  更新:${response.data.updated}\n未找到: ${response.data.notFound?.join(', ') || '無'}`)
+      alert(`轉移庫存成功\n處理:${response.data.processed}  匹配:${response.data.matched}  更新:${response.data.updated}\n未找到: ${response.data.notFound?.join(', ') || '無'}`)
       setTransferOpen(false)
       await load()
     } catch (error: any) {
@@ -412,7 +413,7 @@ export default function Inventory() {
     }
   }
 
-  // Excel導入處理 - 添加錯誤處理
+  // Excel導入處理 - 加入錯誤處理
   async function doExcelImport() {
     if (excelImportState.files.length === 0) {
       alert('請選擇Excel文件')
@@ -422,12 +423,12 @@ export default function Inventory() {
     // 檢查文件大小
     const totalSize = excelImportState.files.reduce((sum, file) => sum + file.size, 0)
     if (totalSize > 10 * 1024 * 1024) { // 10MB限制
-      alert('文件太大超過10MB，請選擇較小文件')
+      alert('文件過大超過10MB，請選擇較小文件')
       return
     }
     
     try {
-      // 顯示處理中消息
+      // 顯示處理中訊息
       const processingMsg = '正在處理Excel文件，請稍候...\n這可能需要一些時間，請不要關閉頁面。'
       alert(processingMsg)
       
@@ -443,7 +444,7 @@ export default function Inventory() {
       })
       
       // 顯示結果
-      const resultMsg = `Excel導入成功！
+      const resultMsg = `Excel導入成功
       
 處理文件: ${response.data.processed}
 匹配商品: ${response.data.matched}
@@ -463,7 +464,7 @@ ${response.data.errors?.length > 0 ? '錯誤詳情:\n' + response.data.errors.sl
       if (error.code === 'ECONNABORTED') {
         errorMsg += '處理超時，請選擇較小文件或檢查網絡連接'
       } else if (error.response?.status === 413) {
-        errorMsg += '文件太大，請選擇較小文件'
+        errorMsg += '文件過大，請選擇較小文件'
       } else if (error.response?.data?.message) {
         errorMsg += error.response.data.message
       } else {
@@ -474,16 +475,16 @@ ${response.data.errors?.length > 0 ? '錯誤詳情:\n' + response.data.errors.sl
     }
   }
 
-  // 清零所有庫存數量
+  // 清除所有庫存數量
   async function doClearAll() {
-    if (!confirm('確定要清零所有庫存嗎？此操作無法撤銷！')) {
+    if (!confirm('確定要清除所有庫存嗎？此操作無法復原！')) {
       return
     }
     
     try {
       const response = await api.post('/import/clear')
       
-      const resultMsg = `清零成功！
+      const resultMsg = `清除成功
       
 處理商品: ${response.data.processed}
 更新商品: ${response.data.updated}
@@ -495,9 +496,9 @@ ${response.data.errors?.length > 0 ? '錯誤詳情:\n' + response.data.errors.sl
       setClearOpen(false)
       await load()
     } catch (error: any) {
-      console.error('清零錯誤:', error)
+      console.error('清除錯誤:', error)
       
-      let errorMsg = '清零失敗：'
+      let errorMsg = '清除失敗：'
       if (error.response?.data?.message) {
         errorMsg += error.response.data.message
       } else {
@@ -508,7 +509,7 @@ ${response.data.errors?.length > 0 ? '錯誤詳情:\n' + response.data.errors.sl
     }
   }
 
-  // 編輯和刪除處理函數 - 添加錯誤處理
+  // 編輯和刪除處理函數 - 加入錯誤處理
   function handleEdit(product: Product) {
     setEditingProduct(product._id)
     setEditForm({
@@ -561,9 +562,9 @@ ${response.data.errors?.length > 0 ? '錯誤詳情:\n' + response.data.errors.sl
     }
   }
 
-  // 刪除整個產品組
+  // 刪除整個產品群組
   async function handleDeleteGroup(group: ProductGroup) {
-    if (confirm(`確定要刪除產品組 "${group.name}" (${group.productCode}) 嗎？\n這將刪除該組內所有產品，此操作無法撤銷！`)) {
+    if (confirm(`確定要刪除產品組 "${group.name}" (${group.productCode}) 嗎？\n這將刪除該組內所有產品，此操作無法復原！`)) {
       try {
         // 批量刪除該組內所有產品
         const deletePromises = group.products.map(product => 
@@ -648,15 +649,15 @@ ${response.data.errors?.length > 0 ? '錯誤詳情:\n' + response.data.errors.sl
           </div>
           
           <div className="spacer" />
-          <button className="btn" onClick={exportToExcel}>導出Excel</button>
-          <button className="btn" onClick={() => setExcelImportOpen(true)}>導入Excel</button>
-          <button className="btn" onClick={() => setClearOpen(true)}>清零</button>
-          <button className="btn" onClick={() => setImportOpen(true)}>導入庫存</button>
+          <button className="btn" onClick={exportToExcel}>匯出Excel</button>
+          <button className="btn" onClick={() => setExcelImportOpen(true)}>匯入Excel</button>
+          <button className="btn" onClick={() => setClearOpen(true)}>清除</button>
+          <button className="btn" onClick={() => setImportOpen(true)}>匯入庫存</button>
           <button className="btn" onClick={() => setTransferOpen(true)}>庫存轉移</button>
         </div>
       )}
 
-      {/* 表格容器：包含標題和數據，無需滾動 */}
+      {/* 表格容器：包含標題和數據，只顯示 */}
       <div className="table-container">
         <table>
           <thead>
@@ -891,11 +892,11 @@ ${response.data.errors?.length > 0 ? '錯誤詳情:\n' + response.data.errors.sl
         </table>
       </div>
 
-      {/* 導入庫存彈窗 */}
+      {/* 匯入庫存模態框 */}
       {importOpen && (
         <div className="modal-backdrop">
           <div className="modal">
-            <div className="header">導入庫存</div>
+            <div className="header">匯入庫存</div>
             <div className="body">
               <div>
                 <p>選擇地點：</p>
@@ -920,7 +921,7 @@ ${response.data.errors?.length > 0 ? '錯誤詳情:\n' + response.data.errors.sl
         </div>
       )}
 
-      {/* 庫存轉移彈窗 */}
+      {/* 庫存轉移模態框 */}
       {transferOpen && (
         <div className="modal-backdrop">
           <div className="modal">
@@ -957,16 +958,16 @@ ${response.data.errors?.length > 0 ? '錯誤詳情:\n' + response.data.errors.sl
         </div>
       )}
 
-      {/* Excel導入彈窗 */}
+      {/* Excel匯入模態框 */}
       {excelImportOpen && (
         <div className="modal-backdrop">
           <div className="modal">
-            <div className="header">導入Excel</div>
+            <div className="header">匯入Excel</div>
             <div className="body">
               <div style={{ marginBottom: '16px' }}>
                 <p><strong>Excel格式要求：</strong></p>
                 <ul style={{ margin: '8px 0', paddingLeft: '20px' }}>
-                  <li>每列：產品代碼、產品名稱、產品類型、尺寸、進貨、上架、庫存調、觀塘、灣仔、荔枝角、元朗、國內倉、總庫</li>
+                  <li>列順序：產品代碼、產品名稱、產品類型、尺寸、進貨、上架、庫存調、觀塘、灣仔、荔枝角、元朗、國內倉、總庫</li>
                   <li>產品代碼：產品代碼（如：產品代碼、商品代碼、產品、代碼、商品）</li>
                   <li>產品名稱：產品名稱（如：產品名稱、名稱、產品、名稱、商品）</li>
                   <li>產品類型：尺寸（如：尺寸、大小、上架、尺寸、規格）</li>
@@ -980,24 +981,24 @@ ${response.data.errors?.length > 0 ? '錯誤詳情:\n' + response.data.errors.sl
             </div>
             <div className="footer">
               <button className="btn secondary" onClick={() => setExcelImportOpen(false)}>取消</button>
-              <button className="btn" onClick={doExcelImport}>開始導入</button>
+              <button className="btn" onClick={doExcelImport}>開始匯入</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* 清零確認彈窗 */}
+      {/* 清除確認模態框 */}
       {clearOpen && (
         <div className="modal-backdrop">
           <div className="modal">
-            <div className="header">清零所有庫存數量</div>
+            <div className="header">清除所有庫存數量</div>
             <div className="body">
-              <p>⚠️ 警告：此操作將清零所有庫存數量（設為0），此操作無法撤銷！</p>
+              <p>⚠️ 警告：此操作將清除所有庫存數量（設為0），此操作無法復原！</p>
               <p>確定要繼續嗎？</p>
             </div>
             <div className="footer">
               <button className="btn secondary" onClick={() => setClearOpen(false)}>取消</button>
-              <button className="btn danger" onClick={doClearAll}>確定清零</button>
+              <button className="btn danger" onClick={doClearAll}>確定清除</button>
             </div>
           </div>
         </div>
