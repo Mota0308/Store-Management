@@ -90,16 +90,21 @@ async function updateWS712Product(rawCode: string, qty: number, locationId: stri
   const variants = codeVariants(rawCode);
   if (variants.length === 0) return;
   
+  console.log(`調試: 處理WS-712產品 - 代碼: ${rawCode}, 數量: ${qty}, 尺寸: ${size}, 購買類型: ${purchaseType}`);
+  
   // 查找所有匹配的WS-712產品
   const products = await Product.find({ productCode: { $in: variants } });
+  console.log(`調試: 找到 ${products.length} 個匹配的WS-712產品`);
   
   if (products.length === 0) { 
+    console.log(`調試: 沒有找到任何WS-712產品`);
     summary.notFound.push(normalizeCode(rawCode)); 
     return; 
   }
   
   // 如果沒有指定購買類型和尺寸，使用原來的邏輯
   if (!purchaseType && !size) {
+    console.log(`調試: 沒有購買類型和尺寸，使用第一個匹配的產品`);
     const product = products[0]; // 取第一個匹配的產品
     summary.matched++;
     const inv = product.inventories.find(i => String(i.locationId) === String(locationId));
@@ -112,6 +117,7 @@ async function updateWS712Product(rawCode: string, qty: number, locationId: stri
   
   // 只有尺寸，沒有購買類型 - 根據尺寸匹配
   if (size && !purchaseType) {
+    console.log(`調試: 只有尺寸 ${size}，沒有購買類型，根據尺寸匹配產品`);
     let matchedProduct = null;
     
     for (const product of products) {
@@ -124,11 +130,13 @@ async function updateWS712Product(rawCode: string, qty: number, locationId: stri
       
       if (hasMatchingSize) {
         matchedProduct = product;
+        console.log(`調試: 找到匹配尺寸的產品: ${product.productCode}`);
         break;
       }
     }
     
     if (!matchedProduct) {
+      console.log(`調試: 沒有找到匹配尺寸的產品`);
       summary.notFound.push(`${normalizeCode(rawCode)} (尺寸: ${size})`);
       return;
     }
@@ -143,6 +151,7 @@ async function updateWS712Product(rawCode: string, qty: number, locationId: stri
   }
   
   // 有購買類型和尺寸 - 精確匹配
+  console.log(`調試: 有購買類型和尺寸，進行精確匹配`);
   let matchedProduct = null;
   for (const product of products) {
     // 檢查產品的尺寸是否匹配
@@ -160,11 +169,13 @@ async function updateWS712Product(rawCode: string, qty: number, locationId: stri
     
     if (hasMatchingSize) {
       matchedProduct = product;
+      console.log(`調試: 找到精確匹配的產品: ${product.productCode}`);
       break;
     }
   }
   
   if (!matchedProduct) {
+    console.log(`調試: 沒有找到精確匹配的產品`);
     summary.notFound.push(`${normalizeCode(rawCode)} (${purchaseType}, 尺寸: ${size})`);
     return;
   }
@@ -205,7 +216,7 @@ async function updateByCodeVariants(code: string, qty: number, locationId: strin
   }
 }
 
-// 改進：PDF解析函數，靈活處理不同格式的產品信息
+// 改進：PDF解析函數，根據圖片格式進行優化
 async function extractByPdfjs(buffer: Buffer): Promise<{ name: string; code: string; qty: number; purchaseType?: string; size?: string }[]> {
   const rows: { name: string; code: string; qty: number; purchaseType?: string; size?: string }[] = [];
   
@@ -214,8 +225,11 @@ async function extractByPdfjs(buffer: Buffer): Promise<{ name: string; code: str
     const data = await pdf(buffer);
     const text = data.text;
     
+    console.log(`調試: PDF解析開始，文本長度: ${text.length}`);
+    
     if (text) {
       const lines = text.split(/\r?\n/).map((line: string) => line.trim()).filter(Boolean);
+      console.log(`調試: 總共 ${lines.length} 行文本`);
       
       // 處理每一行，查找商品信息
       for (let i = 0; i < lines.length; i++) {
@@ -225,6 +239,7 @@ async function extractByPdfjs(buffer: Buffer): Promise<{ name: string; code: str
         const wsCodeMatch = line.match(/(WS-\w+)/);
         if (wsCodeMatch) {
           const code = wsCodeMatch[1];
+          console.log(`調試: 找到商品代碼: ${code}`);
           
           // 查找數量 - 在商品代碼行中查找數量
           let qty = 1; // 默認數量為1
@@ -241,26 +256,30 @@ async function extractByPdfjs(buffer: Buffer): Promise<{ name: string; code: str
           // 檢查後續幾行，尋找產品描述和相關信息
           for (let j = i + 1; j < Math.min(i + 15, lines.length); j++) {
             const nextLine = lines[j];
+            console.log(`調試: 檢查行 ${j + 1}: "${nextLine}"`);
             
             // 先查找數量 - 查找純數字行
             const qtyInLine = nextLine.match(/^\s*\d+\s*$/);
             if (qtyInLine) {
               qty = parseInt(qtyInLine[0].trim(), 10);
+              console.log(`調試: 找到實際數量: ${qty}`);
             }
             
             // 方法1：查找明確的尺寸和購買類型標籤
-            // 匹配格式：尺寸:6 或 購買類型: 褲子
-            const sizeMatch = nextLine.match(/尺寸[：:]\s*(\d+)/);
+            // 匹配格式：- 尺寸: 1 或 - 購買類型: 上衣
+            const sizeMatch = nextLine.match(/-?\s*尺寸[：:]\s*(\d+)/);
             if (sizeMatch) {
               const sizeNum = parseInt(sizeMatch[1], 10);
               if (!isNaN(sizeNum) && sizeNum >= 0 && sizeNum <= 20) {
                 size = sizeMatch[1];
+                console.log(`調試: 找到尺寸: ${size}`);
               }
             }
             
-            const purchaseTypeMatch = nextLine.match(/購買類型[：:]\s*([^，,\s]+)/);
+            const purchaseTypeMatch = nextLine.match(/-?\s*購買類型[：:]\s*([^，,\s]+)/);
             if (purchaseTypeMatch) {
               const type = purchaseTypeMatch[1].trim();
+              console.log(`調試: 找到購買類型: ${type}`);
               // 標準化購買類型
               if (type.includes('上衣') || type.toLowerCase().includes('top')) {
                 purchaseType = '上衣';
@@ -271,6 +290,7 @@ async function extractByPdfjs(buffer: Buffer): Promise<{ name: string; code: str
               } else {
                 purchaseType = type;
               }
+              console.log(`調試: 標準化購買類型: ${purchaseType}`);
             }
             
             // 方法2：如果沒有明確標籤，嘗試從產品描述中提取
@@ -283,10 +303,12 @@ async function extractByPdfjs(buffer: Buffer): Promise<{ name: string; code: str
                   const sizeNum = parseInt(extracted.size, 10);
                   if (!isNaN(sizeNum) && sizeNum >= 0 && sizeNum <= 20) {
                     size = extracted.size;
+                    console.log(`調試: 從描述中提取尺寸: ${size}`);
                   }
                 }
                 if (extracted.purchaseType) {
                   purchaseType = extracted.purchaseType;
+                  console.log(`調試: 從描述中提取購買類型: ${purchaseType}`);
                 }
               }
             }
@@ -298,6 +320,7 @@ async function extractByPdfjs(buffer: Buffer): Promise<{ name: string; code: str
                 const sizeNum = parseInt(setSizeMatch[1], 10);
                 if (!isNaN(sizeNum) && sizeNum >= 0 && sizeNum <= 20) {
                   size = setSizeMatch[1];
+                  console.log(`調試: 從套裝優惠中提取尺寸: ${size}`);
                 }
               }
             }
@@ -307,6 +330,8 @@ async function extractByPdfjs(buffer: Buffer): Promise<{ name: string; code: str
               break;
             }
           }
+          
+          console.log(`調試: 最終結果 - 代碼: ${code}, 數量: ${qty}, 尺寸: ${size}, 購買類型: ${purchaseType}`);
           
           rows.push({
             name: '',
@@ -322,6 +347,7 @@ async function extractByPdfjs(buffer: Buffer): Promise<{ name: string; code: str
     console.error('pdf-parse解析失敗:', error);
   }
   
+  console.log(`調試: 總共提取到 ${rows.length} 個商品`);
   return rows;
 }
 
@@ -332,8 +358,11 @@ function byX(a: any, b: any) { return a.transform[4] - b.transform[4]; }
 // 進貨功能
 router.post('/incoming', upload.array('files'), async (req, res) => {
   try {
+    console.log('調試: 收到進貨請求');
     const { locationId } = req.body;
     const files = req.files as Express.Multer.File[];
+    
+    console.log(`調試: locationId = ${locationId}, 文件數量 = ${files?.length || 0}`);
     
     if (!locationId) {
       return res.status(400).json({ message: 'locationId required' });
@@ -393,6 +422,7 @@ router.post('/incoming', upload.array('files'), async (req, res) => {
       }
     }
     
+    console.log('調試: 進貨處理完成', summary);
     res.json(summary);
   } catch (error) {
     console.error('進貨處理錯誤:', error);
