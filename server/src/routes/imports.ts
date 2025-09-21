@@ -279,6 +279,13 @@ async function extractByPdfjs(buffer: Buffer): Promise<{ name: string; code: str
             const nextLine = lines[j];
             console.log(`調試: 檢查行 ${j + 1}: "${nextLine}"`);
             
+            // 先查找數量 - 查找純數字行
+            const qtyInLine = nextLine.match(/^\s*\d+\s*$/);
+            if (qtyInLine) {
+              qty = parseInt(qtyInLine[0].trim(), 10);
+              console.log(`調試: 找到實際數量: ${qty}`);
+            }
+            
             // 查找尺寸 - 使用經過驗證的正則表達式
             const sizePatterns = [
               /- 尺寸[：:]\s*([^，,\s\n]+)/,
