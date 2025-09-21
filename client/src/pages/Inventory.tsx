@@ -43,6 +43,7 @@ export default function Inventory() {
   const [filteredProducts, setFilteredProducts] = useState<Product[]>([])
   const [selectedType, setSelectedType] = useState<string>('')
   const [searchTerm, setSearchTerm] = useState('')
+  const [sizeSearchTerm, setSizeSearchTerm] = useState('') // 新添加這行
   const [sortBy, setSortBy] = useState<string>('')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
@@ -111,7 +112,7 @@ export default function Inventory() {
 
   useEffect(() => {
     load()
-  }, [selectedType, searchTerm, sortBy, sortOrder])
+  }, [products, selectedType, searchTerm, sizeSearchTerm, sortBy, sortOrder]) // 添加 sizeSearchTerm
 
   async function loadProductTypes() {
       const response = await api.get('/product-types')
@@ -138,6 +139,13 @@ export default function Inventory() {
         p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         p.productCode.toLowerCase().includes(searchTerm.toLowerCase()) ||
         getProductSize(p).toLowerCase().includes(searchTerm.toLowerCase())
+      )
+    }
+
+    // Filter by size search term - 新添加這個邏輯
+    if (sizeSearchTerm) {
+      filtered = filtered.filter(p => 
+        getProductSize(p).toLowerCase().includes(sizeSearchTerm.toLowerCase())
       )
     }
 
@@ -173,7 +181,7 @@ export default function Inventory() {
     }
 
     setFilteredProducts(filtered)
-  }, [products, selectedType, searchTerm, sortBy, sortOrder])
+  }, [products, selectedType, searchTerm, sizeSearchTerm, sortBy, sortOrder]) // 添加 sizeSearchTerm
 
   function getProductSize(product: Product): string {
     if (product.sizes && product.sizes.length > 0) {
@@ -568,6 +576,13 @@ ${response.data.errors?.length > 0 ? '錯誤詳情:\n' + response.data.errors.sl
               placeholder="搜尋產品..."
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}
+            />
+
+            <input
+              type="text"
+              placeholder="搜尋尺寸..."
+              value={sizeSearchTerm}
+              onChange={e => setSizeSearchTerm(e.target.value)}
             />
           </div>
           
