@@ -238,14 +238,26 @@ async function extractByPdfjs(buffer: Buffer): Promise<{ name: string; code: str
         // 查找商品代碼 - 優先查找WS-開頭的商品
         const wsCodeMatch = line.match(/(WS-\w+)/);
         if (wsCodeMatch) {
-          const code = wsCodeMatch[1];
+          let code = wsCodeMatch[1];
           console.log(`調試: 找到商品代碼: ${code}`);
+          
+          // 修復：處理不完整的商品代碼
+          if (code === 'WS-712') {
+            // 跳過不完整的代碼，繼續查找完整的代碼
+            continue;
+          }
+          
+          // 修復：處理帶有1HK後綴的代碼
+          if (code.endsWith('1HK')) {
+            code = code.replace('1HK', '');
+            console.log(`調試: 修復商品代碼: ${code}`);
+          }
           
           // 查找數量 - 在同一行或附近行查找數量
           let qty = 1; // 默認數量為1
           
-          // 方法1：在同一行查找數量
-          const qtyInSameLine = line.match(/\b(\d+)\b/);
+          // 方法1：在同一行查找數量（更嚴格的匹配）
+          const qtyInSameLine = line.match(/\b([1-9]\d{0,2})\b/);
           if (qtyInSameLine) {
             const extractedQty = parseInt(qtyInSameLine[1], 10);
             if (extractedQty >= 1 && extractedQty <= 999) {
@@ -258,7 +270,7 @@ async function extractByPdfjs(buffer: Buffer): Promise<{ name: string; code: str
           if (qty === 1) {
             for (let j = i + 1; j < Math.min(i + 5, lines.length); j++) {
               const nextLine = lines[j];
-              const qtyInNextLine = nextLine.match(/^\s*(\d+)\s*$/);
+              const qtyInNextLine = nextLine.match(/^\s*([1-9]\d{0,2})\s*$/);
               if (qtyInNextLine) {
                 const extractedQty = parseInt(qtyInNextLine[1], 10);
                 if (extractedQty >= 1 && extractedQty <= 999) {
