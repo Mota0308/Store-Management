@@ -108,8 +108,8 @@ export default function Inventory() {
 
   useEffect(() => {
     api.get('/locations').then((r: any) => {
-      // 按照固定順序排列：進貨，上架，庫存調，門市，總?庫
-      const order = ['進貨', '上架', '庫存調', '門市', '總?庫'];
+      // 按照固定順序排列：進貨，上架，庫存調，觀塘，灣仔，荔枝角，元朗，國內倉，總庫
+      const order = ['進貨', '上架', '庫存調', '觀塘', '灣仔', '荔枝角', '元朗', '國內倉', '總庫'];
       const sortedLocations = r.data.sort((a: Location, b: Location) => {
         const aIndex = order.indexOf(a.name);
         const bIndex = order.indexOf(b.name);
@@ -323,7 +323,7 @@ export default function Inventory() {
   function exportToExcel() {
     try {
       const exportData = []
-      const headers = ['產品', '商品', '尺寸', '進貨', '上架', '庫存調', '門市', '總?庫']
+      const headers = ['產品', '商品', '尺寸', '進貨', '上架', '庫存調', '觀塘', '灣仔', '荔枝角', '元朗', '國內倉', '總庫']
       exportData.push(headers)
       Object.values(groupedProducts).forEach(group => {
         const sortedProducts = sortProductsBySize([...group.products])
@@ -335,8 +335,12 @@ export default function Inventory() {
             getQuantity(product, locations.find(l => l.name === '進貨')?._id || ''),
             getQuantity(product, locations.find(l => l.name === '上架')?._id || ''),
             getQuantity(product, locations.find(l => l.name === '庫存調')?._id || ''),
-            getQuantity(product, locations.find(l => l.name === '門市')?._id || ''),
-            getQuantity(product, locations.find(l => l.name === '總?庫')?._id || '')
+            getQuantity(product, locations.find(l => l.name === '觀塘')?._id || ''),
+            getQuantity(product, locations.find(l => l.name === '灣仔')?._id || ''),
+            getQuantity(product, locations.find(l => l.name === '荔枝角')?._id || ''),
+            getQuantity(product, locations.find(l => l.name === '元朗')?._id || ''),
+            getQuantity(product, locations.find(l => l.name === '國內倉')?._id || ''),
+            getQuantity(product, locations.find(l => l.name === '總庫')?._id || '')
           ]
           exportData.push(row)
         })
@@ -961,7 +965,7 @@ ${response.data.errors?.length > 0 ? '錯誤詳情:\n' + response.data.errors.sl
               <div style={{ marginBottom: '16px' }}>
                 <p><strong>Excel格式要求：</strong></p>
                 <ul style={{ margin: '8px 0', paddingLeft: '20px' }}>
-                  <li>列順序：產品編號、商品名稱、產品類型、尺寸、進貨、上架、庫存調、門市、總?庫</li>
+                  <li>列順序：產品編號、商品名稱、產品類型、尺寸、進貨、上架、庫存調、觀塘、灣仔、荔枝角、元朗、國內倉、總庫</li>
                   <li>產品編號：商品編號（例如：商品編號、產品編號、商品、編號、產品）</li>
                   <li>商品名稱：商品名稱（例如：商品名稱、名稱、商品、名稱、產品）</li>
                   <li>產品類型：尺寸（例如：尺寸、大小、規格、型號）</li>
