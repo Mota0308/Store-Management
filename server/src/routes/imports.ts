@@ -257,14 +257,16 @@ async function extractByPdfjs(buffer: Buffer): Promise<{ name: string; code: str
           let qty = 1; // 默認數量為1
           
           // 方法1：在同一行查找數量（更嚴格的匹配）
-          const qtyInSameLine = line.match(/\b([1-9]\d{0,2})\b/);
-          if (qtyInSameLine) {
-            const extractedQty = parseInt(qtyInSameLine[1], 10);
-            if (extractedQty >= 1 && extractedQty <= 999) {
-              qty = extractedQty;
-              console.log(`調試: 在同一行找到數量: ${qty}`);
-            }
-          }
+          // 方法1：在同一行查找數量（更嚴格的匹配）
+const qtyInSameLine = line.match(/\b([1-9]\d{0,2})\b/);
+if (qtyInSameLine) {
+  const extractedQty = parseInt(qtyInSameLine[1], 10);
+  // 更嚴格的數量驗證：只接受1-99範圍
+  if (extractedQty >= 1 && extractedQty <= 99) {
+    qty = extractedQty;
+    console.log(`調試: 在同一行找到數量: ${qty}`);
+  }
+}
           
           // 方法2：在後續行查找數量（表格結構）
           if (qty === 1) {
@@ -304,6 +306,7 @@ async function extractByPdfjs(buffer: Buffer): Promise<{ name: string; code: str
             
             // 查找購買類型信息
            // 查找購買類型信息 - 修復編碼問題
+// 查找購買類型信息 - 修復編碼問題
 const purchaseTypeMatch = nextLine.match(/-?\s*購買[類型觊型][：:]\s*([^，,\s]+)/);
 if (purchaseTypeMatch) {
   const type = purchaseTypeMatch[1].trim();
