@@ -69,7 +69,6 @@ function parsePurchaseTypeAndSize(purchaseTypeText: string): { purchaseType?: st
 }
 
 // 修改：WS-712系列商品的特殊匹配函數
-// 修改：WS-712系列商品的特殊匹配函數
 async function updateWS712Product(rawCode: string, qty: number, locationId: string, summary: any, direction: 'out' | 'in', purchaseType?: string, size?: string) {
   const variants = codeVariants(rawCode);
   if (variants.length === 0) return;
@@ -89,7 +88,7 @@ async function updateWS712Product(rawCode: string, qty: number, locationId: stri
   }
   
   // 如果沒有指定購買類型和尺寸，使用原來的邏輯
-  if (!purchaseType || !size) {
+  if (!purchaseType && !size) {
     console.log(`調試: 沒有購買類型和尺寸，使用第一個匹配的產品`);
     const product = products[0]; // 取第一個匹配的產品
     console.log(`調試: 選擇產品 - _id: ${product._id}, sizes:`, product.sizes);
@@ -114,9 +113,62 @@ async function updateWS712Product(rawCode: string, qty: number, locationId: stri
     return;
   }
   
+  // 只有尺寸，沒有購買類型 - 根據尺寸匹配
+  if (size && !purchaseType) {
+    console.log(`調試: 只有尺寸 ${size}，沒有購買類型，根據尺寸匹配產品`);
+    let matchedProduct = null;
+    
+    for (const product of products) {
+      console.log(`調試: 檢查產品 ${product.productCode}, 尺寸:`, product.sizes);
+      
+      const hasMatchingSize = product.sizes.some(productSize => {
+        const sizeStr = productSize.replace(/[{}]/g, '');
+        const parts = sizeStr.split('|').map(p => p.trim());
+        console.log(`調試: 檢查尺寸 "${productSize}" -> "${sizeStr}" -> parts:`, parts);
+        
+        const hasSize = parts.some(part => part.includes(size));
+        console.log(`調試: 包含尺寸 ${size}: ${hasSize}`);
+        
+        return hasSize;
+      });
+      
+      if (hasMatchingSize) {
+        matchedProduct = product;
+        console.log(`調試: 找到匹配尺寸的產品: ${product.productCode}, _id: ${product._id}, sizes:`, product.sizes);
+        break;
+      }
+    }
+    
+    if (!matchedProduct) {
+      console.log(`調試: 沒有找到匹配尺寸的產品`);
+      summary.notFound.push(`${normalizeCode(rawCode)} (尺寸: ${size})`);
+      return;
+    }
+    
+    console.log(`調試: 開始更新庫存 - 產品: ${matchedProduct.productCode}, _id: ${matchedProduct._id}`);
+    summary.matched++;
+    const inv = matchedProduct.inventories.find(i => String(i.locationId) === String(locationId));
+    console.log(`調試: 查找庫存 - locationId: ${locationId}, 找到庫存:`, inv ? `數量: ${inv.quantity}` : '無');
+    
+    if (inv) {
+      const oldQuantity = inv.quantity;
+      inv.quantity = direction === 'out' ? Math.max(0, inv.quantity - qty) : inv.quantity + qty;
+      console.log(`調試: 更新庫存 - 舊數量: ${oldQuantity}, 新數量: ${inv.quantity}, 變化: ${direction === 'out' ? '-' : '+'}${qty}`);
+    } else {
+      const newQuantity = direction === 'out' ? 0 : qty;
+      matchedProduct.inventories.push({ locationId: new mongoose.Types.ObjectId(locationId), quantity: newQuantity });
+      console.log(`調試: 新增庫存 - locationId: ${locationId}, 數量: ${newQuantity}`);
+    }
+    
+    await matchedProduct.save();
+    console.log(`調試: 產品保存成功`);
+    summary.updated++;
+    return;
+  }
+  
+  // 有購買類型和尺寸 - 精確匹配
   console.log(`調試: 查找匹配的尺寸 - 購買類型: ${purchaseType}, 尺寸: ${size}`);
   
-  // 根據購買類型和尺寸匹配產品
   let matchedProduct = null;
   for (const product of products) {
     console.log(`調試: 檢查產品 ${product.productCode}, 尺寸:`, product.sizes);
@@ -130,8 +182,8 @@ async function updateWS712Product(rawCode: string, qty: number, locationId: stri
       console.log(`調試: 檢查尺寸 "${productSize}" -> "${sizeStr}" -> parts:`, parts);
       
       // 檢查是否包含購買類型和尺寸
-      const hasPurchaseType = parts.some(part => part.includes(purchaseType));
-      const hasSize = parts.some(part => part.includes(size));
+      const hasPurchaseType = parts.some(part => part.includes(purchaseType || ''));
+      const hasSize = parts.some(part => part.includes(size || ''));
       
       console.log(`調試: 包含購買類型: ${hasPurchaseType}, 包含尺寸: ${hasSize}`);
       
