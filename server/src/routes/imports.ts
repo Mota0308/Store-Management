@@ -216,113 +216,89 @@ async function updateByCodeVariants(code: string, qty: number, locationId: strin
   }
 }
 
-// 重新定義：PDF解析函數 - 按照表格結構提取
+// 修復PDF解析函數 - 清理調試日誌並修復匹配邏輯
 async function extractByPdfjs(buffer: Buffer): Promise<{ name: string; code: string; qty: number; purchaseType?: string; size?: string }[]> {
   const rows: { name: string; code: string; qty: number; purchaseType?: string; size?: string }[] = [];
   
   try {
-    // 使用pdf-parse作為主要解析方法
     const data = await pdf(buffer);
     const text = data.text;
     
-    console.log(`調試: PDF解析開始，文本長度: ${text.length}`);
-    
     if (text) {
       const lines = text.split(/\r?\n/).map((line: string) => line.trim()).filter(Boolean);
-      console.log(`調試: 總共 ${lines.length} 行文本`);
       
-      // 按照表格結構解析：尋找"型號"和"數量"列
       for (let i = 0; i < lines.length; i++) {
         const line = lines[i];
         
-        // 查找商品代碼 - 優先查找WS-開頭的商品
         const wsCodeMatch = line.match(/(WS-\w+)/);
         if (wsCodeMatch) {
           let code = wsCodeMatch[1];
-          console.log(`調試: 找到商品代碼: ${code}`);
           
-          // 修復：處理不完整的商品代碼
-          if (code === 'WS-712') {
-            // 跳過不完整的代碼，繼續查找完整的代碼
+          // 跳過不完整的代碼
+          if (code === "WS-712") {
             continue;
           }
           
-          // 修復：處理帶有1HK後綴的代碼
-          if (code.endsWith('1HK')) {
-            code = code.replace('1HK', '');
-            console.log(`調試: 修復商品代碼: ${code}`);
+          // 修復1HK後綴
+          if (code.endsWith("1HK")) {
+            code = code.replace("1HK", "");
           }
           
-          // 查找數量 - 在同一行或附近行查找數量
-          let qty = 1; // 默認數量為1
+          // 查找數量
+          let qty = 1;
+          const qtyInSameLine = line.match(/\b([1-9]\d{0,2})\b/);
+          if (qtyInSameLine) {
+            const extractedQty = parseInt(qtyInSameLine[1], 10);
+            if (extractedQty >= 1 && extractedQty <= 99) {
+              qty = extractedQty;
+            }
+          }
           
-          // 方法1：在同一行查找數量（更嚴格的匹配）
-          // 方法1：在同一行查找數量（更嚴格的匹配）
-const qtyInSameLine = line.match(/\b([1-9]\d{0,2})\b/);
-if (qtyInSameLine) {
-  const extractedQty = parseInt(qtyInSameLine[1], 10);
-  // 更嚴格的數量驗證：只接受1-99範圍
-  if (extractedQty >= 1 && extractedQty <= 99) {
-    qty = extractedQty;
-    console.log(`調試: 在同一行找到數量: ${qty}`);
-  }
-}
-          
-          // 方法2：在後續行查找數量（表格結構）
+          // 在後續行查找數量
           if (qty === 1) {
             for (let j = i + 1; j < Math.min(i + 5, lines.length); j++) {
               const nextLine = lines[j];
               const qtyInNextLine = nextLine.match(/^\s*([1-9]\d{0,2})\s*$/);
               if (qtyInNextLine) {
                 const extractedQty = parseInt(qtyInNextLine[1], 10);
-                if (extractedQty >= 1 && extractedQty <= 999) {
+                if (extractedQty >= 1 && extractedQty <= 99) {
                   qty = extractedQty;
-                  console.log(`調試: 在後續行找到數量: ${qty}`);
                   break;
                 }
               }
             }
           }
           
-          // 查找尺寸和購買類型 - 在商品詳情列中查找
+          // 查找尺寸和購買類型
           let size: string | undefined;
           let purchaseType: string | undefined;
           
-          // 檢查後續幾行，尋找商品詳情信息
           for (let j = i + 1; j < Math.min(i + 10, lines.length); j++) {
             const nextLine = lines[j];
-            console.log(`調試: 檢查商品詳情行 ${j + 1}: "${nextLine}"`);
             
-            // 查找尺寸信息
+            // 查找尺寸
             const sizeMatch = nextLine.match(/-?\s*尺寸[：:]\s*([^\s，,\n\r]+)/);
             if (sizeMatch) {
               const extractedSize = sizeMatch[1].trim();
-              // 過濾掉包含mm的尺寸，只保留純數字
-              if (!extractedSize.includes('mm') && /^\d+$/.test(extractedSize)) {
+              if (!extractedSize.includes("mm") && /^\d+$/.test(extractedSize)) {
                 size = extractedSize;
-                console.log(`調試: 找到尺寸: ${size}`);
               }
             }
             
-            // 查找購買類型信息
-           // 查找購買類型信息 - 修復編碼問題
-// 查找購買類型信息 - 修復編碼問題
-const purchaseTypeMatch = nextLine.match(/-?\s*購買[類型觊型][：:]\s*([^，,\s]+)/);
-if (purchaseTypeMatch) {
-  const type = purchaseTypeMatch[1].trim();
-  console.log(`調試: 找到購買類型: ${type}`);
-  // 標準化購買類型
-  if (type.includes('上衣') || type.toLowerCase().includes('top')) {
-    purchaseType = '上衣';
-  } else if (type.includes('褲子') || type.toLowerCase().includes('bottom')) {
-    purchaseType = '褲子';
-  } else if (type.includes('套裝') || type.toLowerCase().includes('set')) {
-    purchaseType = '套裝';
-  } else {
-    purchaseType = type;
-  }
-  console.log(`調試: 標準化購買類型: ${purchaseType}`);
-}
+            // 查找購買類型 - 修復編碼問題
+            const purchaseTypeMatch = nextLine.match(/-?\s*購買[類型觊型][：:]\s*([^，,\s]+)/);
+            if (purchaseTypeMatch) {
+              const type = purchaseTypeMatch[1].trim();
+              if (type.includes("上衣") || type.toLowerCase().includes("top")) {
+                purchaseType = "上衣";
+              } else if (type.includes("褲子") || type.toLowerCase().includes("bottom")) {
+                purchaseType = "褲子";
+              } else if (type.includes("套裝") || type.toLowerCase().includes("set")) {
+                purchaseType = "套裝";
+              } else {
+                purchaseType = type;
+              }
+            }
             
             // 如果遇到下一個商品代碼，停止搜索
             if (nextLine.match(/(WS-\w+)/)) {
@@ -330,10 +306,8 @@ if (purchaseTypeMatch) {
             }
           }
           
-          console.log(`調試: 最終結果 - 代碼: ${code}, 數量: ${qty}, 尺寸: ${size}, 購買類型: ${purchaseType}`);
-          
           rows.push({
-            name: '',
+            name: "",
             code: code,
             qty: qty,
             purchaseType: purchaseType,
@@ -343,10 +317,9 @@ if (purchaseTypeMatch) {
       }
     }
   } catch (error) {
-    console.error('pdf-parse解析失敗:', error);
+    console.error("pdf-parse解析失敗:", error);
   }
   
-  console.log(`調試: 總共提取到 ${rows.length} 個商品`);
   return rows;
 }
 
