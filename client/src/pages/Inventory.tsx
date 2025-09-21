@@ -2,7 +2,7 @@
 import api from '../api'
 import * as XLSX from 'xlsx'
 
-// �w�q�������f
+// 定義類型接口
 interface Location {
   _id: string
   name: string
@@ -14,7 +14,7 @@ interface ProductType {
 }
 
 interface Inventory {
-  locationId: string | { _id: string; name: string } | null // �K�[ null ����
+  locationId: string | { _id: string; name: string } | null // 添加 null 支持
   quantity: number
 }
 
@@ -43,7 +43,7 @@ export default function Inventory() {
   const [filteredProducts, setFilteredProducts] = useState<Product[]>([])
   const [selectedType, setSelectedType] = useState<string>('')
   const [searchTerm, setSearchTerm] = useState('')
-  const [sizeSearchTerm, setSizeSearchTerm] = useState('') // �s�K�[�o��
+  const [sizeSearchTerm, setSizeSearchTerm] = useState('') // 新添加這行
   const [sortBy, setSortBy] = useState<string>('')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
@@ -51,6 +51,16 @@ export default function Inventory() {
   // Mobile detection & controls
   const [isMobile, setIsMobile] = useState<boolean>(false)
   const [mobileControlsOpen, setMobileControlsOpen] = useState<boolean>(false)
+
+  // 新增：主行編輯狀態
+  const [editingGroup, setEditingGroup] = useState<string | null>(null)
+  const [groupEditForm, setGroupEditForm] = useState<{
+    name: string
+    productCode: string
+  }>({
+    name: '',
+    productCode: ''
+  })
 
   useEffect(() => {
     const mq = window.matchMedia('(max-width: 768px)')
@@ -64,21 +74,21 @@ export default function Inventory() {
     }
   }, [])
   
-  // �ɤJ�w�s���A
+  // 導入庫存狀態
   const [importOpen, setImportOpen] = useState(false)
   const [importState, setImportState] = useState<{ locationId: string; files: File[] }>({ locationId: '', files: [] })
   
-  // �������ժ��A
+  // 轉移庫存狀態
   const [transferOpen, setTransferOpen] = useState(false)
   const [transferState, setTransferState] = useState<{ fromLocationId: string; toLocationId: string; files: File[] }>({ fromLocationId: '', toLocationId: '', files: [] })
   
-  // Excel�ɤJ���A
+  // Excel導入狀態
   const [excelImportOpen, setExcelImportOpen] = useState(false)
   const [excelImportState, setExcelImportState] = useState<{ files: File[] }>({ files: [] })
 
-  // �M�s���A
+  // 清除狀態
   const [clearOpen, setClearOpen] = useState(false)
-  // �s�説�A
+  // 編輯狀態
   const [editingProduct, setEditingProduct] = useState<string | null>(null)
   const [editForm, setEditForm] = useState<{
     name: string
@@ -98,8 +108,8 @@ export default function Inventory() {
 
   useEffect(() => {
     api.get('/locations').then((r: any) => {
-      // ���ӫ��w���ǱƧǡG�[���A�W�J�A���K���A���ԡA��?��
-      const order = ['�[��', '�W�J', '���K��', '����', '��?��'];
+      // 按照固定順序排列：進貨，上架，庫存調，門市，總?庫
+      const order = ['進貨', '上架', '庫存調', '門市', '總?庫'];
       const sortedLocations = r.data.sort((a: Location, b: Location) => {
         const aIndex = order.indexOf(a.name);
         const bIndex = order.indexOf(b.name);
@@ -112,7 +122,7 @@ export default function Inventory() {
 
   useEffect(() => {
     load()
-  }, [products, selectedType, searchTerm, sizeSearchTerm, sortBy, sortOrder]) // �K�[ sizeSearchTerm
+  }, [products, selectedType, searchTerm, sizeSearchTerm, sortBy, sortOrder]) // 添加 sizeSearchTerm
 
   async function loadProductTypes() {
       const response = await api.get('/product-types')
@@ -121,12 +131,12 @@ export default function Inventory() {
 
   async function load() {
     const response = await api.get('/products')
-    // �״_�G���ݪ��^���O { products: [...], pagination: {...} }
+    // 確保返回的數據結構是 { products: [...], pagination: {...} }
     setProducts(response.data.products || [])
   }
 
   useEffect(() => {
-    let filtered = products || [] // �K�[�w���ˬd
+    let filtered = products || [] // 添加空值檢查
 
     // Filter by product type
     if (selectedType) {
@@ -142,10 +152,10 @@ export default function Inventory() {
       )
     }
 
-    // Filter by size search term - �����ǰt�޿�
+    // Filter by size search term - 正則法則（部分匹配）
     if (sizeSearchTerm) {
       filtered = filtered.filter(p => 
-        getProductSize(p).toLowerCase().split(',').map(s => s.trim()).includes(sizeSearchTerm.toLowerCase())
+        getProductSize(p).toLowerCase().includes(sizeSearchTerm.toLowerCase())
       )
     }
 
@@ -181,7 +191,7 @@ export default function Inventory() {
     }
 
     setFilteredProducts(filtered)
-  }, [products, selectedType, searchTerm, sizeSearchTerm, sortBy, sortOrder]) // �K�[ sizeSearchTerm
+  }, [products, selectedType, searchTerm, sizeSearchTerm, sortBy, sortOrder]) // 添加 sizeSearchTerm
 
   function getProductSize(product: Product): string {
     if (product.sizes && product.sizes.length > 0) {
@@ -190,49 +200,49 @@ export default function Inventory() {
     return product.size || ''
   }
 
-  // �s�W�G���ؤo�Ʀr�j�p�Ƨǲ��~
+  // 新增：產品尺寸智能排序
   function sortProductsBySize(products: Product[]): Product[] {
     return products.sort((a, b) => {
       const aSize = getProductSize(a)
       const bSize = getProductSize(b)
       
-      // �����Ʀr�i������
+      // 提取數字進行比較
       const aNumbers = aSize.match(/\d+/g) || []
       const bNumbers = bSize.match(/\d+/g) || []
       
-      // �p�G�����Ʀr�A�����Ĥ@�ӼƦr
+      // 如果都有數字，比較第一個數字
       if (aNumbers.length > 0 && bNumbers.length > 0) {
         const aNum = parseInt(aNumbers[0] || '0')
         const bNum = parseInt(bNumbers[0] || '0')
         return aNum - bNum
       }
       
-      // �p�G�u���@�Ӧ��Ʀr�A�Ʀr�Ʀb�e��
+      // 如果只有一個有數字，數字在前
       if (aNumbers.length > 0 && bNumbers.length === 0) return -1
       if (aNumbers.length === 0 && bNumbers.length > 0) return 1
       
-      // ���S���Ʀr�A���r���Ƨ�
+      // 都沒數字，按字母排序
       return aSize.localeCompare(bSize)
     })
   }
 
-  // �״_�G�K�[ null �ˬd
+  // 確保添加 null 檢查
   function getQuantity(product: Product, locationId: string): number {
     if (!product.inventories || !Array.isArray(product.inventories)) {
       return 0
     }
     const inventory = product.inventories.find(inv => {
-      // �ˬd locationId �O�_�� null �� undefined
+      // 檢查 locationId 是否為 null 或 undefined
       if (!inv.locationId) {
         return false
       }
       
-      // �B�z populate �᪺ locationId ���H
+      // 處理 populate 後的 locationId 對象
       if (typeof inv.locationId === 'object' && inv.locationId !== null) {
         return inv.locationId._id === locationId || inv.locationId._id.toString() === locationId
       }
       
-      // �B�z���l�� ObjectId �r�Ŧ��A�K�[ null �ˬd
+      // 處理字符串 ObjectId 類型，添加 null 檢查
       if (inv.locationId && typeof inv.locationId === 'string') {
         return inv.locationId === locationId || inv.locationId.toString() === locationId
       }
@@ -259,15 +269,61 @@ export default function Inventory() {
   }
 
   function getSortIcon(column: string): string {
-    if (sortBy !== column) return '?'
-    return sortOrder === 'asc' ? '��' : '��'
+    if (sortBy !== column) return '↕'
+    return sortOrder === 'asc' ? '↑' : '↓'
   }
 
-  // Excel�ɥX�\���]�O�����ܡ^
+  // 新增：主行編輯功能
+  function handleEditGroup(group: ProductGroup) {
+    setEditingGroup(group.key)
+    setGroupEditForm({
+      name: group.name,
+      productCode: group.productCode
+    })
+  }
+
+  function handleCancelGroupEdit() {
+    setEditingGroup(null)
+    setGroupEditForm({
+      name: '',
+      productCode: ''
+    })
+  }
+
+  // 新增：保存主行編輯 - 批量更新所有小行
+  async function handleSaveGroupEdit(group: ProductGroup) {
+    try {
+      // 批量更新該組內所有產品的名字和產品編號
+      const updatePromises = group.products.map(product => 
+        api.put(`/products/${product._id}`, {
+          name: groupEditForm.name,
+          productCode: groupEditForm.productCode,
+          productType: product.productType,
+          size: getProductSize(product),
+          price: product.price,
+          inventories: (product.inventories || []).map(inv => ({
+            locationId: typeof inv.locationId === 'object' && inv.locationId !== null 
+              ? inv.locationId._id 
+              : (inv.locationId ? inv.locationId.toString() : ''),
+            quantity: inv.quantity
+          }))
+        })
+      )
+      
+      await Promise.all(updatePromises)
+      alert(`產品組 "${group.name}" 更新成功！共更新 ${group.products.length} 個產品`)
+      setEditingGroup(null)
+      await load()
+    } catch (error: any) {
+      alert(`更新失敗：${error.response?.data?.message || error.message}`)
+    }
+  }
+
+  // Excel導出功能（支持分組和排序）
   function exportToExcel() {
     try {
       const exportData = []
-      const headers = ['�s��', '�ӫ~', '�ؤo', '�[��', '�W�J', '���K��', '����', '��?��']
+      const headers = ['產品', '商品', '尺寸', '進貨', '上架', '庫存調', '門市', '總?庫']
       exportData.push(headers)
       Object.values(groupedProducts).forEach(group => {
         const sortedProducts = sortProductsBySize([...group.products])
@@ -276,37 +332,37 @@ export default function Inventory() {
             product.productCode,
             product.name,
             getProductSize(product),
-            getQuantity(product, locations.find(l => l.name === '�[��')?._id || ''),
-            getQuantity(product, locations.find(l => l.name === '�W�J')?._id || ''),
-            getQuantity(product, locations.find(l => l.name === '���K��')?._id || ''),
-            getQuantity(product, locations.find(l => l.name === '����')?._id || ''),
-            getQuantity(product, locations.find(l => l.name === '��?��')?._id || '')
+            getQuantity(product, locations.find(l => l.name === '進貨')?._id || ''),
+            getQuantity(product, locations.find(l => l.name === '上架')?._id || ''),
+            getQuantity(product, locations.find(l => l.name === '庫存調')?._id || ''),
+            getQuantity(product, locations.find(l => l.name === '門市')?._id || ''),
+            getQuantity(product, locations.find(l => l.name === '總?庫')?._id || '')
           ]
           exportData.push(row)
         })
       })
       const ws = XLSX.utils.aoa_to_sheet(exportData)
       const wb = XLSX.utils.book_new()
-      XLSX.utils.book_append_sheet(wb, ws, '�w�s���i')
+      XLSX.utils.book_append_sheet(wb, ws, '庫存管理')
       const now = new Date()
       const timestamp = now.toISOString().slice(0, 19).replace(/:/g, '-')
-      const filename = `�w�s���i_${timestamp}.xlsx`
+      const filename = `庫存管理_${timestamp}.xlsx`
       XLSX.writeFile(wb, filename)
-      alert('Excel�ɥX���\�I')
+      alert('Excel導出成功！')
     } catch (error) {
-      console.error('�ɥXExcel���~:', error)
-      alert('�ɥXExcel���ѡA�Э���')
+      console.error('導出Excel錯誤:', error)
+      alert('導出Excel失敗，請重試')
     }
   }
 
-  // ���l���ơ]doImport / doTransfer / doExcelImport / doClearAll / �s���^�O������
+  // 導入處理函數（doImport / doTransfer / doExcelImport / doClearAll / 編輯）
   async function doImport(type: 'incoming' | 'outgoing') {
     if (importState.locationId === '') {
-      alert('�п��ܪ���')
+      alert('請選擇地點')
       return
     }
     if (importState.files.length === 0) {
-      alert('�п���PDF�ɮ�')
+      alert('請選擇PDF文件')
       return
     }
     
@@ -315,24 +371,24 @@ export default function Inventory() {
       form.append('locationId', importState.locationId)
       importState.files.forEach(f => form.append('files', f))
       
-      // �״_�G�ھ�type�եΤ��P��API���I
+      // 確保根據type調用不同的API端點
       const response = await api.post(`/import/${type}`, form)
-      alert(`${type === 'incoming' ? '�i�f' : '�X�f'}����\n�B�z:${response.data.processed}  �ǰt:${response.data.matched}  �s�W:${response.data.created}  ���s:${response.data.updated}\n������: ${response.data.notFound?.join(', ') || '�L'}`)
+      alert(`${type === 'incoming' ? '進貨' : '出貨'}成功\n處理:${response.data.processed}  匹配:${response.data.matched}  新增:${response.data.created}  更新:${response.data.updated}\n未找到: ${response.data.notFound?.join(', ') || '無'}`)
       setImportOpen(false)
       await load()
     } catch (error: any) {
-      alert(`${type === 'incoming' ? '�i�f' : '�X�f'}���ѡG${error.response?.data?.message || error.message}`)
+      alert(`${type === 'incoming' ? '進貨' : '出貨'}失敗：${error.response?.data?.message || error.message}`)
     }
   }
 
-  // �������ե\��
+  // 轉移庫存處理
   async function doTransfer() {
     if (transferState.fromLocationId === '' || transferState.toLocationId === '') {
-      alert('�п��ܨӷ������M�ؼЪ���')
+      alert('請選擇來源地點和目標地點')
       return
     }
     if (transferState.files.length === 0) {
-      alert('�п���PDF�ɮ�')
+      alert('請選擇PDF文件')
       return
     }
     
@@ -343,66 +399,66 @@ export default function Inventory() {
       transferState.files.forEach(f => form.append('files', f))
       
       const response = await api.post('/import/transfer', form)
-      alert(`�������է���\n�B�z:${response.data.processed}  �ǰt:${response.data.matched}  ���s:${response.data.updated}\n������: ${response.data.notFound?.join(', ') || '�L'}`)
+      alert(`轉移庫存成功\n處理:${response.data.processed}  匹配:${response.data.matched}  更新:${response.data.updated}\n未找到: ${response.data.notFound?.join(', ') || '無'}`)
       setTransferOpen(false)
       await load()
     } catch (error: any) {
-      alert(`�������ե��ѡG${error.response?.data?.message || error.message}`)
+      alert(`轉移庫存失敗：${error.response?.data?.message || error.message}`)
     }
   }
 
-  // Excel�ɤJ�\�� - �����״_����
+  // Excel導入處理 - 添加錯誤處理
   async function doExcelImport() {
     if (excelImportState.files.length === 0) {
-      alert('�п���Excel�ɮ�')
+      alert('請選擇Excel文件')
       return
     }
     
-    // �ˬd�����j�p
+    // 檢查文件大小
     const totalSize = excelImportState.files.reduce((sum, file) => sum + file.size, 0)
-    if (totalSize > 10 * 1024 * 1024) { // 10MB����
-      alert('�����`�j�p�W�L10MB�A�Шϥθ��p������')
+    if (totalSize > 10 * 1024 * 1024) { // 10MB限制
+      alert('文件總大小超過10MB，請選擇較小的文件')
       return
     }
     
     try {
-      // ?��?�z������
-      const processingMsg = '���b�B�zExcel�����A�еy��...\n�o�i���ݭn�X�����ɶ��A�Ф��n���������C'
+      // 顯示處理中消息
+      const processingMsg = '正在處理Excel文件，請稍候...\n這可能需要一些時間，請不要關閉頁面。'
       alert(processingMsg)
       
       const form = new FormData()
       excelImportState.files.forEach(f => form.append('files', f))
       
-      // �ϥΧ�?���W???
+      // 設置較長的超時時間
       const response = await api.post('/import/excel', form, {
-        timeout: 300000, // 5��?�W?
+        timeout: 300000, // 5分鐘超時
         headers: {
           'Content-Type': 'multipart/form-data'
         }
       })
       
-      // ?��???�G
-      const resultMsg = `Excel�ɤJ�����I
+      // 顯示結果
+      const resultMsg = `Excel導入成功！
       
-�B�z����: ${response.data.processed}
-�ǰt���~: ${response.data.matched}
-�s�W���~: ${response.data.created}
-���s���~: ${response.data.updated}
-���~�ƶq: ${response.data.errors?.length || 0}
+處理行數: ${response.data.processed}
+匹配商品: ${response.data.matched}
+新增商品: ${response.data.created}
+更新商品: ${response.data.updated}
+錯誤數量: ${response.data.errors?.length || 0}
 
-${response.data.errors?.length > 0 ? '���~�Ա�:\n' + response.data.errors.slice(0, 5).join('\n') + (response.data.errors.length > 5 ? '\n...' : '') : '�L���~'}`
+${response.data.errors?.length > 0 ? '錯誤詳情:\n' + response.data.errors.slice(0, 5).join('\n') + (response.data.errors.length > 5 ? '\n...' : '') : '無錯誤'}`
 
       alert(resultMsg)
       setExcelImportOpen(false)
       await load()
     } catch (error: any) {
-      console.error('Excel�ɤJ���~:', error)
+      console.error('Excel導入錯誤:', error)
       
-      let errorMsg = 'Excel�ɤJ���ѡG'
+      let errorMsg = 'Excel導入失敗：'
       if (error.code === 'ECONNABORTED') {
-        errorMsg += '�B�z�W�ɡA�й��ըϥθ��p���������ˬd�����s��'
+        errorMsg += '處理超時，請選擇較小的文件或檢查網絡連接'
       } else if (error.response?.status === 413) {
-        errorMsg += '�����Ӥj�A�Шϥθ��p������'
+        errorMsg += '文件太大，請選擇較小的文件'
       } else if (error.response?.data?.message) {
         errorMsg += error.response.data.message
       } else {
@@ -413,30 +469,30 @@ ${response.data.errors?.length > 0 ? '���~�Ա�:\n' + response.data.err
     }
   }
 
-  // �M�s�Ҧ��w�s�ƶq
+  // 清除所有庫存數量
   async function doClearAll() {
-    if (!confirm('�T�w�n�M�s�Ҧ��w�s�ܡH���ާ@�L�k�M�P�I')) {
+    if (!confirm('確定要清除所有庫存嗎？此操作無法撤銷！')) {
       return
     }
     
     try {
       const response = await api.post('/import/clear')
       
-      const resultMsg = `�M�s�����I
+      const resultMsg = `清除成功！
       
-�B�z���~: ${response.data.processed}
-���s���~: ${response.data.updated}
-���~�ƶq: ${response.data.errors?.length || 0}
+處理商品: ${response.data.processed}
+更新商品: ${response.data.updated}
+錯誤數量: ${response.data.errors?.length || 0}
 
-${response.data.errors?.length > 0 ? '���~�Ա�:\n' + response.data.errors.slice(0, 5).join('\n') + (response.data.errors.length > 5 ? '\n...' : '') : '�L���~'}`
+${response.data.errors?.length > 0 ? '錯誤詳情:\n' + response.data.errors.slice(0, 5).join('\n') + (response.data.errors.length > 5 ? '\n...' : '') : '無錯誤'}`
 
       alert(resultMsg)
       setClearOpen(false)
       await load()
     } catch (error: any) {
-      console.error('�M�s���~:', error)
+      console.error('清除錯誤:', error)
       
-      let errorMsg = '�M�s���ѡG'
+      let errorMsg = '清除失敗：'
       if (error.response?.data?.message) {
         errorMsg += error.response.data.message
       } else {
@@ -447,7 +503,7 @@ ${response.data.errors?.length > 0 ? '���~�Ա�:\n' + response.data.err
     }
   }
 
-  // �s���M�R���B�z���� - �״_����
+  // 編輯和刪除處理函數 - 添加錯誤處理
   function handleEdit(product: Product) {
     setEditingProduct(product._id)
     setEditForm({
@@ -489,7 +545,7 @@ ${response.data.errors?.length > 0 ? '���~�Ա�:\n' + response.data.err
   }
 
   async function handleDelete(product: Product) {
-    if (confirm(`�T�w�n�R�����~ "${product.name}" �ܡH`)) {
+    if (confirm(`確定要刪除商品 "${product.name}" 嗎？`)) {
       try {
         await api.delete(`/products/${product._id}`)
         alert('商品刪除成功')
@@ -500,25 +556,25 @@ ${response.data.errors?.length > 0 ? '���~�Ա�:\n' + response.data.err
     }
   }
 
-  //sWGRӲ~
+  // 刪除產品組
   async function handleDeleteGroup(group: ProductGroup) {
-    if (confirm(`�T�w�n�R�����Ӳ��~�� "${group.name}" (${group.productCode}) �ܡH\n�o�N�R���Ӳ��~�ժ��Ҧ��ؤo�W���A���ާ@�L�k�M�P�I`)) {
+    if (confirm(`確定要刪除產品組 "${group.name}" (${group.productCode}) 嗎？\n這將刪除產品組內的所有商品，此操作無法撤銷！`)) {
       try {
-        // ���q�R���Ӳժ��Ҧ����~
+        // 批量刪除產品組內的所有商品
         const deletePromises = group.products.map(product => 
           api.delete(`/products/${product._id}`)
         )
         
         await Promise.all(deletePromises)
-        alert(`���~�� "${group.name}" �R�����\�A�@�R�� ${group.products.length} �Ӳ��~`)
+        alert(`產品組 "${group.name}" 刪除成功，共刪除 ${group.products.length} 個商品`)
         await load()
       } catch (error: any) {
-        alert(`�R�����ѡG${error.response?.data?.message || error.message}`)
+        alert(`刪除失敗：${error.response?.data?.message || error.message}`)
       }
     }
   }
 
-  // Group products by name and productCode�A���ؤo�Ƨ�
+  // Group products by name and productCode，按尺寸排序
   const groupedProducts = (filteredProducts || []).reduce((groups, product) => {
     const key = `${product.name}-${product.productCode}`
     if (!groups[key]) {
@@ -533,7 +589,7 @@ ${response.data.errors?.length > 0 ? '���~�Ա�:\n' + response.data.err
     return groups
   }, {} as Record<string, ProductGroup>)
 
-  // ���C�Ӥ��ժ����~���ؤo�Ƨ�
+  // 對每個分組的產品按尺寸排序
   Object.values(groupedProducts).forEach(group => {
     group.products = sortProductsBySize(group.products)
   })
@@ -551,11 +607,11 @@ ${response.data.errors?.length > 0 ? '���~�Ա�:\n' + response.data.err
   return (
     <div className="page">
       <div className="header">
-        <h1>�w�s�޲z</h1>
+        <h1>庫存管理</h1>
         {isMobile && (
           <div style={{ marginTop: 12 }}>
             <button className="btn" onClick={() => setMobileControlsOpen(o => !o)}>
-              {mobileControlsOpen ? '���þާ@' : '���ܾާ@'}
+              {mobileControlsOpen ? '隱藏功能' : '顯示功能'}
             </button>
           </div>
         )}
@@ -565,7 +621,7 @@ ${response.data.errors?.length > 0 ? '���~�Ա�:\n' + response.data.err
         <div className="toolbar">
           <div className="filters">
             <select value={selectedType} onChange={e => setSelectedType(e.target.value)}>
-              <option value="">�Ҧ����~����</option>
+              <option value="">所有產品類型</option>
               {productTypes.map(type => (
                 <option key={type._id} value={type.name}>{type.name}</option>
               ))}
@@ -573,45 +629,45 @@ ${response.data.errors?.length > 0 ? '���~�Ա�:\n' + response.data.err
             
             <input
               type="text"
-              placeholder="�j�M���~..."
+              placeholder="搜索商品..."
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}
             />
 
             <input
               type="text"
-              placeholder="�j�M�ؤo..."
+              placeholder="搜索尺寸..."
               value={sizeSearchTerm}
               onChange={e => setSizeSearchTerm(e.target.value)}
             />
           </div>
           
           <div className="spacer" />
-          <button className="btn" onClick={exportToExcel}>�ɥXExcel</button>
-          <button className="btn" onClick={() => setExcelImportOpen(true)}>�ɤJExcel</button>
-          <button className="btn" onClick={() => setClearOpen(true)}>�M�s</button>
-          <button className="btn" onClick={() => setImportOpen(true)}>�ɤJ�w�s</button>
-          <button className="btn" onClick={() => setTransferOpen(true)}>��������</button>
+          <button className="btn" onClick={exportToExcel}>導出Excel</button>
+          <button className="btn" onClick={() => setExcelImportOpen(true)}>導入Excel</button>
+          <button className="btn" onClick={() => setClearOpen(true)}>清除</button>
+          <button className="btn" onClick={() => setImportOpen(true)}>導入庫存</button>
+          <button className="btn" onClick={() => setTransferOpen(true)}>庫存轉移</button>
         </div>
       )}
 
-      {/* �C���ϰ��G�����Υd�����ϡA�ୱ�Ϊ��� */}
+      {/* 表格容器：包含標題和數據行，響應式設計 */}
       <div className="table-container">
         <table>
           <thead>
             <tr>
-              <th>���~</th>
-              <th>�s��</th>
-              <th>�ؤo</th>
+              <th>商品</th>
+              <th>編號</th>
+              <th>尺寸</th>
               {locations.map(location => (
                 <th key={location._id} onClick={() => handleSort(location._id)} style={{ cursor: 'pointer' }}>
                   {location.name} {getSortIcon(location._id)}
                 </th>
               ))}
               <th onClick={() => handleSort('total')} style={{ cursor: 'pointer' }}>
-                �`�p {getSortIcon('total')}
+                總計 {getSortIcon('total')}
               </th>
-              <th>�ާ@</th>
+              <th>操作</th>
             </tr>
           </thead>
           <tbody>
@@ -619,29 +675,122 @@ ${response.data.errors?.length > 0 ? '���~�Ա�:\n' + response.data.err
               <React.Fragment key={group.key}>
                 <tr className="group-header" style={{ borderBottom: '2px solid #dc2626' }}>
                   <td colSpan={locations.length + 3} style={{ cursor: 'pointer' }} onClick={() => toggleGroup(group.key)}>
-                    {expandedGroups.has(group.key) ? '��' : '?'} {group.name} ({group.productCode})
+                    {expandedGroups.has(group.key) ? '▼' : '▶'} {group.name} ({group.productCode})
                   </td>
                   <td style={{ textAlign: 'center' }}>
-                    <button 
-                      className="btn danger" 
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        handleDeleteGroup(group)
-                      }}
-                      style={{ 
-                        backgroundColor: '#dc2626', 
-                        color: 'white', 
-                        border: 'none',
-                        padding: '4px 8px',
-                        borderRadius: '4px',
-                        cursor: 'pointer',
-                        fontSize: '12px'
-                      }}
-                    >
-                      �R��
-                    </button>
+                    <div style={{ display: 'flex', gap: '4px', justifyContent: 'center' }}>
+                      {editingGroup === group.key ? (
+                        // 編輯模式
+                        <>
+                          <button 
+                            className="btn" 
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleSaveGroupEdit(group)
+                            }}
+                            style={{ 
+                              backgroundColor: '#10b981', 
+                              color: 'white', 
+                              border: 'none',
+                              padding: '4px 8px',
+                              borderRadius: '4px',
+                              cursor: 'pointer',
+                              fontSize: '12px'
+                            }}
+                          >
+                            保存
+                          </button>
+                          <button 
+                            className="btn" 
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleCancelGroupEdit()
+                            }}
+                            style={{ 
+                              backgroundColor: '#6b7280', 
+                              color: 'white', 
+                              border: 'none',
+                              padding: '4px 8px',
+                              borderRadius: '4px',
+                              cursor: 'pointer',
+                              fontSize: '12px'
+                            }}
+                          >
+                            取消
+                          </button>
+                        </>
+                      ) : (
+                        // 正常模式
+                        <>
+                          <button 
+                            className="btn" 
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleEditGroup(group)
+                            }}
+                            style={{ 
+                              backgroundColor: '#3b82f6', 
+                              color: 'white', 
+                              border: 'none',
+                              padding: '4px 8px',
+                              borderRadius: '4px',
+                              cursor: 'pointer',
+                              fontSize: '12px'
+                            }}
+                          >
+                            編輯
+                          </button>
+                          <button 
+                            className="btn danger" 
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleDeleteGroup(group)
+                            }}
+                            style={{ 
+                              backgroundColor: '#dc2626', 
+                              color: 'white', 
+                              border: 'none',
+                              padding: '4px 8px',
+                              borderRadius: '4px',
+                              cursor: 'pointer',
+                              fontSize: '12px'
+                            }}
+                          >
+                            刪除
+                          </button>
+                        </>
+                      )}
+                    </div>
                   </td>
                 </tr>
+                {expandedGroups.has(group.key) && (
+                  editingGroup === group.key ? (
+                    // 編輯模式 - 顯示編輯表單
+                    <tr style={{ backgroundColor: '#f3f4f6' }}>
+                      <td>
+                        <input
+                          type="text"
+                          value={groupEditForm.name}
+                          onChange={e => setGroupEditForm(prev => ({ ...prev, name: e.target.value }))}
+                          placeholder="產品名稱"
+                          style={{ width: '100%', padding: '4px 8px', border: '1px solid #d1d5db', borderRadius: '4px' }}
+                        />
+                      </td>
+                      <td>
+                        <input
+                          type="text"
+                          value={groupEditForm.productCode}
+                          onChange={e => setGroupEditForm(prev => ({ ...prev, productCode: e.target.value }))}
+                          placeholder="產品編號"
+                          style={{ width: '100%', padding: '4px 8px', border: '1px solid #d1d5db', borderRadius: '4px' }}
+                        />
+                      </td>
+                      <td colSpan={locations.length + 2} style={{ textAlign: 'center', color: '#6b7280' }}>
+                        編輯模式 - 修改產品名稱和編號將更新該組內所有商品
+                      </td>
+                    </tr>
+                  ) : null
+                )}
                 {expandedGroups.has(group.key) && group.products.map((product: Product, productIndex) => (
                   <tr 
                     key={product._id} 
@@ -650,7 +799,7 @@ ${response.data.errors?.length > 0 ? '���~�Ա�:\n' + response.data.err
                     }}
                   >
                     {editingProduct === product._id ? (
-                      // �s���Ҧ�
+                      // 編輯模式
                       <>
                         <td>
                           <input
@@ -698,13 +847,13 @@ ${response.data.errors?.length > 0 ? '���~�Ա�:\n' + response.data.err
                         <td>{(editForm.inventories || []).reduce((sum, inv) => sum + inv.quantity, 0)}</td>
                         <td>
                           <div className="actions">
-                            <button className="btn" onClick={() => handleSaveEdit(product._id)}>�O�s</button>
-                            <button className="btn secondary" onClick={handleCancelEdit}>����</button>
+                            <button className="btn" onClick={() => handleSaveEdit(product._id)}>保存</button>
+                            <button className="btn secondary" onClick={handleCancelEdit}>取消</button>
                           </div>
                         </td>
                       </>
                     ) : (
-                      // ���ܼҦ� - �]�t�������ܥ\��
+                      // 正常模式 - 包含高光顯示功能
                       <>
                         <td className="right">{product.name}</td>
                         <td>{product.productCode}</td>
@@ -723,8 +872,8 @@ ${response.data.errors?.length > 0 ? '���~�Ա�:\n' + response.data.err
                         <td>{getTotalQuantity(product)}</td>
                         <td>
                           <div className="actions">
-                            <button className="btn ghost" onClick={() => handleEdit(product)}>�s��</button>
-                            <button className="btn ghost" onClick={() => handleDelete(product)}>�R��</button>
+                            <button className="btn ghost" onClick={() => handleEdit(product)}>編輯</button>
+                            <button className="btn ghost" onClick={() => handleDelete(product)}>刪除</button>
                           </div>
                         </td>
                       </>
@@ -737,113 +886,113 @@ ${response.data.errors?.length > 0 ? '���~�Ա�:\n' + response.data.err
         </table>
       </div>
 
-      {/* �ɤJ�w�s�u�� */}
+      {/* 導入庫存彈窗 */}
       {importOpen && (
         <div className="modal-backdrop">
           <div className="modal">
-            <div className="header">�ɤJ�w�s</div>
+            <div className="header">導入庫存</div>
             <div className="body">
               <div>
-                <p>���ܪ����G</p>
+                <p>選擇地點：</p>
                 <select value={importState.locationId} onChange={e => setImportState(s => ({ ...s, locationId: e.target.value }))}>
-                  <option value="">�п��ܪ���</option>
+                  <option value="">請選擇地點</option>
                   {locations.map(location => (
                     <option key={location._id} value={location._id}>{location.name}</option>
                   ))}
                 </select>
               </div>
               <div>
-                <p>����PDF�ɮסG</p>
+                <p>選擇PDF文件：</p>
                 <input multiple type="file" accept=".pdf" onChange={e => setImportState(s => ({ ...s, files: Array.from(e.target.files || []) }))} />
               </div>
             </div>
             <div className="footer">
-              <button className="btn secondary" onClick={() => setImportOpen(false)}>����</button>
-              <button className="btn" onClick={() => doImport('incoming')}>�i�f</button>
-              <button className="btn" onClick={() => doImport('outgoing')}>�X�f</button>
+              <button className="btn secondary" onClick={() => setImportOpen(false)}>取消</button>
+              <button className="btn" onClick={() => doImport('incoming')}>進貨</button>
+              <button className="btn" onClick={() => doImport('outgoing')}>出貨</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* �������ռu�� */}
+      {/* 庫存轉移彈窗 */}
       {transferOpen && (
         <div className="modal-backdrop">
           <div className="modal">
-            <div className="header">��������</div>
+            <div className="header">庫存轉移</div>
             <div className="body">
               <div>
-                <p>�ӷ������G</p>
+                <p>來源地點：</p>
                 <select value={transferState.fromLocationId} onChange={e => setTransferState(s => ({ ...s, fromLocationId: e.target.value }))}>
-                  <option value="">�п��ܨӷ�����</option>
+                  <option value="">請選擇來源地點</option>
                   {locations.map(location => (
                     <option key={location._id} value={location._id}>{location.name}</option>
                   ))}
                 </select>
               </div>
               <div>
-                <p>�ؼЪ����G</p>
+                <p>目標地點：</p>
                 <select value={transferState.toLocationId} onChange={e => setTransferState(s => ({ ...s, toLocationId: e.target.value }))}>
-                  <option value="">�п��ܥؼЪ���</option>
+                  <option value="">請選擇目標地點</option>
                   {locations.map(location => (
                     <option key={location._id} value={location._id}>{location.name}</option>
                   ))}
                 </select>
               </div>
               <div>
-                <p>����PDF�ɮסG</p>
+                <p>選擇PDF文件：</p>
                 <input multiple type="file" accept=".pdf" onChange={e => setTransferState(s => ({ ...s, files: Array.from(e.target.files || []) }))} />
               </div>
             </div>
             <div className="footer">
-              <button className="btn secondary" onClick={() => setTransferOpen(false)}>����</button>
-              <button className="btn" onClick={doTransfer}>�i��</button>
+              <button className="btn secondary" onClick={() => setTransferOpen(false)}>取消</button>
+              <button className="btn" onClick={doTransfer}>開始</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Excel�ɤJ�u�� */}
+      {/* Excel導入彈窗 */}
       {excelImportOpen && (
         <div className="modal-backdrop">
           <div className="modal">
-            <div className="header">�ɤJExcel</div>
+            <div className="header">導入Excel</div>
             <div className="body">
               <div style={{ marginBottom: '16px' }}>
-                <p><strong>Excel�榡�n�D�G</strong></p>
+                <p><strong>Excel格式要求：</strong></p>
                 <ul style={{ margin: '8px 0', paddingLeft: '20px' }}>
-                  <li>�����]�t�C�G�ӫ~�Ա��B�����B�ӫ~�ﶵ�B�[���B�W�J�B���K���B���ԡB��?��</li>
-                  <li>�ӫ~�Ա��G���~�W�١]���������G�ӫ~�W�١B���~�W�١B���~�B�W�١B�ӫ~�^</li>
-                  <li>�����G���~�s���]���������G���~�s���B�s���B�f���BSKU�B���~�N�X�^</li>
-                  <li>�ӫ~�ﶵ�G�ؤo�]���������G�ؤo�B�W���B�ﶵ�B�ؽX�^</li>
-                  <li>�U�����C�G�������w�s�ƶq�]���������G�[�����B�W�J�����^</li>
+                  <li>列順序：產品編號、商品名稱、產品類型、尺寸、進貨、上架、庫存調、門市、總?庫</li>
+                  <li>產品編號：商品編號（例如：商品編號、產品編號、商品、編號、產品）</li>
+                  <li>商品名稱：商品名稱（例如：商品名稱、名稱、商品、名稱、產品）</li>
+                  <li>產品類型：尺寸（例如：尺寸、大小、規格、型號）</li>
+                  <li>下各列：對應庫存數量（例如：進貨數量、上架數量）</li>
                 </ul>
               </div>
               <div>
-                <p>����Excel�ɮסG</p>
+                <p>選擇Excel文件：</p>
                 <input multiple type="file" accept=".xlsx,.xls" onChange={e => setExcelImportState(s => ({ ...s, files: Array.from(e.target.files || []) }))} />
               </div>
             </div>
             <div className="footer">
-              <button className="btn secondary" onClick={() => setExcelImportOpen(false)}>����</button>
-              <button className="btn" onClick={doExcelImport}>�i���ɤJ</button>
+              <button className="btn secondary" onClick={() => setExcelImportOpen(false)}>取消</button>
+              <button className="btn" onClick={doExcelImport}>開始導入</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* �M�s�T�{���ܮ� */}
+      {/* 清除確認彈窗 */}
       {clearOpen && (
         <div className="modal-backdrop">
           <div className="modal">
-            <div className="header">�M�s�Ҧ��w�s�ƶq</div>
+            <div className="header">清除所有庫存數量</div>
             <div className="body">
-              <p>?? ĵ�i�G���ާ@�N���Ҧ��w�s�ƶq�]��0�A���ާ@�L�k�M�P�I</p>
-              <p>�T�w�n�~���ܡH</p>
+              <p>⚠️ 警告：此操作將清除所有庫存數量（設為0），此操作無法撤銷！</p>
+              <p>確定要繼續嗎？</p>
             </div>
             <div className="footer">
-              <button className="btn secondary" onClick={() => setClearOpen(false)}>����</button>
-              <button className="btn danger" onClick={doClearAll}>�T�w�M�s</button>
+              <button className="btn secondary" onClick={() => setClearOpen(false)}>取消</button>
+              <button className="btn danger" onClick={doClearAll}>確定清除</button>
             </div>
           </div>
         </div>
