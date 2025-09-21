@@ -1,8 +1,8 @@
-ï»¿import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 import api from '../api'
 import * as XLSX from 'xlsx'
 
-// å®šç¾©ä»‹é¢
+// ©w¸q¤¶­±
 interface Location {
   _id: string
   name: string
@@ -14,7 +14,7 @@ interface ProductType {
 }
 
 interface Inventory {
-  locationId: string | { _id: string; name: string } | null // æ·»åŠ  null é¡å‹
+  locationId: string | { _id: string; name: string } | null // ²K¥[ null Ãş«¬
   quantity: number
 }
 
@@ -43,7 +43,7 @@ export default function Inventory() {
   const [filteredProducts, setFilteredProducts] = useState<Product[]>([])
   const [selectedType, setSelectedType] = useState<string>('')
   const [searchTerm, setSearchTerm] = useState('')
-  const [sizeSearchTerm, setSizeSearchTerm] = useState('') // æ–°æ·»åŠ é€™è¡Œ
+  const [sizeSearchTerm, setSizeSearchTerm] = useState('') // ·s²K¥[³o¦æ
   const [sortBy, setSortBy] = useState<string>('')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
@@ -52,7 +52,7 @@ export default function Inventory() {
   const [isMobile, setIsMobile] = useState<boolean>(false)
   const [mobileControlsOpen, setMobileControlsOpen] = useState<boolean>(false)
 
-  // æ–°å¢ç¾¤çµ„ç·¨è¼¯ç‹€æ…‹
+  // ·s¼W¸s²Õ½s¿èª¬ºA
   const [editingGroup, setEditingGroup] = useState<string | null>(null)
   const [groupEditForm, setGroupEditForm] = useState<{
     name: string
@@ -74,21 +74,21 @@ export default function Inventory() {
     }
   }, [])
   
-  // å°å…¥åº«å­˜ç‹€æ…‹
+  // ¾É¤J®w¦sª¬ºA
   const [importOpen, setImportOpen] = useState(false)
   const [importState, setImportState] = useState<{ locationId: string; files: File[] }>({ locationId: '', files: [] })
   
-  // è½‰ç§»åº«å­˜ç‹€æ…‹
+  // Âà²¾®w¦sª¬ºA
   const [transferOpen, setTransferOpen] = useState(false)
   const [transferState, setTransferState] = useState<{ fromLocationId: string; toLocationId: string; files: File[] }>({ fromLocationId: '', toLocationId: '', files: [] })
   
-  // Excelå°å…¥ç‹€æ…‹
+  // Excel¾É¤Jª¬ºA
   const [excelImportOpen, setExcelImportOpen] = useState(false)
   const [excelImportState, setExcelImportState] = useState<{ files: File[] }>({ files: [] })
 
-  // æ¸…é›¶ç‹€æ…‹
+  // ²M¹sª¬ºA
   const [clearOpen, setClearOpen] = useState(false)
-  // ç·¨è¼¯ç‹€æ…‹
+  // ½s¿èª¬ºA
   const [editingProduct, setEditingProduct] = useState<string | null>(null)
   const [editForm, setEditForm] = useState<{
     name: string
@@ -108,21 +108,21 @@ export default function Inventory() {
 
   useEffect(() => {
     api.get('/locations').then((r: any) => {
-      // æŒ‰ç…§å›ºå®šé †åºæ’åˆ—ï¼šé€²è²¨ã€ä¸Šæ¶ã€åº«å­˜èª¿ã€è§€å¡˜ã€ç£ä»”ã€è”æè§’ã€å…ƒæœ—ã€åœ‹å…§å€‰ã€ç¸½åº«
-      const order = ['é€²è²¨', 'ä¸Šæ¶', 'åº«å­˜èª¿', 'è§€å¡˜', 'ç£ä»”', 'è”æè§’', 'å…ƒæœ—', 'åœ‹å…§å€‰', 'ç¸½åº«'];
+      // «ö·Ó©T©w¶¶§Ç±Æ¦C¡G¶i³f¡B¤W¬[¡B®w¦s½Õ¡BÆ[¶í¡BÆW¥J¡B¯ïªK¨¤¡B¤¸®Ô¡B°ê¤º­Ü¡BÁ`®w
+      const order = ['¶i³f', '¤W¬[', '®w¦s½Õ', 'Æ[¶í', 'ÆW¥J', '¯ïªK¨¤', '¤¸®Ô', '°ê¤º­Ü', 'Á`®w'];
       const sortedLocations = r.data.sort((a: Location, b: Location) => {
         const aIndex = order.indexOf(a.name);
         const bIndex = order.indexOf(b.name);
         return aIndex - bIndex;
       });
-      setLocations(sortedLocations);
+      console.log(" ±Æ§Ç«áªº¦aÂI:\, sortedLocations.map(l => l.name)); setLocations(sortedLocations);
     })
     loadProductTypes()
   }, [])
 
   useEffect(() => {
     load()
-  }, [products, selectedType, searchTerm, sizeSearchTerm, sortBy, sortOrder]) // æ·»åŠ  sizeSearchTerm
+  }, [products, selectedType, searchTerm, sizeSearchTerm, sortBy, sortOrder]) // ²K¥[ sizeSearchTerm
 
   async function loadProductTypes() {
       const response = await api.get('/product-types')
@@ -131,12 +131,12 @@ export default function Inventory() {
 
   async function load() {
     const response = await api.get('/products')
-    // ç¢ºä¿è¿”å›çš„æ•¸æ“šçµæ§‹æ˜¯ { products: [...], pagination: {...} }
+    // ½T«Oªğ¦^ªº¼Æ¾Úµ²ºc¬O { products: [...], pagination: {...} }
     setProducts(response.data.products || [])
   }
 
   useEffect(() => {
-    let filtered = products || [] // æ·»åŠ ç©ºå€¼æª¢æŸ¥
+    let filtered = products || [] // ²K¥[ªÅ­ÈÀË¬d
 
     // Filter by product type
     if (selectedType) {
@@ -152,7 +152,7 @@ export default function Inventory() {
       )
     }
 
-    // Filter by size search term - æ­£å‰‡æ³•å‰‡ï¼ˆéƒ¨åˆ†åŒ¹é…ï¼‰
+    // Filter by size search term - ¥¿«hªk«h¡]³¡¤À¤Ç°t¡^
     if (sizeSearchTerm) {
       filtered = filtered.filter(p => 
         getProductSize(p).toLowerCase().includes(sizeSearchTerm.toLowerCase())
@@ -191,7 +191,7 @@ export default function Inventory() {
     }
 
     setFilteredProducts(filtered)
-  }, [products, selectedType, searchTerm, sizeSearchTerm, sortBy, sortOrder]) // æ·»åŠ  sizeSearchTerm
+  }, [products, selectedType, searchTerm, sizeSearchTerm, sortBy, sortOrder]) // ²K¥[ sizeSearchTerm
 
   function getProductSize(product: Product): string {
     if (product.sizes && product.sizes.length > 0) {
@@ -200,49 +200,49 @@ export default function Inventory() {
     return product.size || ''
   }
 
-  // æ–°å¢ç”¢å“å°ºå¯¸æ’åºé‚è¼¯
+  // ·s¼W²£«~¤Ø¤o±Æ§ÇÅŞ¿è
   function sortProductsBySize(products: Product[]): Product[] {
     return products.sort((a, b) => {
       const aSize = getProductSize(a)
       const bSize = getProductSize(b)
       
-      // æå–æ•¸å­—é€²è¡Œæ’åº
+      // ´£¨ú¼Æ¦r¶i¦æ±Æ§Ç
       const aNumbers = aSize.match(/\d+/g) || []
       const bNumbers = bSize.match(/\d+/g) || []
       
-      // å¦‚æœæœ‰æ•¸å­—ï¼Œæ¯”è¼ƒç¬¬ä¸€å€‹æ•¸å­—
+      // ¦pªG¦³¼Æ¦r¡A¤ñ¸û²Ä¤@­Ó¼Æ¦r
       if (aNumbers.length > 0 && bNumbers.length > 0) {
         const aNum = parseInt(aNumbers[0] || '0')
         const bNum = parseInt(bNumbers[0] || '0')
         return aNum - bNum
       }
       
-      // å¦‚æœåªæœ‰ä¸€å€‹æœ‰æ•¸å­—ï¼Œæ•¸å­—åœ¨å‰
+      // ¦pªG¥u¦³¤@­Ó¦³¼Æ¦r¡A¼Æ¦r¦b«e
       if (aNumbers.length > 0 && bNumbers.length === 0) return -1
       if (aNumbers.length === 0 && bNumbers.length > 0) return 1
       
-      // éƒ½æ²’æ•¸å­—ï¼ŒæŒ‰å­—æ¯æ’åº
+      // ³£¨S¼Æ¦r¡A«ö¦r¥À±Æ§Ç
       return aSize.localeCompare(bSize)
     })
   }
 
-  // ç¢ºä¿æ·»åŠ  null æª¢æŸ¥
+  // ½T«O²K¥[ null ÀË¬d
   function getQuantity(product: Product, locationId: string): number {
     if (!product.inventories || !Array.isArray(product.inventories)) {
       return 0
     }
     const inventory = product.inventories.find(inv => {
-      // æª¢æŸ¥ locationId æ˜¯å¦ç‚º null æˆ– undefined
+      // ÀË¬d locationId ¬O§_¬° null ©Î undefined
       if (!inv.locationId) {
         return false
       }
       
-      // è™•ç† populate å¾Œçš„ locationId å°è±¡
+      // ³B²z populate «áªº locationId ¹ï¶H
       if (typeof inv.locationId === 'object' && inv.locationId !== null) {
         return inv.locationId._id === locationId || inv.locationId._id.toString() === locationId
       }
       
-      // è™•ç†å­—ç¬¦ä¸² ObjectId çš„æƒ…æ³ï¼Œæ·»åŠ  null æª¢æŸ¥
+      // ³B²z¦r²Å¦ê ObjectId ªº±¡ªp¡A²K¥[ null ÀË¬d
       if (inv.locationId && typeof inv.locationId === 'string') {
         return inv.locationId === locationId || inv.locationId.toString() === locationId
       }
@@ -270,10 +270,10 @@ export default function Inventory() {
 
   function getSortIcon(column: string): string {
     if (sortBy !== column) return '?'
-    return sortOrder === 'asc' ? 'â†‘' : 'â†“'
+    return sortOrder === 'asc' ? '¡ô' : '¡õ'
   }
 
-  // æ–°å¢ç¾¤çµ„ç·¨è¼¯åŠŸèƒ½
+  // ·s¼W¸s²Õ½s¿è¥\¯à
   function handleEditGroup(group: ProductGroup) {
     setEditingGroup(group.key)
     setGroupEditForm({
@@ -290,10 +290,10 @@ export default function Inventory() {
     })
   }
 
-  // æ–°å¢ç¾¤çµ„ç·¨è¼¯ä¿å­˜ - æ‰¹é‡æ›´æ–°æ‰€æœ‰ç”¢å“
+  // ·s¼W¸s²Õ½s¿è«O¦s - §å¶q§ó·s©Ò¦³²£«~
   async function handleSaveGroupEdit(group: ProductGroup) {
     try {
-      // æ‰¹é‡æ›´æ–°è©²ç¾¤çµ„å…§æ‰€æœ‰ç”¢å“çš„åç¨±å’Œç”¢å“ä»£ç¢¼
+      // §å¶q§ó·s¸Ó¸s²Õ¤º©Ò¦³²£«~ªº¦WºÙ©M²£«~¥N½X
       const updatePromises = group.products.map(product => 
         api.put(`/products/${product._id}`, {
           name: groupEditForm.name,
@@ -311,19 +311,19 @@ export default function Inventory() {
       )
       
       await Promise.all(updatePromises)
-      alert(`ç”¢å“çµ„ "${group.name}" æ›´æ–°æˆåŠŸï¼å…±æ›´æ–° ${group.products.length} å€‹ç”¢å“`)
+      alert(`²£«~²Õ "${group.name}" §ó·s¦¨¥\¡I¦@§ó·s ${group.products.length} ­Ó²£«~`)
       setEditingGroup(null)
       await load()
     } catch (error: any) {
-      alert(`æ›´æ–°å¤±æ•—ï¼š${error.response?.data?.message || error.message}`)
+      alert(`§ó·s¥¢±Ñ¡G${error.response?.data?.message || error.message}`)
     }
   }
 
-  // Excelå°å‡ºåŠŸèƒ½ï¼ˆåŒ…å«åˆ†çµ„å’Œæ’åºï¼‰
+  // Excel¾É¥X¥\¯à¡]¥]§t¤À²Õ©M±Æ§Ç¡^
   function exportToExcel() {
     try {
       const exportData = []
-      const headers = ['ç”¢å“', 'å•†å“', 'å°ºå¯¸', 'é€²è²¨', 'ä¸Šæ¶', 'åº«å­˜èª¿', 'è§€å¡˜', 'ç£ä»”', 'è”æè§’', 'å…ƒæœ—', 'åœ‹å…§å€‰', 'ç¸½åº«']
+      const headers = ['²£«~', '°Ó«~', '¤Ø¤o', '¶i³f', '¤W¬[', '®w¦s½Õ', 'Æ[¶í', 'ÆW¥J', '¯ïªK¨¤', '¤¸®Ô', '°ê¤º­Ü', 'Á`®w']
       exportData.push(headers)
       Object.values(groupedProducts).forEach(group => {
         const sortedProducts = sortProductsBySize([...group.products])
@@ -332,41 +332,41 @@ export default function Inventory() {
             product.productCode,
             product.name,
             getProductSize(product),
-            getQuantity(product, locations.find(l => l.name === 'é€²è²¨')?._id || ''),
-            getQuantity(product, locations.find(l => l.name === 'ä¸Šæ¶')?._id || ''),
-            getQuantity(product, locations.find(l => l.name === 'åº«å­˜èª¿')?._id || ''),
-            getQuantity(product, locations.find(l => l.name === 'è§€å¡˜')?._id || ''),
-            getQuantity(product, locations.find(l => l.name === 'ç£ä»”')?._id || ''),
-            getQuantity(product, locations.find(l => l.name === 'è”æè§’')?._id || ''),
-            getQuantity(product, locations.find(l => l.name === 'å…ƒæœ—')?._id || ''),
-            getQuantity(product, locations.find(l => l.name === 'åœ‹å…§å€‰')?._id || ''),
-            getQuantity(product, locations.find(l => l.name === 'ç¸½åº«')?._id || '')
+            getQuantity(product, locations.find(l => l.name === '¶i³f')?._id || ''),
+            getQuantity(product, locations.find(l => l.name === '¤W¬[')?._id || ''),
+            getQuantity(product, locations.find(l => l.name === '®w¦s½Õ')?._id || ''),
+            getQuantity(product, locations.find(l => l.name === 'Æ[¶í')?._id || ''),
+            getQuantity(product, locations.find(l => l.name === 'ÆW¥J')?._id || ''),
+            getQuantity(product, locations.find(l => l.name === '¯ïªK¨¤')?._id || ''),
+            getQuantity(product, locations.find(l => l.name === '¤¸®Ô')?._id || ''),
+            getQuantity(product, locations.find(l => l.name === '°ê¤º­Ü')?._id || ''),
+            getQuantity(product, locations.find(l => l.name === 'Á`®w')?._id || '')
           ]
           exportData.push(row)
         })
       })
       const ws = XLSX.utils.aoa_to_sheet(exportData)
       const wb = XLSX.utils.book_new()
-      XLSX.utils.book_append_sheet(wb, ws, 'åº«å­˜ç®¡ç†')
+      XLSX.utils.book_append_sheet(wb, ws, '®w¦sºŞ²z')
       const now = new Date()
       const timestamp = now.toISOString().slice(0, 19).replace(/:/g, '-')
-      const filename = `åº«å­˜ç®¡ç†_${timestamp}.xlsx`
+      const filename = `®w¦sºŞ²z_${timestamp}.xlsx`
       XLSX.writeFile(wb, filename)
-      alert('Excelå°å‡ºæˆåŠŸï¼')
+      alert('Excel¾É¥X¦¨¥\¡I')
     } catch (error) {
-      console.error('å°å‡ºExceléŒ¯èª¤:', error)
-      alert('å°å‡ºExcelå¤±æ•—ï¼Œè«‹é‡è©¦')
+      console.error('¾É¥XExcel¿ù»~:', error)
+      alert('¾É¥XExcel¥¢±Ñ¡A½Ğ­«¸Õ')
     }
   }
 
-  // å°å…¥è™•ç†å‡½æ•¸ï¼ˆdoImport / doTransfer / doExcelImport / doClearAll / ç·¨è¼¯ï¼‰
+  // ¾É¤J³B²z¨ç¼Æ¡]doImport / doTransfer / doExcelImport / doClearAll / ½s¿è¡^
   async function doImport(type: 'incoming' | 'outgoing') {
     if (importState.locationId === '') {
-      alert('è«‹é¸æ“‡åœ°é»')
+      alert('½Ğ¿ï¾Ü¦aÂI')
       return
     }
     if (importState.files.length === 0) {
-      alert('è«‹é¸æ“‡PDFæ–‡ä»¶')
+      alert('½Ğ¿ï¾ÜPDF¤å¥ó')
       return
     }
     
@@ -375,24 +375,24 @@ export default function Inventory() {
       form.append('locationId', importState.locationId)
       importState.files.forEach(f => form.append('files', f))
       
-      // ç¢ºä¿æ ¹æ“štypeèª¿ç”¨æ­£ç¢ºçš„APIç«¯é»
+      // ½T«O®Ú¾Útype½Õ¥Î¥¿½TªºAPIºİÂI
       const response = await api.post(`/import/${type}`, form)
-      alert(`${type === 'incoming' ? 'é€²è²¨' : 'å‡ºè²¨'}æˆåŠŸï¼\nè™•ç†:${response.data.processed}  åŒ¹é…:${response.data.matched}  æ–°å¢:${response.data.created}  æ›´æ–°:${response.data.updated}\næœªæ‰¾åˆ°: ${response.data.notFound?.join(', ') || 'ç„¡'}`)
+      alert(`${type === 'incoming' ? '¶i³f' : '¥X³f'}¦¨¥\¡I\n³B²z:${response.data.processed}  ¤Ç°t:${response.data.matched}  ·s¼W:${response.data.created}  §ó·s:${response.data.updated}\n¥¼§ä¨ì: ${response.data.notFound?.join(', ') || 'µL'}`)
       setImportOpen(false)
       await load()
     } catch (error: any) {
-      alert(`${type === 'incoming' ? 'é€²è²¨' : 'å‡ºè²¨'}å¤±æ•—ï¼š${error.response?.data?.message || error.message}`)
+      alert(`${type === 'incoming' ? '¶i³f' : '¥X³f'}¥¢±Ñ¡G${error.response?.data?.message || error.message}`)
     }
   }
 
-  // è½‰ç§»åº«å­˜è™•ç†
+  // Âà²¾®w¦s³B²z
   async function doTransfer() {
     if (transferState.fromLocationId === '' || transferState.toLocationId === '') {
-      alert('è«‹é¸æ“‡ä¾†æºåœ°é»å’Œç›®æ¨™åœ°é»')
+      alert('½Ğ¿ï¾Ü¨Ó·½¦aÂI©M¥Ø¼Ğ¦aÂI')
       return
     }
     if (transferState.files.length === 0) {
-      alert('è«‹é¸æ“‡PDFæ–‡ä»¶')
+      alert('½Ğ¿ï¾ÜPDF¤å¥ó')
       return
     }
     
@@ -403,66 +403,66 @@ export default function Inventory() {
       transferState.files.forEach(f => form.append('files', f))
       
       const response = await api.post('/import/transfer', form)
-      alert(`è½‰ç§»åº«å­˜æˆåŠŸï¼\nè™•ç†:${response.data.processed}  åŒ¹é…:${response.data.matched}  æ›´æ–°:${response.data.updated}\næœªæ‰¾åˆ°: ${response.data.notFound?.join(', ') || 'ç„¡'}`)
+      alert(`Âà²¾®w¦s¦¨¥\¡I\n³B²z:${response.data.processed}  ¤Ç°t:${response.data.matched}  §ó·s:${response.data.updated}\n¥¼§ä¨ì: ${response.data.notFound?.join(', ') || 'µL'}`)
       setTransferOpen(false)
       await load()
     } catch (error: any) {
-      alert(`è½‰ç§»åº«å­˜å¤±æ•—ï¼š${error.response?.data?.message || error.message}`)
+      alert(`Âà²¾®w¦s¥¢±Ñ¡G${error.response?.data?.message || error.message}`)
     }
   }
 
-  // Excelå°å…¥è™•ç† - æ·»åŠ éŒ¯èª¤è™•ç†
+  // Excel¾É¤J³B²z - ²K¥[¿ù»~³B²z
   async function doExcelImport() {
     if (excelImportState.files.length === 0) {
-      alert('è«‹é¸æ“‡Excelæ–‡ä»¶')
+      alert('½Ğ¿ï¾ÜExcel¤å¥ó')
       return
     }
     
-    // æª¢æŸ¥æ–‡ä»¶å¤§å°
+    // ÀË¬d¤å¥ó¤j¤p
     const totalSize = excelImportState.files.reduce((sum, file) => sum + file.size, 0)
-    if (totalSize > 10 * 1024 * 1024) { // 10MBé™åˆ¶
-      alert('æ–‡ä»¶å¤ªå¤§è¶…é10MBï¼Œè«‹é¸æ“‡è¼ƒå°æ–‡ä»¶')
+    if (totalSize > 10 * 1024 * 1024) { // 10MB­­¨î
+      alert('¤å¥ó¤Ó¤j¶W¹L10MB¡A½Ğ¿ï¾Ü¸û¤p¤å¥ó')
       return
     }
     
     try {
-      // é¡¯ç¤ºè™•ç†ä¸­æ¶ˆæ¯
-      const processingMsg = 'æ­£åœ¨è™•ç†Excelæ–‡ä»¶ï¼Œè«‹ç¨å€™...\né€™å¯èƒ½éœ€è¦ä¸€äº›æ™‚é–“ï¼Œè«‹ä¸è¦é—œé–‰é é¢ã€‚'
+      // Åã¥Ü³B²z¤¤®ø®§
+      const processingMsg = '¥¿¦b³B²zExcel¤å¥ó¡A½Ğµy­Ô...\n³o¥i¯à»İ­n¤@¨Ç®É¶¡¡A½Ğ¤£­nÃö³¬­¶­±¡C'
       alert(processingMsg)
       
       const form = new FormData()
       excelImportState.files.forEach(f => form.append('files', f))
       
-      // è¨­ç½®è¼ƒé•·çš„è¶…æ™‚æ™‚é–“
+      // ³]¸m¸ûªøªº¶W®É®É¶¡
       const response = await api.post('/import/excel', form, {
-        timeout: 300000, // 5åˆ†é˜è¶…æ™‚
+        timeout: 300000, // 5¤ÀÄÁ¶W®É
         headers: {
           'Content-Type': 'multipart/form-data'
         }
       })
       
-      // é¡¯ç¤ºçµæœ
-      const resultMsg = `Excelå°å…¥æˆåŠŸï¼
+      // Åã¥Üµ²ªG
+      const resultMsg = `Excel¾É¤J¦¨¥\¡I
       
-è™•ç†æ–‡ä»¶: ${response.data.processed}
-åŒ¹é…å•†å“: ${response.data.matched}
-æ–°å¢å•†å“: ${response.data.created}
-æ›´æ–°å•†å“: ${response.data.updated}
-éŒ¯èª¤æ•¸é‡: ${response.data.errors?.length || 0}
+³B²z¤å¥ó: ${response.data.processed}
+¤Ç°t°Ó«~: ${response.data.matched}
+·s¼W°Ó«~: ${response.data.created}
+§ó·s°Ó«~: ${response.data.updated}
+¿ù»~¼Æ¶q: ${response.data.errors?.length || 0}
 
-${response.data.errors?.length > 0 ? 'éŒ¯èª¤è©³æƒ…:\n' + response.data.errors.slice(0, 5).join('\n') + (response.data.errors.length > 5 ? '\n...' : '') : 'ç„¡éŒ¯èª¤'}`
+${response.data.errors?.length > 0 ? '¿ù»~¸Ô±¡:\n' + response.data.errors.slice(0, 5).join('\n') + (response.data.errors.length > 5 ? '\n...' : '') : 'µL¿ù»~'}`
 
       alert(resultMsg)
       setExcelImportOpen(false)
       await load()
     } catch (error: any) {
-      console.error('Excelå°å…¥éŒ¯èª¤:', error)
+      console.error('Excel¾É¤J¿ù»~:', error)
       
-      let errorMsg = 'Excelå°å…¥å¤±æ•—ï¼š'
+      let errorMsg = 'Excel¾É¤J¥¢±Ñ¡G'
       if (error.code === 'ECONNABORTED') {
-        errorMsg += 'è™•ç†è¶…æ™‚ï¼Œè«‹é¸æ“‡è¼ƒå°æ–‡ä»¶æˆ–æª¢æŸ¥ç¶²çµ¡é€£æ¥'
+        errorMsg += '³B²z¶W®É¡A½Ğ¿ï¾Ü¸û¤p¤å¥ó©ÎÀË¬dºôµ¸³s±µ'
       } else if (error.response?.status === 413) {
-        errorMsg += 'æ–‡ä»¶å¤ªå¤§ï¼Œè«‹é¸æ“‡è¼ƒå°æ–‡ä»¶'
+        errorMsg += '¤å¥ó¤Ó¤j¡A½Ğ¿ï¾Ü¸û¤p¤å¥ó'
       } else if (error.response?.data?.message) {
         errorMsg += error.response.data.message
       } else {
@@ -473,30 +473,30 @@ ${response.data.errors?.length > 0 ? 'éŒ¯èª¤è©³æƒ…:\n' + response.data.errors.sl
     }
   }
 
-  // æ¸…é›¶æ‰€æœ‰åº«å­˜æ•¸é‡
+  // ²M¹s©Ò¦³®w¦s¼Æ¶q
   async function doClearAll() {
-    if (!confirm('ç¢ºå®šè¦æ¸…é›¶æ‰€æœ‰åº«å­˜å—ï¼Ÿæ­¤æ“ä½œç„¡æ³•æ’¤éŠ·ï¼')) {
+    if (!confirm('½T©w­n²M¹s©Ò¦³®w¦s¶Ü¡H¦¹¾Ş§@µLªkºM¾P¡I')) {
       return
     }
     
     try {
       const response = await api.post('/import/clear')
       
-      const resultMsg = `æ¸…é›¶æˆåŠŸï¼
+      const resultMsg = `²M¹s¦¨¥\¡I
       
-è™•ç†å•†å“: ${response.data.processed}
-æ›´æ–°å•†å“: ${response.data.updated}
-éŒ¯èª¤æ•¸é‡: ${response.data.errors?.length || 0}
+³B²z°Ó«~: ${response.data.processed}
+§ó·s°Ó«~: ${response.data.updated}
+¿ù»~¼Æ¶q: ${response.data.errors?.length || 0}
 
-${response.data.errors?.length > 0 ? 'éŒ¯èª¤è©³æƒ…:\n' + response.data.errors.slice(0, 5).join('\n') + (response.data.errors.length > 5 ? '\n...' : '') : 'ç„¡éŒ¯èª¤'}`
+${response.data.errors?.length > 0 ? '¿ù»~¸Ô±¡:\n' + response.data.errors.slice(0, 5).join('\n') + (response.data.errors.length > 5 ? '\n...' : '') : 'µL¿ù»~'}`
 
       alert(resultMsg)
       setClearOpen(false)
       await load()
     } catch (error: any) {
-      console.error('æ¸…é›¶éŒ¯èª¤:', error)
+      console.error('²M¹s¿ù»~:', error)
       
-      let errorMsg = 'æ¸…é›¶å¤±æ•—ï¼š'
+      let errorMsg = '²M¹s¥¢±Ñ¡G'
       if (error.response?.data?.message) {
         errorMsg += error.response.data.message
       } else {
@@ -507,7 +507,7 @@ ${response.data.errors?.length > 0 ? 'éŒ¯èª¤è©³æƒ…:\n' + response.data.errors.sl
     }
   }
 
-  // ç·¨è¼¯å’Œåˆªé™¤è™•ç†å‡½æ•¸ - æ·»åŠ éŒ¯èª¤è™•ç†
+  // ½s¿è©M§R°£³B²z¨ç¼Æ - ²K¥[¿ù»~³B²z
   function handleEdit(product: Product) {
     setEditingProduct(product._id)
     setEditForm({
@@ -540,45 +540,45 @@ ${response.data.errors?.length > 0 ? 'éŒ¯èª¤è©³æƒ…:\n' + response.data.errors.sl
   async function handleSaveEdit(productId: string) {
     try {
       const response = await api.put(`/products/${productId}`, editForm)
-      alert('å•†å“æ›´æ–°æˆåŠŸ')
+      alert('°Ó«~§ó·s¦¨¥\')
       setEditingProduct(null)
       await load()
     } catch (error: any) {
-      alert(`æ›´æ–°å¤±æ•—ï¼š${error.response?.data?.message || error.message}`)
+      alert(`§ó·s¥¢±Ñ¡G${error.response?.data?.message || error.message}`)
     }
   }
 
   async function handleDelete(product: Product) {
-    if (confirm(`ç¢ºå®šè¦åˆªé™¤å•†å“ "${product.name}" å—ï¼Ÿ`)) {
+    if (confirm(`½T©w­n§R°£°Ó«~ "${product.name}" ¶Ü¡H`)) {
       try {
         await api.delete(`/products/${product._id}`)
-        alert('å•†å“åˆªé™¤æˆåŠŸ')
+        alert('°Ó«~§R°£¦¨¥\')
         await load()
       } catch (error: any) {
-        alert(`åˆªé™¤å¤±æ•—ï¼š${error.response?.data?.message || error.message}`)
+        alert(`§R°£¥¢±Ñ¡G${error.response?.data?.message || error.message}`)
       }
     }
   }
 
-  // åˆªé™¤æ•´å€‹ç”¢å“çµ„
+  // §R°£¾ã­Ó²£«~²Õ
   async function handleDeleteGroup(group: ProductGroup) {
-    if (confirm(`ç¢ºå®šè¦åˆªé™¤ç”¢å“çµ„ "${group.name}" (${group.productCode}) å—ï¼Ÿ\né€™å°‡åˆªé™¤è©²çµ„å…§æ‰€æœ‰ç”¢å“ï¼Œæ­¤æ“ä½œç„¡æ³•æ’¤éŠ·ï¼`)) {
+    if (confirm(`½T©w­n§R°£²£«~²Õ "${group.name}" (${group.productCode}) ¶Ü¡H\n³o±N§R°£¸Ó²Õ¤º©Ò¦³²£«~¡A¦¹¾Ş§@µLªkºM¾P¡I`)) {
       try {
-        // æ‰¹é‡åˆªé™¤è©²çµ„å…§æ‰€æœ‰ç”¢å“
+        // §å¶q§R°£¸Ó²Õ¤º©Ò¦³²£«~
         const deletePromises = group.products.map(product => 
           api.delete(`/products/${product._id}`)
         )
         
         await Promise.all(deletePromises)
-        alert(`ç”¢å“çµ„ "${group.name}" åˆªé™¤æˆåŠŸï¼Œå…±åˆªé™¤ ${group.products.length} å€‹ç”¢å“`)
+        alert(`²£«~²Õ "${group.name}" §R°£¦¨¥\¡A¦@§R°£ ${group.products.length} ­Ó²£«~`)
         await load()
       } catch (error: any) {
-        alert(`åˆªé™¤å¤±æ•—ï¼š${error.response?.data?.message || error.message}`)
+        alert(`§R°£¥¢±Ñ¡G${error.response?.data?.message || error.message}`)
       }
     }
   }
 
-  // Group products by name and productCodeï¼ŒæŒ‰å°ºå¯¸æ’åº
+  // Group products by name and productCode¡A«ö¤Ø¤o±Æ§Ç
   const groupedProducts = (filteredProducts || []).reduce((groups, product) => {
     const key = `${product.name}-${product.productCode}`
     if (!groups[key]) {
@@ -593,7 +593,7 @@ ${response.data.errors?.length > 0 ? 'éŒ¯èª¤è©³æƒ…:\n' + response.data.errors.sl
     return groups
   }, {} as Record<string, ProductGroup>)
 
-  // å°æ¯å€‹ç¾¤çµ„å…§çš„ç”¢å“æŒ‰å°ºå¯¸æ’åº
+  // ¹ï¨C­Ó¸s²Õ¤ºªº²£«~«ö¤Ø¤o±Æ§Ç
   Object.values(groupedProducts).forEach(group => {
     group.products = sortProductsBySize(group.products)
   })
@@ -611,11 +611,11 @@ ${response.data.errors?.length > 0 ? 'éŒ¯èª¤è©³æƒ…:\n' + response.data.errors.sl
   return (
     <div className="page">
       <div className="header">
-        <h1>åº«å­˜ç®¡ç†</h1>
+        <h1>®w¦sºŞ²z</h1>
         {isMobile && (
           <div style={{ marginTop: 12 }}>
             <button className="btn" onClick={() => setMobileControlsOpen(o => !o)}>
-              {mobileControlsOpen ? 'éš±è—æ§åˆ¶' : 'é¡¯ç¤ºæ§åˆ¶'}
+              {mobileControlsOpen ? 'ÁôÂÃ±±¨î' : 'Åã¥Ü±±¨î'}
             </button>
           </div>
         )}
@@ -625,7 +625,7 @@ ${response.data.errors?.length > 0 ? 'éŒ¯èª¤è©³æƒ…:\n' + response.data.errors.sl
         <div className="toolbar">
           <div className="filters">
             <select value={selectedType} onChange={e => setSelectedType(e.target.value)}>
-              <option value="">æ‰€æœ‰ç”¢å“é¡å‹</option>
+              <option value="">©Ò¦³²£«~Ãş«¬</option>
               {productTypes.map(type => (
                 <option key={type._id} value={type.name}>{type.name}</option>
               ))}
@@ -633,45 +633,45 @@ ${response.data.errors?.length > 0 ? 'éŒ¯èª¤è©³æƒ…:\n' + response.data.errors.sl
             
             <input
               type="text"
-              placeholder="æœå°‹ç”¢å“..."
+              placeholder="·j´M²£«~..."
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}
             />
 
             <input
               type="text"
-              placeholder="æœå°‹å°ºå¯¸..."
+              placeholder="·j´M¤Ø¤o..."
               value={sizeSearchTerm}
               onChange={e => setSizeSearchTerm(e.target.value)}
             />
           </div>
           
           <div className="spacer" />
-          <button className="btn" onClick={exportToExcel}>å°å‡ºExcel</button>
-          <button className="btn" onClick={() => setExcelImportOpen(true)}>å°å…¥Excel</button>
-          <button className="btn" onClick={() => setClearOpen(true)}>æ¸…é›¶</button>
-          <button className="btn" onClick={() => setImportOpen(true)}>å°å…¥åº«å­˜</button>
-          <button className="btn" onClick={() => setTransferOpen(true)}>åº«å­˜è½‰ç§»</button>
+          <button className="btn" onClick={exportToExcel}>¾É¥XExcel</button>
+          <button className="btn" onClick={() => setExcelImportOpen(true)}>¾É¤JExcel</button>
+          <button className="btn" onClick={() => setClearOpen(true)}>²M¹s</button>
+          <button className="btn" onClick={() => setImportOpen(true)}>¾É¤J®w¦s</button>
+          <button className="btn" onClick={() => setTransferOpen(true)}>®w¦sÂà²¾</button>
         </div>
       )}
 
-      {/* è¡¨æ ¼å®¹å™¨ï¼šåŒ…å«æ¨™é¡Œå’Œæ•¸æ“šï¼Œç„¡éœ€æ»¾å‹• */}
+      {/* ªí®æ®e¾¹¡G¥]§t¼ĞÃD©M¼Æ¾Ú¡AµL»İºu°Ê */}
       <div className="table-container">
         <table>
           <thead>
             <tr>
-              <th>ç”¢å“</th>
-              <th>ä»£ç¢¼</th>
-              <th>å°ºå¯¸</th>
+              <th>²£«~</th>
+              <th>¥N½X</th>
+              <th>¤Ø¤o</th>
               {locations.map(location => (
                 <th key={location._id} onClick={() => handleSort(location._id)} style={{ cursor: 'pointer' }}>
                   {location.name} {getSortIcon(location._id)}
                 </th>
               ))}
               <th onClick={() => handleSort('total')} style={{ cursor: 'pointer' }}>
-                ç¸½è¨ˆ {getSortIcon('total')}
+                Á`­p {getSortIcon('total')}
               </th>
-              <th>æ“ä½œ</th>
+              <th>¾Ş§@</th>
             </tr>
           </thead>
           <tbody>
@@ -679,12 +679,12 @@ ${response.data.errors?.length > 0 ? 'éŒ¯èª¤è©³æƒ…:\n' + response.data.errors.sl
               <React.Fragment key={group.key}>
                 <tr className="group-header" style={{ borderBottom: '2px solid #dc2626' }}>
                   <td colSpan={locations.length + 3} style={{ cursor: 'pointer' }} onClick={() => toggleGroup(group.key)}>
-                    {expandedGroups.has(group.key) ? 'â–¼' : 'â–¶'} {group.name} ({group.productCode})
+                    {expandedGroups.has(group.key) ? '¡¿' : '?'} {group.name} ({group.productCode})
                   </td>
                   <td style={{ textAlign: 'center' }}>
                     <div style={{ display: 'flex', gap: '4px', justifyContent: 'center' }}>
                       {editingGroup === group.key ? (
-                        // ç·¨è¼¯æ¨¡å¼
+                        // ½s¿è¼Ò¦¡
                         <>
                           <button 
                             className="btn" 
@@ -702,7 +702,7 @@ ${response.data.errors?.length > 0 ? 'éŒ¯èª¤è©³æƒ…:\n' + response.data.errors.sl
                               fontSize: '12px'
                             }}
                           >
-                            ä¿å­˜
+                            «O¦s
                           </button>
                           <button 
                             className="btn" 
@@ -720,11 +720,11 @@ ${response.data.errors?.length > 0 ? 'éŒ¯èª¤è©³æƒ…:\n' + response.data.errors.sl
                               fontSize: '12px'
                             }}
                           >
-                            å–æ¶ˆ
+                            ¨ú®ø
                           </button>
                         </>
                       ) : (
-                        // æ­£å¸¸æ¨¡å¼
+                        // ¥¿±`¼Ò¦¡
                         <>
                           <button 
                             className="btn" 
@@ -742,7 +742,7 @@ ${response.data.errors?.length > 0 ? 'éŒ¯èª¤è©³æƒ…:\n' + response.data.errors.sl
                               fontSize: '12px'
                             }}
                           >
-                            ç·¨è¼¯
+                            ½s¿è
                           </button>
                           <button 
                             className="btn danger" 
@@ -760,7 +760,7 @@ ${response.data.errors?.length > 0 ? 'éŒ¯èª¤è©³æƒ…:\n' + response.data.errors.sl
                               fontSize: '12px'
                             }}
                           >
-                            åˆªé™¤
+                            §R°£
                           </button>
                         </>
                       )}
@@ -769,14 +769,14 @@ ${response.data.errors?.length > 0 ? 'éŒ¯èª¤è©³æƒ…:\n' + response.data.errors.sl
                 </tr>
                 {expandedGroups.has(group.key) && (
                   editingGroup === group.key ? (
-                    // ç·¨è¼¯æ¨¡å¼ - é¡¯ç¤ºç·¨è¼¯è¡¨å–®
+                    // ½s¿è¼Ò¦¡ - Åã¥Ü½s¿èªí³æ
                     <tr style={{ backgroundColor: '#f3f4f6' }}>
                       <td>
                         <input
                           type="text"
                           value={groupEditForm.name}
                           onChange={e => setGroupEditForm(prev => ({ ...prev, name: e.target.value }))}
-                          placeholder="ç”¢å“åç¨±"
+                          placeholder="²£«~¦WºÙ"
                           style={{ width: '100%', padding: '4px 8px', border: '1px solid #d1d5db', borderRadius: '4px' }}
                         />
                       </td>
@@ -785,12 +785,12 @@ ${response.data.errors?.length > 0 ? 'éŒ¯èª¤è©³æƒ…:\n' + response.data.errors.sl
                           type="text"
                           value={groupEditForm.productCode}
                           onChange={e => setGroupEditForm(prev => ({ ...prev, productCode: e.target.value }))}
-                          placeholder="ç”¢å“ä»£ç¢¼"
+                          placeholder="²£«~¥N½X"
                           style={{ width: '100%', padding: '4px 8px', border: '1px solid #d1d5db', borderRadius: '4px' }}
                         />
                       </td>
                       <td colSpan={locations.length + 2} style={{ textAlign: 'center', color: '#6b7280' }}>
-                        ç·¨è¼¯æ¨¡å¼ - ä¿®æ”¹ç”¢å“åç¨±å’Œä»£ç¢¼å°‡æ›´æ–°è©²çµ„å…§æ‰€æœ‰ç”¢å“
+                        ½s¿è¼Ò¦¡ - ­×§ï²£«~¦WºÙ©M¥N½X±N§ó·s¸Ó²Õ¤º©Ò¦³²£«~
                       </td>
                     </tr>
                   ) : null
@@ -803,7 +803,7 @@ ${response.data.errors?.length > 0 ? 'éŒ¯èª¤è©³æƒ…:\n' + response.data.errors.sl
                     }}
                   >
                     {editingProduct === product._id ? (
-                      // ç·¨è¼¯æ¨¡å¼
+                      // ½s¿è¼Ò¦¡
                       <>
                         <td>
                           <input
@@ -851,13 +851,13 @@ ${response.data.errors?.length > 0 ? 'éŒ¯èª¤è©³æƒ…:\n' + response.data.errors.sl
                         <td>{(editForm.inventories || []).reduce((sum, inv) => sum + inv.quantity, 0)}</td>
                         <td>
                           <div className="actions">
-                            <button className="btn" onClick={() => handleSaveEdit(product._id)}>ä¿å­˜</button>
-                            <button className="btn secondary" onClick={handleCancelEdit}>å–æ¶ˆ</button>
+                            <button className="btn" onClick={() => handleSaveEdit(product._id)}>«O¦s</button>
+                            <button className="btn secondary" onClick={handleCancelEdit}>¨ú®ø</button>
                           </div>
                         </td>
                       </>
                     ) : (
-                      // æ­£å¸¸æ¨¡å¼ - é¡¯ç¤ºç”¢å“æ•¸æ“š
+                      // ¥¿±`¼Ò¦¡ - Åã¥Ü²£«~¼Æ¾Ú
                       <>
                         <td className="right">{product.name}</td>
                         <td>{product.productCode}</td>
@@ -876,8 +876,8 @@ ${response.data.errors?.length > 0 ? 'éŒ¯èª¤è©³æƒ…:\n' + response.data.errors.sl
                         <td>{getTotalQuantity(product)}</td>
                         <td>
                           <div className="actions">
-                            <button className="btn ghost" onClick={() => handleEdit(product)}>ç·¨è¼¯</button>
-                            <button className="btn ghost" onClick={() => handleDelete(product)}>åˆªé™¤</button>
+                            <button className="btn ghost" onClick={() => handleEdit(product)}>½s¿è</button>
+                            <button className="btn ghost" onClick={() => handleDelete(product)}>§R°£</button>
                           </div>
                         </td>
                       </>
@@ -890,113 +890,113 @@ ${response.data.errors?.length > 0 ? 'éŒ¯èª¤è©³æƒ…:\n' + response.data.errors.sl
         </table>
       </div>
 
-      {/* å°å…¥åº«å­˜å½ˆçª— */}
+      {/* ¾É¤J®w¦s¼uµ¡ */}
       {importOpen && (
         <div className="modal-backdrop">
           <div className="modal">
-            <div className="header">å°å…¥åº«å­˜</div>
+            <div className="header">¾É¤J®w¦s</div>
             <div className="body">
               <div>
-                <p>é¸æ“‡åœ°é»ï¼š</p>
+                <p>¿ï¾Ü¦aÂI¡G</p>
                 <select value={importState.locationId} onChange={e => setImportState(s => ({ ...s, locationId: e.target.value }))}>
-                  <option value="">è«‹é¸æ“‡åœ°é»</option>
+                  <option value="">½Ğ¿ï¾Ü¦aÂI</option>
                   {locations.map(location => (
                     <option key={location._id} value={location._id}>{location.name}</option>
                   ))}
                 </select>
               </div>
               <div>
-                <p>é¸æ“‡PDFæ–‡ä»¶ï¼š</p>
+                <p>¿ï¾ÜPDF¤å¥ó¡G</p>
                 <input multiple type="file" accept=".pdf" onChange={e => setImportState(s => ({ ...s, files: Array.from(e.target.files || []) }))} />
               </div>
             </div>
             <div className="footer">
-              <button className="btn secondary" onClick={() => setImportOpen(false)}>å–æ¶ˆ</button>
-              <button className="btn" onClick={() => doImport('incoming')}>é€²è²¨</button>
-              <button className="btn" onClick={() => doImport('outgoing')}>å‡ºè²¨</button>
+              <button className="btn secondary" onClick={() => setImportOpen(false)}>¨ú®ø</button>
+              <button className="btn" onClick={() => doImport('incoming')}>¶i³f</button>
+              <button className="btn" onClick={() => doImport('outgoing')}>¥X³f</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* åº«å­˜è½‰ç§»å½ˆçª— */}
+      {/* ®w¦sÂà²¾¼uµ¡ */}
       {transferOpen && (
         <div className="modal-backdrop">
           <div className="modal">
-            <div className="header">åº«å­˜è½‰ç§»</div>
+            <div className="header">®w¦sÂà²¾</div>
             <div className="body">
               <div>
-                <p>ä¾†æºåœ°é»ï¼š</p>
+                <p>¨Ó·½¦aÂI¡G</p>
                 <select value={transferState.fromLocationId} onChange={e => setTransferState(s => ({ ...s, fromLocationId: e.target.value }))}>
-                  <option value="">è«‹é¸æ“‡ä¾†æºåœ°é»</option>
+                  <option value="">½Ğ¿ï¾Ü¨Ó·½¦aÂI</option>
                   {locations.map(location => (
                     <option key={location._id} value={location._id}>{location.name}</option>
                   ))}
                 </select>
               </div>
               <div>
-                <p>ç›®æ¨™åœ°é»ï¼š</p>
+                <p>¥Ø¼Ğ¦aÂI¡G</p>
                 <select value={transferState.toLocationId} onChange={e => setTransferState(s => ({ ...s, toLocationId: e.target.value }))}>
-                  <option value="">è«‹é¸æ“‡ç›®æ¨™åœ°é»</option>
+                  <option value="">½Ğ¿ï¾Ü¥Ø¼Ğ¦aÂI</option>
                   {locations.map(location => (
                     <option key={location._id} value={location._id}>{location.name}</option>
                   ))}
                 </select>
               </div>
               <div>
-                <p>é¸æ“‡PDFæ–‡ä»¶ï¼š</p>
+                <p>¿ï¾ÜPDF¤å¥ó¡G</p>
                 <input multiple type="file" accept=".pdf" onChange={e => setTransferState(s => ({ ...s, files: Array.from(e.target.files || []) }))} />
               </div>
             </div>
             <div className="footer">
-              <button className="btn secondary" onClick={() => setTransferOpen(false)}>å–æ¶ˆ</button>
-              <button className="btn" onClick={doTransfer}>é–‹å§‹</button>
+              <button className="btn secondary" onClick={() => setTransferOpen(false)}>¨ú®ø</button>
+              <button className="btn" onClick={doTransfer}>¶}©l</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Excelå°å…¥å½ˆçª— */}
+      {/* Excel¾É¤J¼uµ¡ */}
       {excelImportOpen && (
         <div className="modal-backdrop">
           <div className="modal">
-            <div className="header">å°å…¥Excel</div>
+            <div className="header">¾É¤JExcel</div>
             <div className="body">
               <div style={{ marginBottom: '16px' }}>
-                <p><strong>Excelæ ¼å¼è¦æ±‚ï¼š</strong></p>
+                <p><strong>Excel®æ¦¡­n¨D¡G</strong></p>
                 <ul style={{ margin: '8px 0', paddingLeft: '20px' }}>
-                  <li>æ¯åˆ—ï¼šç”¢å“ä»£ç¢¼ã€ç”¢å“åç¨±ã€ç”¢å“é¡å‹ã€å°ºå¯¸ã€é€²è²¨ã€ä¸Šæ¶ã€åº«å­˜èª¿ã€è§€å¡˜ã€ç£ä»”ã€è”æè§’ã€å…ƒæœ—ã€åœ‹å…§å€‰ã€ç¸½åº«</li>
-                  <li>ç”¢å“ä»£ç¢¼ï¼šç”¢å“ä»£ç¢¼ï¼ˆå¦‚ï¼šç”¢å“ä»£ç¢¼ã€å•†å“ä»£ç¢¼ã€ç”¢å“ã€ä»£ç¢¼ã€å•†å“ï¼‰</li>
-                  <li>ç”¢å“åç¨±ï¼šç”¢å“åç¨±ï¼ˆå¦‚ï¼šç”¢å“åç¨±ã€åç¨±ã€ç”¢å“ã€åç¨±ã€å•†å“ï¼‰</li>
-                  <li>ç”¢å“é¡å‹ï¼šå°ºå¯¸ï¼ˆå¦‚ï¼šå°ºå¯¸ã€å¤§å°ã€ä¸Šæ¶ã€å°ºå¯¸ã€è¦æ ¼ï¼‰</li>
-                  <li>ä¸‹ä¸‹åˆ—ï¼šå°æ‡‰åº«å­˜æ•¸é‡ï¼ˆå¦‚ï¼šé€²è²¨æ•¸é‡ã€ä¸Šæ¶æ•¸é‡ï¼‰</li>
+                  <li>¨C¦C¡G²£«~¥N½X¡B²£«~¦WºÙ¡B²£«~Ãş«¬¡B¤Ø¤o¡B¶i³f¡B¤W¬[¡B®w¦s½Õ¡BÆ[¶í¡BÆW¥J¡B¯ïªK¨¤¡B¤¸®Ô¡B°ê¤º­Ü¡BÁ`®w</li>
+                  <li>²£«~¥N½X¡G²£«~¥N½X¡]¦p¡G²£«~¥N½X¡B°Ó«~¥N½X¡B²£«~¡B¥N½X¡B°Ó«~¡^</li>
+                  <li>²£«~¦WºÙ¡G²£«~¦WºÙ¡]¦p¡G²£«~¦WºÙ¡B¦WºÙ¡B²£«~¡B¦WºÙ¡B°Ó«~¡^</li>
+                  <li>²£«~Ãş«¬¡G¤Ø¤o¡]¦p¡G¤Ø¤o¡B¤j¤p¡B¤W¬[¡B¤Ø¤o¡B³W®æ¡^</li>
+                  <li>¤U¤U¦C¡G¹ïÀ³®w¦s¼Æ¶q¡]¦p¡G¶i³f¼Æ¶q¡B¤W¬[¼Æ¶q¡^</li>
                 </ul>
               </div>
               <div>
-                <p>é¸æ“‡Excelæ–‡ä»¶ï¼š</p>
+                <p>¿ï¾ÜExcel¤å¥ó¡G</p>
                 <input multiple type="file" accept=".xlsx,.xls" onChange={e => setExcelImportState(s => ({ ...s, files: Array.from(e.target.files || []) }))} />
               </div>
             </div>
             <div className="footer">
-              <button className="btn secondary" onClick={() => setExcelImportOpen(false)}>å–æ¶ˆ</button>
-              <button className="btn" onClick={doExcelImport}>é–‹å§‹å°å…¥</button>
+              <button className="btn secondary" onClick={() => setExcelImportOpen(false)}>¨ú®ø</button>
+              <button className="btn" onClick={doExcelImport}>¶}©l¾É¤J</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* æ¸…é›¶ç¢ºèªå½ˆçª— */}
+      {/* ²M¹s½T»{¼uµ¡ */}
       {clearOpen && (
         <div className="modal-backdrop">
           <div className="modal">
-            <div className="header">æ¸…é›¶æ‰€æœ‰åº«å­˜æ•¸é‡</div>
+            <div className="header">²M¹s©Ò¦³®w¦s¼Æ¶q</div>
             <div className="body">
-              <p>âš ï¸ è­¦å‘Šï¼šæ­¤æ“ä½œå°‡æ¸…é›¶æ‰€æœ‰åº«å­˜æ•¸é‡ï¼ˆè¨­ç‚º0ï¼‰ï¼Œæ­¤æ“ä½œç„¡æ³•æ’¤éŠ·ï¼</p>
-              <p>ç¢ºå®šè¦ç¹¼çºŒå—ï¼Ÿ</p>
+              <p>?? Äµ§i¡G¦¹¾Ş§@±N²M¹s©Ò¦³®w¦s¼Æ¶q¡]³]¬°0¡^¡A¦¹¾Ş§@µLªkºM¾P¡I</p>
+              <p>½T©w­nÄ~Äò¶Ü¡H</p>
             </div>
             <div className="footer">
-              <button className="btn secondary" onClick={() => setClearOpen(false)}>å–æ¶ˆ</button>
-              <button className="btn danger" onClick={doClearAll}>ç¢ºå®šæ¸…é›¶</button>
+              <button className="btn secondary" onClick={() => setClearOpen(false)}>¨ú®ø</button>
+              <button className="btn danger" onClick={doClearAll}>½T©w²M¹s</button>
             </div>
           </div>
         </div>
