@@ -303,22 +303,23 @@ async function extractByPdfjs(buffer: Buffer): Promise<{ name: string; code: str
             }
             
             // 查找購買類型信息
-            const purchaseTypeMatch = nextLine.match(/-?\s*購買類型[：:]\s*([^，,\s]+)/);
-            if (purchaseTypeMatch) {
-              const type = purchaseTypeMatch[1].trim();
-              console.log(`調試: 找到購買類型: ${type}`);
-              // 標準化購買類型
-              if (type.includes('上衣') || type.toLowerCase().includes('top')) {
-                purchaseType = '上衣';
-              } else if (type.includes('褲子') || type.toLowerCase().includes('bottom')) {
-                purchaseType = '褲子';
-              } else if (type.includes('套裝') || type.toLowerCase().includes('set')) {
-                purchaseType = '套裝';
-              } else {
-                purchaseType = type;
-              }
-              console.log(`調試: 標準化購買類型: ${purchaseType}`);
-            }
+           // 查找購買類型信息 - 修復編碼問題
+const purchaseTypeMatch = nextLine.match(/-?\s*購買[類型觊型][：:]\s*([^，,\s]+)/);
+if (purchaseTypeMatch) {
+  const type = purchaseTypeMatch[1].trim();
+  console.log(`調試: 找到購買類型: ${type}`);
+  // 標準化購買類型
+  if (type.includes('上衣') || type.toLowerCase().includes('top')) {
+    purchaseType = '上衣';
+  } else if (type.includes('褲子') || type.toLowerCase().includes('bottom')) {
+    purchaseType = '褲子';
+  } else if (type.includes('套裝') || type.toLowerCase().includes('set')) {
+    purchaseType = '套裝';
+  } else {
+    purchaseType = type;
+  }
+  console.log(`調試: 標準化購買類型: ${purchaseType}`);
+}
             
             // 如果遇到下一個商品代碼，停止搜索
             if (nextLine.match(/(WS-\w+)/)) {
