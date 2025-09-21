@@ -36,57 +36,36 @@ function codeVariants(raw: string): string[] {
 
 const codePattern = /(?:[A-Z]{1,8}[\-]?\d{2,8}(?:[A-Z]+)?(?:\/[A-Z]+)?)|(?:\b\d{8,14}\b)/;
 
-// 修改：同時提取購買類型和尺寸信息
-function extractPurchaseTypeAndSize(text: string): { purchaseType?: string; size?: string } {
-  // 匹配購買類型模式
-  const purchaseTypePatterns = [
-    /購買類型[：:]\s*([^，,\s]+)/,
-    /購買類型[：:]\s*([^，,\s]+)/,
-    /類型[：:]\s*([^，,\s]+)/,
-    /(上衣|褲子|套裝)/,
-    /(Top|Bottom|Set)/i
+// 改進：從購買類型中提取尺寸和類型
+function parsePurchaseTypeAndSize(purchaseTypeText: string): { purchaseType?: string; size?: string } {
+  if (!purchaseTypeText) {
+    return {};
+  }
+  
+  // 支持格式："尺寸 | 褲子/上衣" 或 "褲子/上衣 | 尺寸"
+  const patterns = [
+    /(\d+)\s*[|｜]\s*(上衣|褲子|套裝)/,
+    /(上衣|褲子|套裝)\s*[|｜]\s*(\d+)/,
+    /(\d+)\s*(上衣|褲子|套裝)/,
+    /(上衣|褲子|套裝)\s*(\d+)/
   ];
   
-  // 匹配尺寸模式
-  const sizePatterns = [
-    /尺寸[：:]\s*([^，,\s]+)/,
-    /尺碼[：:]\s*([^，,\s]+)/,
-    /Size[：:]\s*([^，,\s]+)/i,
-    /\b(\d+)\b/  // 匹配數字作為尺寸
-  ];
-  
-  let purchaseType: string | undefined;
-  let size: string | undefined;
-  
-  for (const pattern of purchaseTypePatterns) {
-    const match = text.match(pattern);
+  for (const pattern of patterns) {
+    const match = purchaseTypeText.match(pattern);
     if (match) {
-      const type = match[1] || match[0];
-      // 標準化購買類型
-      if (type.includes('上衣') || type.toLowerCase().includes('top')) {
-        purchaseType = '上衣';
-        break;
-      }
-      if (type.includes('褲子') || type.toLowerCase().includes('bottom')) {
-        purchaseType = '褲子';
-        break;
-      }
-      if (type.includes('套裝') || type.toLowerCase().includes('set')) {
-        purchaseType = '套裝';
-        break;
+      const size = match[1] || match[2];
+      const type = match[2] || match[1];
+      
+      if (/\d+/.test(size) && /(上衣|褲子|套裝)/.test(type)) {
+        return {
+          purchaseType: type,
+          size: size
+        };
       }
     }
   }
   
-  for (const pattern of sizePatterns) {
-    const match = text.match(pattern);
-    if (match) {
-      size = match[1];
-      break;
-    }
-  }
-  
-  return { purchaseType, size };
+  return {};
 }
 
 // 修改：WS-712系列商品的特殊匹配函數
@@ -394,15 +373,34 @@ async function extractByPdfjs(buffer: Buffer): Promise<{ name: string; code: str
               console.log(`調試: 找到實際數量: ${qty}`);
             }
             
-            // 使用新的組合提取函數
-            const extracted = extractPurchaseTypeAndSize(nextLine);
-            if (extracted.size) {
-              size = extracted.size;
-              console.log(`調試: 找到尺寸: ${size}`);
+            // 查找尺寸 - 使用經過驗證的正則表達式
+            const sizePatterns = [
+              /- 尺寸[：:]\s*([^，,\s\n]+)/,
+              /尺寸[：:]\s*([^，,\s\n]+)/
+            ];
+            
+            for (const pattern of sizePatterns) {
+              const sizeMatch = nextLine.match(pattern);
+              if (sizeMatch) {
+                size = sizeMatch[1];
+                console.log(`調試: 找到尺寸: ${size} (使用模式: ${pattern})`);
+                break;
+              }
             }
-            if (extracted.purchaseType) {
-              purchaseType = extracted.purchaseType;
-              console.log(`調試: 找到購買類型: ${purchaseType}`);
+            
+            // 查找購買類型 - 使用經過驗證的正則表達式
+            const purchaseTypePatterns = [
+              /- 購買類型[：:]\s*([^，,\s\n]+)/,
+              /購買類型[：:]\s*([^，,\s\n]+)/
+            ];
+            
+            for (const pattern of purchaseTypePatterns) {
+              const purchaseTypeMatch = nextLine.match(pattern);
+              if (purchaseTypeMatch) {
+                purchaseType = purchaseTypeMatch[1];
+                console.log(`調試: 找到購買類型: ${purchaseType} (使用模式: ${pattern})`);
+                break;
+              }
             }
             
             // 如果遇到下一個商品代碼，停止搜索
