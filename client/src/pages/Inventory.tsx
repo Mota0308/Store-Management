@@ -109,7 +109,7 @@ export default function Inventory() {
   useEffect(() => {
     api.get('/locations').then((r: any) => {
       // 按照固定順序排列：進貨、上架、庫存調、觀塘、灣仔、荔枝角、元朗、國內倉、總庫
-      const order = ['觀塘', '灣仔', '荔枝角', '元朗', '國內倉']
+      const order = ['進貨', '上架', '庫存調', '觀塘', '灣仔', '荔枝角', '元朗', '國內倉', '總庫'];
       const sortedLocations = r.data.sort((a: Location, b: Location) => {
         const aIndex = order.indexOf(a.name);
         const bIndex = order.indexOf(b.name);
