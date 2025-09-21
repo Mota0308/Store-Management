@@ -2,7 +2,7 @@
 import api from '../api'
 import * as XLSX from 'xlsx'
 
-// 定義類型接口
+// �w�q�������f
 interface Location {
   _id: string
   name: string
@@ -14,7 +14,7 @@ interface ProductType {
 }
 
 interface Inventory {
-  locationId: string | { _id: string; name: string } | null // 添加 null 支持
+  locationId: string | { _id: string; name: string } | null // �K�[ null ����
   quantity: number
 }
 
@@ -43,7 +43,7 @@ export default function Inventory() {
   const [filteredProducts, setFilteredProducts] = useState<Product[]>([])
   const [selectedType, setSelectedType] = useState<string>('')
   const [searchTerm, setSearchTerm] = useState('')
-  const [sizeSearchTerm, setSizeSearchTerm] = useState('') // 新添加這行
+  const [sizeSearchTerm, setSizeSearchTerm] = useState('') // �s�K�[�o��
   const [sortBy, setSortBy] = useState<string>('')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
@@ -64,21 +64,21 @@ export default function Inventory() {
     }
   }, [])
   
-  // 導入庫存狀態
+  // �ɤJ�w�s���A
   const [importOpen, setImportOpen] = useState(false)
   const [importState, setImportState] = useState<{ locationId: string; files: File[] }>({ locationId: '', files: [] })
   
-  // 門市對調狀態
+  // �������ժ��A
   const [transferOpen, setTransferOpen] = useState(false)
   const [transferState, setTransferState] = useState<{ fromLocationId: string; toLocationId: string; files: File[] }>({ fromLocationId: '', toLocationId: '', files: [] })
   
-  // Excel導入狀態
+  // Excel�ɤJ���A
   const [excelImportOpen, setExcelImportOpen] = useState(false)
   const [excelImportState, setExcelImportState] = useState<{ files: File[] }>({ files: [] })
 
-  // 清零狀態
+  // �M�s���A
   const [clearOpen, setClearOpen] = useState(false)
-  // 編輯狀態
+  // �s�説�A
   const [editingProduct, setEditingProduct] = useState<string | null>(null)
   const [editForm, setEditForm] = useState<{
     name: string
@@ -98,8 +98,8 @@ export default function Inventory() {
 
   useEffect(() => {
     api.get('/locations').then((r: any) => {
-      // 按照指定順序排序：觀塘，灣仔，荔枝角，元朗，國内倉
-      const order = ['觀塘', '灣仔', '荔枝角', '元朗', '國内倉'];
+      // ���ӫ��w���ǱƧǡG�[���A�W�J�A���K���A���ԡA��?��
+      const order = ['�[��', '�W�J', '���K��', '����', '��?��'];
       const sortedLocations = r.data.sort((a: Location, b: Location) => {
         const aIndex = order.indexOf(a.name);
         const bIndex = order.indexOf(b.name);
@@ -112,7 +112,7 @@ export default function Inventory() {
 
   useEffect(() => {
     load()
-  }, [products, selectedType, searchTerm, sizeSearchTerm, sortBy, sortOrder]) // 添加 sizeSearchTerm
+  }, [products, selectedType, searchTerm, sizeSearchTerm, sortBy, sortOrder]) // �K�[ sizeSearchTerm
 
   async function loadProductTypes() {
       const response = await api.get('/product-types')
@@ -121,12 +121,12 @@ export default function Inventory() {
 
   async function load() {
     const response = await api.get('/products')
-    // 修復：後端返回的是 { products: [...], pagination: {...} }
+    // �״_�G���ݪ��^���O { products: [...], pagination: {...} }
     setProducts(response.data.products || [])
   }
 
   useEffect(() => {
-    let filtered = products || [] // 添加安全檢查
+    let filtered = products || [] // �K�[�w���ˬd
 
     // Filter by product type
     if (selectedType) {
@@ -142,7 +142,7 @@ export default function Inventory() {
       )
     }
 
-    // Filter by size search term - 完全匹配邏輯
+    // Filter by size search term - �����ǰt�޿�
     if (sizeSearchTerm) {
       filtered = filtered.filter(p => 
         getProductSize(p).toLowerCase().split(',').map(s => s.trim()).includes(sizeSearchTerm.toLowerCase())
@@ -181,7 +181,7 @@ export default function Inventory() {
     }
 
     setFilteredProducts(filtered)
-  }, [products, selectedType, searchTerm, sizeSearchTerm, sortBy, sortOrder]) // 添加 sizeSearchTerm
+  }, [products, selectedType, searchTerm, sizeSearchTerm, sortBy, sortOrder]) // �K�[ sizeSearchTerm
 
   function getProductSize(product: Product): string {
     if (product.sizes && product.sizes.length > 0) {
@@ -190,49 +190,49 @@ export default function Inventory() {
     return product.size || ''
   }
 
-  // 新增：按尺寸數字大小排序產品
+  // �s�W�G���ؤo�Ʀr�j�p�Ƨǲ��~
   function sortProductsBySize(products: Product[]): Product[] {
     return products.sort((a, b) => {
       const aSize = getProductSize(a)
       const bSize = getProductSize(b)
       
-      // 提取數字進行比較
+      // �����Ʀr�i������
       const aNumbers = aSize.match(/\d+/g) || []
       const bNumbers = bSize.match(/\d+/g) || []
       
-      // 如果都有數字，比較第一個數字
+      // �p�G�����Ʀr�A�����Ĥ@�ӼƦr
       if (aNumbers.length > 0 && bNumbers.length > 0) {
         const aNum = parseInt(aNumbers[0] || '0')
         const bNum = parseInt(bNumbers[0] || '0')
         return aNum - bNum
       }
       
-      // 如果只有一個有數字，數字排在前面
+      // �p�G�u���@�Ӧ��Ʀr�A�Ʀr�Ʀb�e��
       if (aNumbers.length > 0 && bNumbers.length === 0) return -1
       if (aNumbers.length === 0 && bNumbers.length > 0) return 1
       
-      // 都沒有數字，按字母排序
+      // ���S���Ʀr�A���r���Ƨ�
       return aSize.localeCompare(bSize)
     })
   }
 
-  // 修復：添加 null 檢查
+  // �״_�G�K�[ null �ˬd
   function getQuantity(product: Product, locationId: string): number {
     if (!product.inventories || !Array.isArray(product.inventories)) {
       return 0
     }
     const inventory = product.inventories.find(inv => {
-      // 檢查 locationId 是否為 null 或 undefined
+      // �ˬd locationId �O�_�� null �� undefined
       if (!inv.locationId) {
         return false
       }
       
-      // 處理 populate 後的 locationId 對象
+      // �B�z populate �᪺ locationId ���H
       if (typeof inv.locationId === 'object' && inv.locationId !== null) {
         return inv.locationId._id === locationId || inv.locationId._id.toString() === locationId
       }
       
-      // 處理原始的 ObjectId 字符串，添加 null 檢查
+      // �B�z���l�� ObjectId �r�Ŧ��A�K�[ null �ˬd
       if (inv.locationId && typeof inv.locationId === 'string') {
         return inv.locationId === locationId || inv.locationId.toString() === locationId
       }
@@ -259,15 +259,15 @@ export default function Inventory() {
   }
 
   function getSortIcon(column: string): string {
-    if (sortBy !== column) return '↕'
-    return sortOrder === 'asc' ? '↓' : '↑'
+    if (sortBy !== column) return '?'
+    return sortOrder === 'asc' ? '��' : '��'
   }
 
-  // Excel導出功能（保持不變）
+  // Excel�ɥX�\���]�O�����ܡ^
   function exportToExcel() {
     try {
       const exportData = []
-      const headers = ['編號', '商品', '尺寸', '觀塘', '灣仔', '荔枝角', '元朗', '國内倉']
+      const headers = ['�s��', '�ӫ~', '�ؤo', '�[��', '�W�J', '���K��', '����', '��?��']
       exportData.push(headers)
       Object.values(groupedProducts).forEach(group => {
         const sortedProducts = sortProductsBySize([...group.products])
@@ -276,37 +276,37 @@ export default function Inventory() {
             product.productCode,
             product.name,
             getProductSize(product),
-            getQuantity(product, locations.find(l => l.name === '觀塘')?._id || ''),
-            getQuantity(product, locations.find(l => l.name === '灣仔')?._id || ''),
-            getQuantity(product, locations.find(l => l.name === '荔枝角')?._id || ''),
-            getQuantity(product, locations.find(l => l.name === '元朗')?._id || ''),
-            getQuantity(product, locations.find(l => l.name === '國内倉')?._id || '')
+            getQuantity(product, locations.find(l => l.name === '�[��')?._id || ''),
+            getQuantity(product, locations.find(l => l.name === '�W�J')?._id || ''),
+            getQuantity(product, locations.find(l => l.name === '���K��')?._id || ''),
+            getQuantity(product, locations.find(l => l.name === '����')?._id || ''),
+            getQuantity(product, locations.find(l => l.name === '��?��')?._id || '')
           ]
           exportData.push(row)
         })
       })
       const ws = XLSX.utils.aoa_to_sheet(exportData)
       const wb = XLSX.utils.book_new()
-      XLSX.utils.book_append_sheet(wb, ws, '庫存報告')
+      XLSX.utils.book_append_sheet(wb, ws, '�w�s���i')
       const now = new Date()
       const timestamp = now.toISOString().slice(0, 19).replace(/:/g, '-')
-      const filename = `庫存報告_${timestamp}.xlsx`
+      const filename = `�w�s���i_${timestamp}.xlsx`
       XLSX.writeFile(wb, filename)
-      alert('Excel導出成功！')
+      alert('Excel�ɥX���\�I')
     } catch (error) {
-      console.error('導出Excel錯誤:', error)
-      alert('導出Excel失敗，請重試')
+      console.error('�ɥXExcel���~:', error)
+      alert('�ɥXExcel���ѡA�Э���')
     }
   }
 
-  // 其餘函數（doImport / doTransfer / doExcelImport / doClearAll / 編輯）保持不變
+  // ���l���ơ]doImport / doTransfer / doExcelImport / doClearAll / �s���^�O������
   async function doImport(type: 'incoming' | 'outgoing') {
     if (importState.locationId === '') {
-      alert('請選擇門市')
+      alert('�п��ܪ���')
       return
     }
     if (importState.files.length === 0) {
-      alert('請選擇PDF檔案')
+      alert('�п���PDF�ɮ�')
       return
     }
     
@@ -315,24 +315,24 @@ export default function Inventory() {
       form.append('locationId', importState.locationId)
       importState.files.forEach(f => form.append('files', f))
       
-      // 修復：根據type調用不同的API端點
+      // �״_�G�ھ�type�եΤ��P��API���I
       const response = await api.post(`/import/${type}`, form)
-      alert(`${type === 'incoming' ? '進貨' : '出貨'}完成\n處理:${response.data.processed}  匹配:${response.data.matched}  新增:${response.data.created}  更新:${response.data.updated}\n未找到: ${response.data.notFound?.join(', ') || '無'}`)
+      alert(`${type === 'incoming' ? '�i�f' : '�X�f'}����\n�B�z:${response.data.processed}  �ǰt:${response.data.matched}  �s�W:${response.data.created}  ���s:${response.data.updated}\n������: ${response.data.notFound?.join(', ') || '�L'}`)
       setImportOpen(false)
       await load()
     } catch (error: any) {
-      alert(`${type === 'incoming' ? '進貨' : '出貨'}失敗：${error.response?.data?.message || error.message}`)
+      alert(`${type === 'incoming' ? '�i�f' : '�X�f'}���ѡG${error.response?.data?.message || error.message}`)
     }
   }
 
-  // 門市對調功能
+  // �������ե\��
   async function doTransfer() {
     if (transferState.fromLocationId === '' || transferState.toLocationId === '') {
-      alert('請選擇來源門市和目標門市')
+      alert('�п��ܨӷ������M�ؼЪ���')
       return
     }
     if (transferState.files.length === 0) {
-      alert('請選擇PDF檔案')
+      alert('�п���PDF�ɮ�')
       return
     }
     
@@ -343,66 +343,66 @@ export default function Inventory() {
       transferState.files.forEach(f => form.append('files', f))
       
       const response = await api.post('/import/transfer', form)
-      alert(`門市對調完成\n處理:${response.data.processed}  匹配:${response.data.matched}  更新:${response.data.updated}\n未找到: ${response.data.notFound?.join(', ') || '無'}`)
+      alert(`�������է���\n�B�z:${response.data.processed}  �ǰt:${response.data.matched}  ���s:${response.data.updated}\n������: ${response.data.notFound?.join(', ') || '�L'}`)
       setTransferOpen(false)
       await load()
     } catch (error: any) {
-      alert(`門市對調失敗：${error.response?.data?.message || error.message}`)
+      alert(`�������ե��ѡG${error.response?.data?.message || error.message}`)
     }
   }
 
-  // Excel導入功能 - 完全修復版本
+  // Excel�ɤJ�\�� - �����״_����
   async function doExcelImport() {
     if (excelImportState.files.length === 0) {
-      alert('請選擇Excel檔案')
+      alert('�п���Excel�ɮ�')
       return
     }
     
-    // 檢查文件大小
+    // �ˬd�����j�p
     const totalSize = excelImportState.files.reduce((sum, file) => sum + file.size, 0)
-    if (totalSize > 10 * 1024 * 1024) { // 10MB限制
-      alert('文件總大小超過10MB，請使用較小的文件')
+    if (totalSize > 10 * 1024 * 1024) { // 10MB����
+      alert('�����`�j�p�W�L10MB�A�Шϥθ��p������')
       return
     }
     
     try {
-      // 显示处理中提示
-      const processingMsg = '正在處理Excel文件，請稍候...\n這可能需要幾分鐘時間，請不要關閉頁面。'
+      // ?��?�z������
+      const processingMsg = '���b�B�zExcel�����A�еy��...\n�o�i���ݭn�X�����ɶ��A�Ф��n���������C'
       alert(processingMsg)
       
       const form = new FormData()
       excelImportState.files.forEach(f => form.append('files', f))
       
-      // 使用更长的超时时间
+      // �ϥΧ�?���W???
       const response = await api.post('/import/excel', form, {
-        timeout: 300000, // 5分钟超时
+        timeout: 300000, // 5��?�W?
         headers: {
           'Content-Type': 'multipart/form-data'
         }
       })
       
-      // 显示详细结果
-      const resultMsg = `Excel導入完成！
+      // ?��???�G
+      const resultMsg = `Excel�ɤJ�����I
       
-處理行數: ${response.data.processed}
-匹配產品: ${response.data.matched}
-新增產品: ${response.data.created}
-更新產品: ${response.data.updated}
-錯誤數量: ${response.data.errors?.length || 0}
+�B�z����: ${response.data.processed}
+�ǰt���~: ${response.data.matched}
+�s�W���~: ${response.data.created}
+���s���~: ${response.data.updated}
+���~�ƶq: ${response.data.errors?.length || 0}
 
-${response.data.errors?.length > 0 ? '錯誤詳情:\n' + response.data.errors.slice(0, 5).join('\n') + (response.data.errors.length > 5 ? '\n...' : '') : '無錯誤'}`
+${response.data.errors?.length > 0 ? '���~�Ա�:\n' + response.data.errors.slice(0, 5).join('\n') + (response.data.errors.length > 5 ? '\n...' : '') : '�L���~'}`
 
       alert(resultMsg)
       setExcelImportOpen(false)
       await load()
     } catch (error: any) {
-      console.error('Excel導入錯誤:', error)
+      console.error('Excel�ɤJ���~:', error)
       
-      let errorMsg = 'Excel導入失敗：'
+      let errorMsg = 'Excel�ɤJ���ѡG'
       if (error.code === 'ECONNABORTED') {
-        errorMsg += '處理超時，請嘗試使用較小的文件或檢查網絡連接'
+        errorMsg += '�B�z�W�ɡA�й��ըϥθ��p���������ˬd�����s��'
       } else if (error.response?.status === 413) {
-        errorMsg += '文件太大，請使用較小的文件'
+        errorMsg += '�����Ӥj�A�Шϥθ��p������'
       } else if (error.response?.data?.message) {
         errorMsg += error.response.data.message
       } else {
@@ -413,30 +413,30 @@ ${response.data.errors?.length > 0 ? '錯誤詳情:\n' + response.data.errors.sl
     }
   }
 
-  // 清零所有庫存數量
+  // �M�s�Ҧ��w�s�ƶq
   async function doClearAll() {
-    if (!confirm('確定要清零所有庫存嗎？此操作無法撤銷！')) {
+    if (!confirm('�T�w�n�M�s�Ҧ��w�s�ܡH���ާ@�L�k�M�P�I')) {
       return
     }
     
     try {
       const response = await api.post('/import/clear')
       
-      const resultMsg = `清零完成！
+      const resultMsg = `�M�s�����I
       
-處理產品: ${response.data.processed}
-更新產品: ${response.data.updated}
-錯誤數量: ${response.data.errors?.length || 0}
+�B�z���~: ${response.data.processed}
+���s���~: ${response.data.updated}
+���~�ƶq: ${response.data.errors?.length || 0}
 
-${response.data.errors?.length > 0 ? '錯誤詳情:\n' + response.data.errors.slice(0, 5).join('\n') + (response.data.errors.length > 5 ? '\n...' : '') : '無錯誤'}`
+${response.data.errors?.length > 0 ? '���~�Ա�:\n' + response.data.errors.slice(0, 5).join('\n') + (response.data.errors.length > 5 ? '\n...' : '') : '�L���~'}`
 
       alert(resultMsg)
       setClearOpen(false)
       await load()
     } catch (error: any) {
-      console.error('清零錯誤:', error)
+      console.error('�M�s���~:', error)
       
-      let errorMsg = '清零失敗：'
+      let errorMsg = '�M�s���ѡG'
       if (error.response?.data?.message) {
         errorMsg += error.response.data.message
       } else {
@@ -447,7 +447,7 @@ ${response.data.errors?.length > 0 ? '錯誤詳情:\n' + response.data.errors.sl
     }
   }
 
-  // 編輯和刪除處理函數 - 修復版本
+  // �s���M�R���B�z���� - �״_����
   function handleEdit(product: Product) {
     setEditingProduct(product._id)
     setEditForm({
@@ -489,7 +489,7 @@ ${response.data.errors?.length > 0 ? '錯誤詳情:\n' + response.data.errors.sl
   }
 
   async function handleDelete(product: Product) {
-    if (confirm(`確定要刪除產品 "${product.name}" 嗎？`)) {
+    if (confirm(`�T�w�n�R�����~ "${product.name}" �ܡH`)) {
       try {
         await api.delete(`/products/${product._id}`)
         alert('商品刪除成功')
@@ -500,25 +500,25 @@ ${response.data.errors?.length > 0 ? '錯誤詳情:\n' + response.data.errors.sl
     }
   }
 
-  // 新增：刪除整個產品組
+  //sWGRӲ~
   async function handleDeleteGroup(group: ProductGroup) {
-    if (confirm(`確定要刪除整個產品組 "${group.name}" (${group.productCode}) 嗎？\n這將刪除該產品組的所有尺寸規格，此操作無法撤銷！`)) {
+    if (confirm(`�T�w�n�R�����Ӳ��~�� "${group.name}" (${group.productCode}) �ܡH\n�o�N�R���Ӳ��~�ժ��Ҧ��ؤo�W���A���ާ@�L�k�M�P�I`)) {
       try {
-        // 批量刪除該組的所有產品
+        // ���q�R���Ӳժ��Ҧ����~
         const deletePromises = group.products.map(product => 
           api.delete(`/products/${product._id}`)
         )
         
         await Promise.all(deletePromises)
-        alert(`產品組 "${group.name}" 刪除成功，共刪除 ${group.products.length} 個產品`)
+        alert(`���~�� "${group.name}" �R�����\�A�@�R�� ${group.products.length} �Ӳ��~`)
         await load()
       } catch (error: any) {
-        alert(`刪除失敗：${error.response?.data?.message || error.message}`)
+        alert(`�R�����ѡG${error.response?.data?.message || error.message}`)
       }
     }
   }
 
-  // Group products by name and productCode，按尺寸排序
+  // Group products by name and productCode�A���ؤo�Ƨ�
   const groupedProducts = (filteredProducts || []).reduce((groups, product) => {
     const key = `${product.name}-${product.productCode}`
     if (!groups[key]) {
@@ -533,7 +533,7 @@ ${response.data.errors?.length > 0 ? '錯誤詳情:\n' + response.data.errors.sl
     return groups
   }, {} as Record<string, ProductGroup>)
 
-  // 對每個分組的產品按尺寸排序
+  // ���C�Ӥ��ժ����~���ؤo�Ƨ�
   Object.values(groupedProducts).forEach(group => {
     group.products = sortProductsBySize(group.products)
   })
@@ -551,11 +551,11 @@ ${response.data.errors?.length > 0 ? '錯誤詳情:\n' + response.data.errors.sl
   return (
     <div className="page">
       <div className="header">
-        <h1>庫存管理</h1>
+        <h1>�w�s�޲z</h1>
         {isMobile && (
           <div style={{ marginTop: 12 }}>
             <button className="btn" onClick={() => setMobileControlsOpen(o => !o)}>
-              {mobileControlsOpen ? '隱藏操作' : '顯示操作'}
+              {mobileControlsOpen ? '���þާ@' : '���ܾާ@'}
             </button>
           </div>
         )}
@@ -565,7 +565,7 @@ ${response.data.errors?.length > 0 ? '錯誤詳情:\n' + response.data.errors.sl
         <div className="toolbar">
           <div className="filters">
             <select value={selectedType} onChange={e => setSelectedType(e.target.value)}>
-              <option value="">所有產品類型</option>
+              <option value="">�Ҧ����~����</option>
               {productTypes.map(type => (
                 <option key={type._id} value={type.name}>{type.name}</option>
               ))}
@@ -573,45 +573,45 @@ ${response.data.errors?.length > 0 ? '錯誤詳情:\n' + response.data.errors.sl
             
             <input
               type="text"
-              placeholder="搜尋產品..."
+              placeholder="�j�M���~..."
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}
             />
 
             <input
               type="text"
-              placeholder="搜尋尺寸..."
+              placeholder="�j�M�ؤo..."
               value={sizeSearchTerm}
               onChange={e => setSizeSearchTerm(e.target.value)}
             />
           </div>
           
           <div className="spacer" />
-          <button className="btn" onClick={exportToExcel}>導出Excel</button>
-          <button className="btn" onClick={() => setExcelImportOpen(true)}>導入Excel</button>
-          <button className="btn" onClick={() => setClearOpen(true)}>清零</button>
-          <button className="btn" onClick={() => setImportOpen(true)}>導入庫存</button>
-          <button className="btn" onClick={() => setTransferOpen(true)}>門市對調</button>
+          <button className="btn" onClick={exportToExcel}>�ɥXExcel</button>
+          <button className="btn" onClick={() => setExcelImportOpen(true)}>�ɤJExcel</button>
+          <button className="btn" onClick={() => setClearOpen(true)}>�M�s</button>
+          <button className="btn" onClick={() => setImportOpen(true)}>�ɤJ�w�s</button>
+          <button className="btn" onClick={() => setTransferOpen(true)}>��������</button>
         </div>
       )}
 
-      {/* 列表區域：手機用卡片視圖，桌面用表格 */}
+      {/* �C���ϰ��G�����Υd�����ϡA�ୱ�Ϊ��� */}
       <div className="table-container">
         <table>
           <thead>
             <tr>
-              <th>產品</th>
-              <th>編號</th>
-              <th>尺寸</th>
+              <th>���~</th>
+              <th>�s��</th>
+              <th>�ؤo</th>
               {locations.map(location => (
                 <th key={location._id} onClick={() => handleSort(location._id)} style={{ cursor: 'pointer' }}>
                   {location.name} {getSortIcon(location._id)}
                 </th>
               ))}
               <th onClick={() => handleSort('total')} style={{ cursor: 'pointer' }}>
-                總計 {getSortIcon('total')}
+                �`�p {getSortIcon('total')}
               </th>
-              <th>操作</th>
+              <th>�ާ@</th>
             </tr>
           </thead>
           <tbody>
@@ -619,7 +619,7 @@ ${response.data.errors?.length > 0 ? '錯誤詳情:\n' + response.data.errors.sl
               <React.Fragment key={group.key}>
                 <tr className="group-header" style={{ borderBottom: '2px solid #dc2626' }}>
                   <td colSpan={locations.length + 3} style={{ cursor: 'pointer' }} onClick={() => toggleGroup(group.key)}>
-                    {expandedGroups.has(group.key) ? '▼' : '▶'} {group.name} ({group.productCode})
+                    {expandedGroups.has(group.key) ? '��' : '?'} {group.name} ({group.productCode})
                   </td>
                   <td style={{ textAlign: 'center' }}>
                     <button 
@@ -638,7 +638,7 @@ ${response.data.errors?.length > 0 ? '錯誤詳情:\n' + response.data.errors.sl
                         fontSize: '12px'
                       }}
                     >
-                      刪除
+                      �R��
                     </button>
                   </td>
                 </tr>
@@ -650,7 +650,7 @@ ${response.data.errors?.length > 0 ? '錯誤詳情:\n' + response.data.errors.sl
                     }}
                   >
                     {editingProduct === product._id ? (
-                      // 編輯模式
+                      // �s���Ҧ�
                       <>
                         <td>
                           <input
@@ -698,13 +698,13 @@ ${response.data.errors?.length > 0 ? '錯誤詳情:\n' + response.data.errors.sl
                         <td>{(editForm.inventories || []).reduce((sum, inv) => sum + inv.quantity, 0)}</td>
                         <td>
                           <div className="actions">
-                            <button className="btn" onClick={() => handleSaveEdit(product._id)}>保存</button>
-                            <button className="btn secondary" onClick={handleCancelEdit}>取消</button>
+                            <button className="btn" onClick={() => handleSaveEdit(product._id)}>�O�s</button>
+                            <button className="btn secondary" onClick={handleCancelEdit}>����</button>
                           </div>
                         </td>
                       </>
                     ) : (
-                      // 顯示模式 - 包含高光顯示功能
+                      // ���ܼҦ� - �]�t�������ܥ\��
                       <>
                         <td className="right">{product.name}</td>
                         <td>{product.productCode}</td>
@@ -723,8 +723,8 @@ ${response.data.errors?.length > 0 ? '錯誤詳情:\n' + response.data.errors.sl
                         <td>{getTotalQuantity(product)}</td>
                         <td>
                           <div className="actions">
-                            <button className="btn ghost" onClick={() => handleEdit(product)}>編輯</button>
-                            <button className="btn ghost" onClick={() => handleDelete(product)}>刪除</button>
+                            <button className="btn ghost" onClick={() => handleEdit(product)}>�s��</button>
+                            <button className="btn ghost" onClick={() => handleDelete(product)}>�R��</button>
                           </div>
                         </td>
                       </>
@@ -737,113 +737,113 @@ ${response.data.errors?.length > 0 ? '錯誤詳情:\n' + response.data.errors.sl
         </table>
       </div>
 
-      {/* 導入庫存彈窗 */}
+      {/* �ɤJ�w�s�u�� */}
       {importOpen && (
         <div className="modal-backdrop">
           <div className="modal">
-            <div className="header">導入庫存</div>
+            <div className="header">�ɤJ�w�s</div>
             <div className="body">
               <div>
-                <p>選擇門市：</p>
+                <p>���ܪ����G</p>
                 <select value={importState.locationId} onChange={e => setImportState(s => ({ ...s, locationId: e.target.value }))}>
-                  <option value="">請選擇門市</option>
+                  <option value="">�п��ܪ���</option>
                   {locations.map(location => (
                     <option key={location._id} value={location._id}>{location.name}</option>
                   ))}
                 </select>
               </div>
               <div>
-                <p>選擇PDF檔案：</p>
+                <p>����PDF�ɮסG</p>
                 <input multiple type="file" accept=".pdf" onChange={e => setImportState(s => ({ ...s, files: Array.from(e.target.files || []) }))} />
               </div>
             </div>
             <div className="footer">
-              <button className="btn secondary" onClick={() => setImportOpen(false)}>取消</button>
-              <button className="btn" onClick={() => doImport('incoming')}>進貨</button>
-              <button className="btn" onClick={() => doImport('outgoing')}>出貨</button>
+              <button className="btn secondary" onClick={() => setImportOpen(false)}>����</button>
+              <button className="btn" onClick={() => doImport('incoming')}>�i�f</button>
+              <button className="btn" onClick={() => doImport('outgoing')}>�X�f</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* 門市對調彈窗 */}
+      {/* �������ռu�� */}
       {transferOpen && (
         <div className="modal-backdrop">
           <div className="modal">
-            <div className="header">門市對調</div>
+            <div className="header">��������</div>
             <div className="body">
               <div>
-                <p>來源門市：</p>
+                <p>�ӷ������G</p>
                 <select value={transferState.fromLocationId} onChange={e => setTransferState(s => ({ ...s, fromLocationId: e.target.value }))}>
-                  <option value="">請選擇來源門市</option>
+                  <option value="">�п��ܨӷ�����</option>
                   {locations.map(location => (
                     <option key={location._id} value={location._id}>{location.name}</option>
                   ))}
                 </select>
               </div>
               <div>
-                <p>目標門市：</p>
+                <p>�ؼЪ����G</p>
                 <select value={transferState.toLocationId} onChange={e => setTransferState(s => ({ ...s, toLocationId: e.target.value }))}>
-                  <option value="">請選擇目標門市</option>
+                  <option value="">�п��ܥؼЪ���</option>
                   {locations.map(location => (
                     <option key={location._id} value={location._id}>{location.name}</option>
                   ))}
                 </select>
               </div>
               <div>
-                <p>選擇PDF檔案：</p>
+                <p>����PDF�ɮסG</p>
                 <input multiple type="file" accept=".pdf" onChange={e => setTransferState(s => ({ ...s, files: Array.from(e.target.files || []) }))} />
               </div>
             </div>
             <div className="footer">
-              <button className="btn secondary" onClick={() => setTransferOpen(false)}>取消</button>
-              <button className="btn" onClick={doTransfer}>進行</button>
+              <button className="btn secondary" onClick={() => setTransferOpen(false)}>����</button>
+              <button className="btn" onClick={doTransfer}>�i��</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Excel導入彈窗 */}
+      {/* Excel�ɤJ�u�� */}
       {excelImportOpen && (
         <div className="modal-backdrop">
           <div className="modal">
-            <div className="header">導入Excel</div>
+            <div className="header">�ɤJExcel</div>
             <div className="body">
               <div style={{ marginBottom: '16px' }}>
-                <p><strong>Excel格式要求：</strong></p>
+                <p><strong>Excel�榡�n�D�G</strong></p>
                 <ul style={{ margin: '8px 0', paddingLeft: '20px' }}>
-                  <li>必須包含列：商品詳情、型號、商品選項、觀塘、灣仔、荔枝角、元朗、國内倉</li>
-                  <li>商品詳情：產品名稱（支持變體：商品名稱、產品名稱、產品、名稱、商品）</li>
-                  <li>型號：產品編號（支持變體：產品編號、編號、貨號、SKU、產品代碼）</li>
-                  <li>商品選項：尺寸（支持變體：尺寸、規格、選項、尺碼）</li>
-                  <li>各門市列：對應的庫存數量（支持變體：觀塘店、灣仔店等）</li>
+                  <li>�����]�t�C�G�ӫ~�Ա��B�����B�ӫ~�ﶵ�B�[���B�W�J�B���K���B���ԡB��?��</li>
+                  <li>�ӫ~�Ա��G���~�W�١]���������G�ӫ~�W�١B���~�W�١B���~�B�W�١B�ӫ~�^</li>
+                  <li>�����G���~�s���]���������G���~�s���B�s���B�f���BSKU�B���~�N�X�^</li>
+                  <li>�ӫ~�ﶵ�G�ؤo�]���������G�ؤo�B�W���B�ﶵ�B�ؽX�^</li>
+                  <li>�U�����C�G�������w�s�ƶq�]���������G�[�����B�W�J�����^</li>
                 </ul>
               </div>
               <div>
-                <p>選擇Excel檔案：</p>
+                <p>����Excel�ɮסG</p>
                 <input multiple type="file" accept=".xlsx,.xls" onChange={e => setExcelImportState(s => ({ ...s, files: Array.from(e.target.files || []) }))} />
               </div>
             </div>
             <div className="footer">
-              <button className="btn secondary" onClick={() => setExcelImportOpen(false)}>取消</button>
-              <button className="btn" onClick={doExcelImport}>進行導入</button>
+              <button className="btn secondary" onClick={() => setExcelImportOpen(false)}>����</button>
+              <button className="btn" onClick={doExcelImport}>�i���ɤJ</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* 清零確認對話框 */}
+      {/* �M�s�T�{���ܮ� */}
       {clearOpen && (
         <div className="modal-backdrop">
           <div className="modal">
-            <div className="header">清零所有庫存數量</div>
+            <div className="header">�M�s�Ҧ��w�s�ƶq</div>
             <div className="body">
-              <p>⚠️ 警告：此操作將把所有庫存數量設為0，此操作無法撤銷！</p>
-              <p>確定要繼續嗎？</p>
+              <p>?? ĵ�i�G���ާ@�N���Ҧ��w�s�ƶq�]��0�A���ާ@�L�k�M�P�I</p>
+              <p>�T�w�n�~���ܡH</p>
             </div>
             <div className="footer">
-              <button className="btn secondary" onClick={() => setClearOpen(false)}>取消</button>
-              <button className="btn danger" onClick={doClearAll}>確定清零</button>
+              <button className="btn secondary" onClick={() => setClearOpen(false)}>����</button>
+              <button className="btn danger" onClick={doClearAll}>�T�w�M�s</button>
             </div>
           </div>
         </div>
