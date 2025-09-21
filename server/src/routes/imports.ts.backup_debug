@@ -81,12 +81,6 @@ async function updateWS712Product(rawCode: string, qty: number, locationId: stri
   const products = await Product.find({ productCode: { $in: variants } });
   console.log(`調試: 找到 ${products.length} 個匹配的WS-712產品`);
   
-  // 詳細調試：列出所有查詢到的產品
-  console.log(`調試: 查詢到的產品詳情:`);
-  products.forEach((product, index) => {
-    console.log(`調試: 產品 ${index + 1} - productCode: ${product.productCode}, _id: ${product._id}, sizes:`, product.sizes);
-  });
-  
   if (products.length === 0) { 
     console.log(`調試: 沒有找到任何WS-712產品`);
     summary.notFound.push(normalizeCode(rawCode)); 
