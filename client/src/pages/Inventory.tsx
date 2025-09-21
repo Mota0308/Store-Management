@@ -2,7 +2,7 @@
 import api from '../api'
 import * as XLSX from 'xlsx'
 
-// 定義類型接口
+// 定義介面
 interface Location {
   _id: string
   name: string
@@ -14,7 +14,7 @@ interface ProductType {
 }
 
 interface Inventory {
-  locationId: string | { _id: string; name: string } | null // 添加 null 支持
+  locationId: string | { _id: string; name: string } | null // 添加 null 類型
   quantity: number
 }
 
@@ -52,7 +52,7 @@ export default function Inventory() {
   const [isMobile, setIsMobile] = useState<boolean>(false)
   const [mobileControlsOpen, setMobileControlsOpen] = useState<boolean>(false)
 
-  // 新增：主行編輯狀態
+  // 新增群組編輯狀態
   const [editingGroup, setEditingGroup] = useState<string | null>(null)
   const [groupEditForm, setGroupEditForm] = useState<{
     name: string
@@ -86,7 +86,7 @@ export default function Inventory() {
   const [excelImportOpen, setExcelImportOpen] = useState(false)
   const [excelImportState, setExcelImportState] = useState<{ files: File[] }>({ files: [] })
 
-  // 清除狀態
+  // 清零狀態
   const [clearOpen, setClearOpen] = useState(false)
   // 編輯狀態
   const [editingProduct, setEditingProduct] = useState<string | null>(null)
@@ -108,7 +108,7 @@ export default function Inventory() {
 
   useEffect(() => {
     api.get('/locations').then((r: any) => {
-      // 按照固定順序排列：進貨，上架，庫存調，觀塘，灣仔，荔枝角，元朗，國內倉，總庫
+      // 按照固定順序排列：進貨、上架、庫存調、觀塘、灣仔、荔枝角、元朗、國內倉、總庫
       const order = ['進貨', '上架', '庫存調', '觀塘', '灣仔', '荔枝角', '元朗', '國內倉', '總庫'];
       const sortedLocations = r.data.sort((a: Location, b: Location) => {
         const aIndex = order.indexOf(a.name);
@@ -200,17 +200,17 @@ export default function Inventory() {
     return product.size || ''
   }
 
-  // 新增：產品尺寸智能排序
+  // 新增產品尺寸排序邏輯
   function sortProductsBySize(products: Product[]): Product[] {
     return products.sort((a, b) => {
       const aSize = getProductSize(a)
       const bSize = getProductSize(b)
       
-      // 提取數字進行比較
+      // 提取數字進行排序
       const aNumbers = aSize.match(/\d+/g) || []
       const bNumbers = bSize.match(/\d+/g) || []
       
-      // 如果都有數字，比較第一個數字
+      // 如果有數字，比較第一個數字
       if (aNumbers.length > 0 && bNumbers.length > 0) {
         const aNum = parseInt(aNumbers[0] || '0')
         const bNum = parseInt(bNumbers[0] || '0')
@@ -242,7 +242,7 @@ export default function Inventory() {
         return inv.locationId._id === locationId || inv.locationId._id.toString() === locationId
       }
       
-      // 處理字符串 ObjectId 類型，添加 null 檢查
+      // 處理字符串 ObjectId 的情況，添加 null 檢查
       if (inv.locationId && typeof inv.locationId === 'string') {
         return inv.locationId === locationId || inv.locationId.toString() === locationId
       }
@@ -269,11 +269,11 @@ export default function Inventory() {
   }
 
   function getSortIcon(column: string): string {
-    if (sortBy !== column) return '↕'
+    if (sortBy !== column) return '?'
     return sortOrder === 'asc' ? '↑' : '↓'
   }
 
-  // 新增：主行編輯功能
+  // 新增群組編輯功能
   function handleEditGroup(group: ProductGroup) {
     setEditingGroup(group.key)
     setGroupEditForm({
@@ -290,10 +290,10 @@ export default function Inventory() {
     })
   }
 
-  // 新增：保存主行編輯 - 批量更新所有小行
+  // 新增群組編輯保存 - 批量更新所有產品
   async function handleSaveGroupEdit(group: ProductGroup) {
     try {
-      // 批量更新該組內所有產品的名字和產品編號
+      // 批量更新該群組內所有產品的名稱和產品代碼
       const updatePromises = group.products.map(product => 
         api.put(`/products/${product._id}`, {
           name: groupEditForm.name,
@@ -319,7 +319,7 @@ export default function Inventory() {
     }
   }
 
-  // Excel導出功能（支持分組和排序）
+  // Excel導出功能（包含分組和排序）
   function exportToExcel() {
     try {
       const exportData = []
@@ -375,9 +375,9 @@ export default function Inventory() {
       form.append('locationId', importState.locationId)
       importState.files.forEach(f => form.append('files', f))
       
-      // 確保根據type調用不同的API端點
+      // 確保根據type調用正確的API端點
       const response = await api.post(`/import/${type}`, form)
-      alert(`${type === 'incoming' ? '進貨' : '出貨'}成功\n處理:${response.data.processed}  匹配:${response.data.matched}  新增:${response.data.created}  更新:${response.data.updated}\n未找到: ${response.data.notFound?.join(', ') || '無'}`)
+      alert(`${type === 'incoming' ? '進貨' : '出貨'}成功！\n處理:${response.data.processed}  匹配:${response.data.matched}  新增:${response.data.created}  更新:${response.data.updated}\n未找到: ${response.data.notFound?.join(', ') || '無'}`)
       setImportOpen(false)
       await load()
     } catch (error: any) {
@@ -403,7 +403,7 @@ export default function Inventory() {
       transferState.files.forEach(f => form.append('files', f))
       
       const response = await api.post('/import/transfer', form)
-      alert(`轉移庫存成功\n處理:${response.data.processed}  匹配:${response.data.matched}  更新:${response.data.updated}\n未找到: ${response.data.notFound?.join(', ') || '無'}`)
+      alert(`轉移庫存成功！\n處理:${response.data.processed}  匹配:${response.data.matched}  更新:${response.data.updated}\n未找到: ${response.data.notFound?.join(', ') || '無'}`)
       setTransferOpen(false)
       await load()
     } catch (error: any) {
@@ -421,7 +421,7 @@ export default function Inventory() {
     // 檢查文件大小
     const totalSize = excelImportState.files.reduce((sum, file) => sum + file.size, 0)
     if (totalSize > 10 * 1024 * 1024) { // 10MB限制
-      alert('文件總大小超過10MB，請選擇較小的文件')
+      alert('文件太大超過10MB，請選擇較小文件')
       return
     }
     
@@ -444,7 +444,7 @@ export default function Inventory() {
       // 顯示結果
       const resultMsg = `Excel導入成功！
       
-處理行數: ${response.data.processed}
+處理文件: ${response.data.processed}
 匹配商品: ${response.data.matched}
 新增商品: ${response.data.created}
 更新商品: ${response.data.updated}
@@ -460,9 +460,9 @@ ${response.data.errors?.length > 0 ? '錯誤詳情:\n' + response.data.errors.sl
       
       let errorMsg = 'Excel導入失敗：'
       if (error.code === 'ECONNABORTED') {
-        errorMsg += '處理超時，請選擇較小的文件或檢查網絡連接'
+        errorMsg += '處理超時，請選擇較小文件或檢查網絡連接'
       } else if (error.response?.status === 413) {
-        errorMsg += '文件太大，請選擇較小的文件'
+        errorMsg += '文件太大，請選擇較小文件'
       } else if (error.response?.data?.message) {
         errorMsg += error.response.data.message
       } else {
@@ -473,16 +473,16 @@ ${response.data.errors?.length > 0 ? '錯誤詳情:\n' + response.data.errors.sl
     }
   }
 
-  // 清除所有庫存數量
+  // 清零所有庫存數量
   async function doClearAll() {
-    if (!confirm('確定要清除所有庫存嗎？此操作無法撤銷！')) {
+    if (!confirm('確定要清零所有庫存嗎？此操作無法撤銷！')) {
       return
     }
     
     try {
       const response = await api.post('/import/clear')
       
-      const resultMsg = `清除成功！
+      const resultMsg = `清零成功！
       
 處理商品: ${response.data.processed}
 更新商品: ${response.data.updated}
@@ -494,9 +494,9 @@ ${response.data.errors?.length > 0 ? '錯誤詳情:\n' + response.data.errors.sl
       setClearOpen(false)
       await load()
     } catch (error: any) {
-      console.error('清除錯誤:', error)
+      console.error('清零錯誤:', error)
       
-      let errorMsg = '清除失敗：'
+      let errorMsg = '清零失敗：'
       if (error.response?.data?.message) {
         errorMsg += error.response.data.message
       } else {
@@ -560,17 +560,17 @@ ${response.data.errors?.length > 0 ? '錯誤詳情:\n' + response.data.errors.sl
     }
   }
 
-  // 刪除產品組
+  // 刪除整個產品組
   async function handleDeleteGroup(group: ProductGroup) {
-    if (confirm(`確定要刪除產品組 "${group.name}" (${group.productCode}) 嗎？\n這將刪除產品組內的所有商品，此操作無法撤銷！`)) {
+    if (confirm(`確定要刪除產品組 "${group.name}" (${group.productCode}) 嗎？\n這將刪除該組內所有產品，此操作無法撤銷！`)) {
       try {
-        // 批量刪除產品組內的所有商品
+        // 批量刪除該組內所有產品
         const deletePromises = group.products.map(product => 
           api.delete(`/products/${product._id}`)
         )
         
         await Promise.all(deletePromises)
-        alert(`產品組 "${group.name}" 刪除成功，共刪除 ${group.products.length} 個商品`)
+        alert(`產品組 "${group.name}" 刪除成功，共刪除 ${group.products.length} 個產品`)
         await load()
       } catch (error: any) {
         alert(`刪除失敗：${error.response?.data?.message || error.message}`)
@@ -593,7 +593,7 @@ ${response.data.errors?.length > 0 ? '錯誤詳情:\n' + response.data.errors.sl
     return groups
   }, {} as Record<string, ProductGroup>)
 
-  // 對每個分組的產品按尺寸排序
+  // 對每個群組內的產品按尺寸排序
   Object.values(groupedProducts).forEach(group => {
     group.products = sortProductsBySize(group.products)
   })
@@ -615,7 +615,7 @@ ${response.data.errors?.length > 0 ? '錯誤詳情:\n' + response.data.errors.sl
         {isMobile && (
           <div style={{ marginTop: 12 }}>
             <button className="btn" onClick={() => setMobileControlsOpen(o => !o)}>
-              {mobileControlsOpen ? '隱藏功能' : '顯示功能'}
+              {mobileControlsOpen ? '隱藏控制' : '顯示控制'}
             </button>
           </div>
         )}
@@ -633,14 +633,14 @@ ${response.data.errors?.length > 0 ? '錯誤詳情:\n' + response.data.errors.sl
             
             <input
               type="text"
-              placeholder="搜索商品..."
+              placeholder="搜尋產品..."
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}
             />
 
             <input
               type="text"
-              placeholder="搜索尺寸..."
+              placeholder="搜尋尺寸..."
               value={sizeSearchTerm}
               onChange={e => setSizeSearchTerm(e.target.value)}
             />
@@ -649,19 +649,19 @@ ${response.data.errors?.length > 0 ? '錯誤詳情:\n' + response.data.errors.sl
           <div className="spacer" />
           <button className="btn" onClick={exportToExcel}>導出Excel</button>
           <button className="btn" onClick={() => setExcelImportOpen(true)}>導入Excel</button>
-          <button className="btn" onClick={() => setClearOpen(true)}>清除</button>
+          <button className="btn" onClick={() => setClearOpen(true)}>清零</button>
           <button className="btn" onClick={() => setImportOpen(true)}>導入庫存</button>
           <button className="btn" onClick={() => setTransferOpen(true)}>庫存轉移</button>
         </div>
       )}
 
-      {/* 表格容器：包含標題和數據行，響應式設計 */}
+      {/* 表格容器：包含標題和數據，無需滾動 */}
       <div className="table-container">
         <table>
           <thead>
             <tr>
-              <th>商品</th>
-              <th>編號</th>
+              <th>產品</th>
+              <th>代碼</th>
               <th>尺寸</th>
               {locations.map(location => (
                 <th key={location._id} onClick={() => handleSort(location._id)} style={{ cursor: 'pointer' }}>
@@ -785,12 +785,12 @@ ${response.data.errors?.length > 0 ? '錯誤詳情:\n' + response.data.errors.sl
                           type="text"
                           value={groupEditForm.productCode}
                           onChange={e => setGroupEditForm(prev => ({ ...prev, productCode: e.target.value }))}
-                          placeholder="產品編號"
+                          placeholder="產品代碼"
                           style={{ width: '100%', padding: '4px 8px', border: '1px solid #d1d5db', borderRadius: '4px' }}
                         />
                       </td>
                       <td colSpan={locations.length + 2} style={{ textAlign: 'center', color: '#6b7280' }}>
-                        編輯模式 - 修改產品名稱和編號將更新該組內所有商品
+                        編輯模式 - 修改產品名稱和代碼將更新該組內所有產品
                       </td>
                     </tr>
                   ) : null
@@ -857,7 +857,7 @@ ${response.data.errors?.length > 0 ? '錯誤詳情:\n' + response.data.errors.sl
                         </td>
                       </>
                     ) : (
-                      // 正常模式 - 包含高光顯示功能
+                      // 正常模式 - 顯示產品數據
                       <>
                         <td className="right">{product.name}</td>
                         <td>{product.productCode}</td>
@@ -965,11 +965,11 @@ ${response.data.errors?.length > 0 ? '錯誤詳情:\n' + response.data.errors.sl
               <div style={{ marginBottom: '16px' }}>
                 <p><strong>Excel格式要求：</strong></p>
                 <ul style={{ margin: '8px 0', paddingLeft: '20px' }}>
-                  <li>列順序：產品編號、商品名稱、產品類型、尺寸、進貨、上架、庫存調、觀塘、灣仔、荔枝角、元朗、國內倉、總庫</li>
-                  <li>產品編號：商品編號（例如：商品編號、產品編號、商品、編號、產品）</li>
-                  <li>商品名稱：商品名稱（例如：商品名稱、名稱、商品、名稱、產品）</li>
-                  <li>產品類型：尺寸（例如：尺寸、大小、規格、型號）</li>
-                  <li>下各列：對應庫存數量（例如：進貨數量、上架數量）</li>
+                  <li>每列：產品代碼、產品名稱、產品類型、尺寸、進貨、上架、庫存調、觀塘、灣仔、荔枝角、元朗、國內倉、總庫</li>
+                  <li>產品代碼：產品代碼（如：產品代碼、商品代碼、產品、代碼、商品）</li>
+                  <li>產品名稱：產品名稱（如：產品名稱、名稱、產品、名稱、商品）</li>
+                  <li>產品類型：尺寸（如：尺寸、大小、上架、尺寸、規格）</li>
+                  <li>下下列：對應庫存數量（如：進貨數量、上架數量）</li>
                 </ul>
               </div>
               <div>
@@ -985,18 +985,18 @@ ${response.data.errors?.length > 0 ? '錯誤詳情:\n' + response.data.errors.sl
         </div>
       )}
 
-      {/* 清除確認彈窗 */}
+      {/* 清零確認彈窗 */}
       {clearOpen && (
         <div className="modal-backdrop">
           <div className="modal">
-            <div className="header">清除所有庫存數量</div>
+            <div className="header">清零所有庫存數量</div>
             <div className="body">
-              <p>⚠️ 警告：此操作將清除所有庫存數量（設為0），此操作無法撤銷！</p>
+              <p>⚠️ 警告：此操作將清零所有庫存數量（設為0），此操作無法撤銷！</p>
               <p>確定要繼續嗎？</p>
             </div>
             <div className="footer">
               <button className="btn secondary" onClick={() => setClearOpen(false)}>取消</button>
-              <button className="btn danger" onClick={doClearAll}>確定清除</button>
+              <button className="btn danger" onClick={doClearAll}>確定清零</button>
             </div>
           </div>
         </div>
