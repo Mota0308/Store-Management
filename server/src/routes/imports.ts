@@ -216,7 +216,7 @@ async function updateByCodeVariants(code: string, qty: number, locationId: strin
   }
 }
 
-// 改進：PDF解析函數，根據圖片格式進行優化
+// 重新定義：PDF解析函數 - 按照表格結構提取
 async function extractByPdfjs(buffer: Buffer): Promise<{ name: string; code: string; qty: number; purchaseType?: string; size?: string }[]> {
   const rows: { name: string; code: string; qty: number; purchaseType?: string; size?: string }[] = [];
   
@@ -231,7 +231,7 @@ async function extractByPdfjs(buffer: Buffer): Promise<{ name: string; code: str
       const lines = text.split(/\r?\n/).map((line: string) => line.trim()).filter(Boolean);
       console.log(`調試: 總共 ${lines.length} 行文本`);
       
-      // 處理每一行，查找商品信息
+      // 按照表格結構解析：尋找"型號"和"數量"列
       for (let i = 0; i < lines.length; i++) {
         const line = lines[i];
         
@@ -241,38 +241,56 @@ async function extractByPdfjs(buffer: Buffer): Promise<{ name: string; code: str
           const code = wsCodeMatch[1];
           console.log(`調試: 找到商品代碼: ${code}`);
           
-          // 查找數量 - 在商品代碼行中查找數量
+          // 查找數量 - 在同一行或附近行查找數量
           let qty = 1; // 默認數量為1
-          const qtyMatch = line.match(/(\d+)HK\$/);
-          if (qtyMatch) {
-            // 如果找到價格，數量通常是1
-            qty = 1;
+          
+          // 方法1：在同一行查找數量
+          const qtyInSameLine = line.match(/\b(\d+)\b/);
+          if (qtyInSameLine) {
+            const extractedQty = parseInt(qtyInSameLine[1], 10);
+            if (extractedQty >= 1 && extractedQty <= 999) {
+              qty = extractedQty;
+              console.log(`調試: 在同一行找到數量: ${qty}`);
+            }
           }
           
-          // 查找尺寸和購買類型 - 在後續行中查找
+          // 方法2：在後續行查找數量（表格結構）
+          if (qty === 1) {
+            for (let j = i + 1; j < Math.min(i + 5, lines.length); j++) {
+              const nextLine = lines[j];
+              const qtyInNextLine = nextLine.match(/^\s*(\d+)\s*$/);
+              if (qtyInNextLine) {
+                const extractedQty = parseInt(qtyInNextLine[1], 10);
+                if (extractedQty >= 1 && extractedQty <= 999) {
+                  qty = extractedQty;
+                  console.log(`調試: 在後續行找到數量: ${qty}`);
+                  break;
+                }
+              }
+            }
+          }
+          
+          // 查找尺寸和購買類型 - 在商品詳情列中查找
           let size: string | undefined;
           let purchaseType: string | undefined;
           
-          // 檢查後續幾行，尋找產品描述和相關信息
-          for (let j = i + 1; j < Math.min(i + 15, lines.length); j++) {
+          // 檢查後續幾行，尋找商品詳情信息
+          for (let j = i + 1; j < Math.min(i + 10, lines.length); j++) {
             const nextLine = lines[j];
-            console.log(`調試: 檢查行 ${j + 1}: "${nextLine}"`);
+            console.log(`調試: 檢查商品詳情行 ${j + 1}: "${nextLine}"`);
             
-            // 先查找數量 - 查找純數字行
-            const qtyInLine = nextLine.match(/^\s*\d+\s*$/);
-            if (qtyInLine) {
-              qty = parseInt(qtyInLine[0].trim(), 10);
-              console.log(`調試: 找到實際數量: ${qty}`);
-            }
-            
-            // 方法1：查找明確的尺寸和購買類型標籤
-            // 匹配格式：- 尺寸: 1 或 - 購買類型: 上衣
+            // 查找尺寸信息
             const sizeMatch = nextLine.match(/-?\s*尺寸[：:]\s*([^\s，,\n\r]+)/);
             if (sizeMatch) {
-              size = sizeMatch[1].trim();
-              console.log(`調試: 找到尺寸: ${size}`);
+              const extractedSize = sizeMatch[1].trim();
+              // 過濾掉包含mm的尺寸，只保留純數字
+              if (!extractedSize.includes('mm') && /^\d+$/.test(extractedSize)) {
+                size = extractedSize;
+                console.log(`調試: 找到尺寸: ${size}`);
+              }
             }
             
+            // 查找購買類型信息
             const purchaseTypeMatch = nextLine.match(/-?\s*購買類型[：:]\s*([^，,\s]+)/);
             if (purchaseTypeMatch) {
               const type = purchaseTypeMatch[1].trim();
@@ -288,32 +306,6 @@ async function extractByPdfjs(buffer: Buffer): Promise<{ name: string; code: str
                 purchaseType = type;
               }
               console.log(`調試: 標準化購買類型: ${purchaseType}`);
-            }
-            
-            // 方法2：如果沒有明確標籤，嘗試從產品描述中提取
-            if (!size && !purchaseType) {
-              // 查找產品描述行（通常包含產品名稱）
-              if (nextLine.includes('mm') || nextLine.includes('兒童') || nextLine.includes('保暖') || nextLine.includes('上衣') || nextLine.includes('褲子')) {
-                // 從產品描述中提取尺寸和購買類型
-                const extracted = extractPurchaseTypeAndSize(nextLine);
-                if (extracted.size) {
-                  size = extracted.size;
-                  console.log(`調試: 從描述中提取尺寸: ${size}`);
-                }
-                if (extracted.purchaseType) {
-                  purchaseType = extracted.purchaseType;
-                  console.log(`調試: 從描述中提取購買類型: ${purchaseType}`);
-                }
-              }
-            }
-            
-            // 方法3：查找套裝優惠行，可能包含尺寸信息
-            if (!size && nextLine.includes('套裝優惠')) {
-              const setSizeMatch = nextLine.match(/-?\s*套裝優惠.*?(\d+)/);
-              if (setSizeMatch) {
-                size = setSizeMatch[1].trim();
-                console.log(`調試: 從套裝優惠中提取尺寸: ${size}`);
-              }
             }
             
             // 如果遇到下一個商品代碼，停止搜索
