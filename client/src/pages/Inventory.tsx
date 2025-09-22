@@ -92,6 +92,7 @@ export default function Inventory() {
     return product.size || ''
   }
 
+  // 修復後的 getQuantity 函數 - 加入 null 檢查
   function getQuantity(product: Product, locationId: string): number {
     if (!product.inventories || !Array.isArray(product.inventories)) {
       return 0
