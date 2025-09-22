@@ -40,29 +40,20 @@ export default function Inventory() {
   const [filteredProducts, setFilteredProducts] = useState<Product[]>([])
   const [selectedType, setSelectedType] = useState<string>('')
   const [searchTerm, setSearchTerm] = useState('')
+  const [loading, setLoading] = useState(false)
   const [sortBy, setSortBy] = useState<string>('')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
-  const [loading, setLoading] = useState(false)
   const [editingGroup, setEditingGroup] = useState<ProductGroup | null>(null)
   const [groupEditForm, setGroupEditForm] = useState({
     name: '',
     productCode: ''
   })
   
-  // 導入庫存狀態
+  // 導入狀態
   const [importOpen, setImportOpen] = useState(false)
-  const [importState, setImportState] = useState<{ locationId: string; files: File[] }>({ locationId: '', files: [] })
-  
-  // 門市對調狀態
   const [transferOpen, setTransferOpen] = useState(false)
-  const [transferState, setTransferState] = useState<{ fromLocationId: string; toLocationId: string; files: File[] }>({ fromLocationId: '', toLocationId: '', files: [] })
-  
-  // Excel導入狀態
   const [excelImportOpen, setExcelImportOpen] = useState(false)
-  const [excelImportState, setExcelImportState] = useState<{ files: File[] }>({ files: [] })
-  
-  // 清零庫存狀態
   const [clearOpen, setClearOpen] = useState(false)
   const [selectedFiles, setSelectedFiles] = useState<FileList | null>(null)
   const [selectedLocation, setSelectedLocation] = useState('')
@@ -265,14 +256,12 @@ export default function Inventory() {
     setExpandedGroups(newExpanded)
   }
 
-  // 修改後的Excel匯出功能
+  // Excel匯出功能
   function exportToExcel() {
     try {
-      // 準備數據
       const exportData = []
-      
-      // 添加標題行
-      exportData.push(['產品代碼', '產品名稱', '產品類型', '尺寸', '價格', ...locations.map(l => l.name), '總庫存'])
+      const headers = ['產品代碼', '產品名稱', '產品類型', '尺寸', '價格', ...locations.map(l => l.name), '總庫存']
+      exportData.push(headers)
       
       // 按組分組並添加產品數據
       const groupedProducts = (filteredProducts || []).reduce((groups, product) => {
@@ -306,19 +295,15 @@ export default function Inventory() {
         })
       })
       
-      // 創建工作表
       const ws = XLSX.utils.aoa_to_sheet(exportData)
       const wb = XLSX.utils.book_new()
       XLSX.utils.book_append_sheet(wb, ws, '庫存報表')
       
-      // 生成文件名
       const now = new Date()
       const timestamp = now.toISOString().slice(0, 19).replace(/:/g, '-')
       const filename = `庫存報表_${timestamp}.xlsx`
       
-      // 導出文件
       XLSX.writeFile(wb, filename)
-      
       alert('Excel文件導出成功！')
     } catch (error) {
       console.error('導出Excel失敗:', error)
@@ -328,20 +313,20 @@ export default function Inventory() {
 
   // 導入處理函數
   async function doImport(type: 'incoming' | 'outgoing') {
-    if (!importState.files || importState.files.length === 0) {
+    if (!selectedFiles || selectedFiles.length === 0) {
       alert('請選擇文件')
       return
     }
-    if (!importState.locationId) {
+    if (!selectedLocation) {
       alert('請選擇地點')
       return
     }
 
     const formData = new FormData()
-    importState.files.forEach(file => {
+    Array.from(selectedFiles).forEach(file => {
       formData.append('files', file)
     })
-    formData.append('locationId', importState.locationId)
+    formData.append('locationId', selectedLocation)
 
     try {
       setLoading(true)
@@ -361,7 +346,8 @@ ${response.data.notFound?.length ? '未找到商品:\n' + response.data.notFound
       
       alert(resultMsg)
       setImportOpen(false)
-      setImportState({ locationId: '', files: [] })
+      setSelectedFiles(null)
+      setSelectedLocation('')
       await load()
     } catch (error: any) {
       console.error('導入錯誤:', error)
@@ -373,32 +359,42 @@ ${response.data.notFound?.length ? '未找到商品:\n' + response.data.notFound
 
   // 調貨功能
   async function doTransfer() {
-    if (!transferState.fromLocationId || !transferState.toLocationId || !transferState.files || transferState.files.length === 0) {
+    if (!transferFrom || !transferTo || !selectedProduct || !transferQuantity) {
       alert('請填寫完整信息')
       return
     }
 
-    if (transferState.fromLocationId === transferState.toLocationId) {
+    if (transferFrom === transferTo) {
       alert('來源和目標門市不能相同')
       return
     }
 
-    const formData = new FormData()
-    transferState.files.forEach(file => {
-      formData.append('files', file)
-    })
-    formData.append('fromLocationId', transferState.fromLocationId)
-    formData.append('toLocationId', transferState.toLocationId)
+    if (transferQuantity <= 0) {
+      alert('調貨數量必須大於0')
+      return
+    }
+
+    const currentQuantity = getQuantity(selectedProduct, transferFrom)
+    if (currentQuantity < transferQuantity) {
+      alert(`庫存不足！當前庫存：${currentQuantity}，需要調貨：${transferQuantity}`)
+      return
+    }
 
     try {
       setLoading(true)
-      const response = await api.post('/import/transfer', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
+      const response = await api.post('/transfer', {
+        productId: selectedProduct._id,
+        fromLocationId: transferFrom,
+        toLocationId: transferTo,
+        quantity: transferQuantity
       })
 
-      alert(`門市對調完成！處理了${response.data.processed || 0}個產品`)
+      alert(`調貨成功！已從${locations.find(l => l._id === transferFrom)?.name}調貨${transferQuantity}件到${locations.find(l => l._id === transferTo)?.name}`)
       setTransferOpen(false)
-      setTransferState({ fromLocationId: '', toLocationId: '', files: [] })
+      setSelectedProduct(null)
+      setTransferFrom('')
+      setTransferTo('')
+      setTransferQuantity(1)
       await load()
     } catch (error: any) {
       console.error('調貨錯誤:', error)
@@ -410,21 +406,21 @@ ${response.data.notFound?.length ? '未找到商品:\n' + response.data.notFound
 
   // Excel導入功能
   async function doExcelImport() {
-    if (!excelImportState.files || excelImportState.files.length === 0) {
+    if (!selectedFiles || selectedFiles.length === 0) {
       alert('請選擇Excel文件')
       return
     }
-
-    const totalSize = excelImportState.files.reduce((sum, file) => sum + file.size, 0)
-    if (totalSize > 50 * 1024 * 1024) { // 50MB limit
-      alert('文件總大小不能超過50MB')
+    if (!selectedLocation) {
+      alert('請選擇門市')
       return
     }
 
     const formData = new FormData()
-    excelImportState.files.forEach(file => {
+    Array.from(selectedFiles).forEach(file => {
       formData.append('files', file)
     })
+    formData.append('locationId', selectedLocation)
+    formData.append('direction', 'incoming')
 
     try {
       setLoading(true)
@@ -434,7 +430,8 @@ ${response.data.notFound?.length ? '未找到商品:\n' + response.data.notFound
 
       alert(`Excel導入完成！處理了${response.data.processed || 0}個產品`)
       setExcelImportOpen(false)
-      setExcelImportState({ files: [] })
+      setSelectedFiles(null)
+      setSelectedLocation('')
       await load()
     } catch (error: any) {
       console.error('Excel導入錯誤:', error)
@@ -570,6 +567,14 @@ ${response.data.notFound?.length ? '未找到商品:\n' + response.data.notFound
     return groups
   }, {} as Record<string, ProductGroup>)
 
+  // 默認展開第一個組
+  useEffect(() => {
+    const firstGroupKey = Object.keys(groupedProducts)[0]
+    if (firstGroupKey && !expandedGroups.has(firstGroupKey)) {
+      setExpandedGroups(new Set([firstGroupKey]))
+    }
+  }, [groupedProducts])
+
   if (loading) {
     return (
       <div className="flex justify-center items-center h-64">
@@ -579,10 +584,12 @@ ${response.data.notFound?.length ? '未找到商品:\n' + response.data.notFound
   }
 
   return (
-    <div className="p-6">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold mb-4">庫存管理</h1>
-        
+    <div className="page">
+      <div className="header">
+        <h1>庫存管理</h1>
+      </div>
+
+      <div className="toolbar">
         <div className="filters">
           <select value={selectedType} onChange={e => setSelectedType(e.target.value)}>
             <option value="">所有產品類型</option>
@@ -723,7 +730,7 @@ ${response.data.notFound?.length ? '未找到商品:\n' + response.data.notFound
             <div className="body">
               <div>
                 <p>選擇門市：</p>
-                <select value={importState.locationId} onChange={e => setImportState(s => ({ ...s, locationId: e.target.value }))}>
+                <select value={selectedLocation} onChange={e => setSelectedLocation(e.target.value)}>
                   <option value="">請選擇門市</option>
                   {locations.map(location => (
                     <option key={location._id} value={location._id}>{location.name}</option>
@@ -732,7 +739,7 @@ ${response.data.notFound?.length ? '未找到商品:\n' + response.data.notFound
               </div>
               <div>
                 <p>選擇PDF檔案：</p>
-                <input multiple type="file" accept=".pdf" onChange={e => setImportState(s => ({ ...s, files: Array.from(e.target.files || []) }))} />
+                <input multiple type="file" accept=".pdf" onChange={e => setSelectedFiles(e.target.files)} />
               </div>
             </div>
             <div className="footer">
@@ -751,8 +758,25 @@ ${response.data.notFound?.length ? '未找到商品:\n' + response.data.notFound
             <div className="header">門市對調</div>
             <div className="body">
               <div>
+                <p>選擇產品：</p>
+                <select 
+                  value={selectedProduct?._id || ''} 
+                  onChange={e => {
+                    const product = products.find(p => p._id === e.target.value)
+                    setSelectedProduct(product || null)
+                  }}
+                >
+                  <option value="">請選擇產品</option>
+                  {products.map(product => (
+                    <option key={product._id} value={product._id}>
+                      {product.productCode} - {product.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
                 <p>來源門市：</p>
-                <select value={transferState.fromLocationId} onChange={e => setTransferState(s => ({ ...s, fromLocationId: e.target.value }))}>
+                <select value={transferFrom} onChange={e => setTransferFrom(e.target.value)}>
                   <option value="">請選擇來源門市</option>
                   {locations.map(location => (
                     <option key={location._id} value={location._id}>{location.name}</option>
@@ -761,7 +785,7 @@ ${response.data.notFound?.length ? '未找到商品:\n' + response.data.notFound
               </div>
               <div>
                 <p>目標門市：</p>
-                <select value={transferState.toLocationId} onChange={e => setTransferState(s => ({ ...s, toLocationId: e.target.value }))}>
+                <select value={transferTo} onChange={e => setTransferTo(e.target.value)}>
                   <option value="">請選擇目標門市</option>
                   {locations.map(location => (
                     <option key={location._id} value={location._id}>{location.name}</option>
@@ -769,13 +793,18 @@ ${response.data.notFound?.length ? '未找到商品:\n' + response.data.notFound
                 </select>
               </div>
               <div>
-                <p>選擇PDF檔案：</p>
-                <input multiple type="file" accept=".pdf" onChange={e => setTransferState(s => ({ ...s, files: Array.from(e.target.files || []) }))} />
+                <p>調貨數量：</p>
+                <input 
+                  type="number" 
+                  value={transferQuantity} 
+                  onChange={e => setTransferQuantity(parseInt(e.target.value) || 0)}
+                  min="1"
+                />
               </div>
             </div>
             <div className="footer">
               <button className="btn secondary" onClick={() => setTransferOpen(false)}>取消</button>
-              <button className="btn" onClick={doTransfer}>進行</button>
+              <button className="btn" onClick={doTransfer}>確認調貨</button>
             </div>
           </div>
         </div>
@@ -785,7 +814,7 @@ ${response.data.notFound?.length ? '未找到商品:\n' + response.data.notFound
       {excelImportOpen && (
         <div className="modal-backdrop">
           <div className="modal">
-            <div className="header">導入Excel</div>
+            <div className="header">Excel導入</div>
             <div className="body">
               <div style={{ marginBottom: '16px' }}>
                 <p><strong>Excel格式要求：</strong></p>
@@ -798,8 +827,17 @@ ${response.data.notFound?.length ? '未找到商品:\n' + response.data.notFound
                 </ul>
               </div>
               <div>
+                <p>選擇門市：</p>
+                <select value={selectedLocation} onChange={e => setSelectedLocation(e.target.value)}>
+                  <option value="">請選擇門市</option>
+                  {locations.map(location => (
+                    <option key={location._id} value={location._id}>{location.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
                 <p>選擇Excel檔案：</p>
-                <input multiple type="file" accept=".xlsx,.xls" onChange={e => setExcelImportState(s => ({ ...s, files: Array.from(e.target.files || []) }))} />
+                <input multiple type="file" accept=".xlsx,.xls" onChange={e => setSelectedFiles(e.target.files)} />
               </div>
             </div>
             <div className="footer">
