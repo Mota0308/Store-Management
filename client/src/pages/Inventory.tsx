@@ -92,17 +92,28 @@ export default function Inventory() {
     return product.size || ''
   }
 
+  // 修復後的 getQuantity 函數 - 加入 null 檢查
   function getQuantity(product: Product, locationId: string): number {
     if (!product.inventories || !Array.isArray(product.inventories)) {
       return 0
     }
     const inventory = product.inventories.find(inv => {
+      // 檢查 locationId 是否為 null 或 undefined
+      if (!inv.locationId) {
+        return false
+      }
+      
       // 處理 populate 後的 locationId 對象
       if (typeof inv.locationId === 'object' && inv.locationId !== null) {
         return inv.locationId._id === locationId || inv.locationId._id.toString() === locationId
       }
-      // 處理原始的 ObjectId 字符串
-      return inv.locationId === locationId || inv.locationId.toString() === locationId
+      
+      // 處理字符串 ObjectId 的比較，加入 null 檢查
+      if (inv.locationId && typeof inv.locationId === 'string') {
+        return inv.locationId === locationId || inv.locationId.toString() === locationId
+      }
+      
+      return false
     })
     return inventory ? inventory.quantity : 0
   }
@@ -128,63 +139,47 @@ export default function Inventory() {
     return sortOrder === 'asc' ? '↓' : '↑'
   }
 
-  // 按尺寸排序產品
-  function sortProductsBySize(products: Product[]): Product[] {
-    return products.sort((a, b) => {
-      const sizeA = getProductSize(a)
-      const sizeB = getProductSize(b)
-      
-      // 提取數字進行排序
-      const numA = parseInt(sizeA.match(/\d+/)?.[0] || '0')
-      const numB = parseInt(sizeB.match(/\d+/)?.[0] || '0')
-      
-      return sortOrder === 'asc' ? numA - numB : numB - numA
-    })
-  }
-
   // 修改後的Excel匯出功能
   function exportToExcel() {
     try {
+      // 準備數據
       const exportData = []
-      const headers = ['產品', '商品', '尺寸', '觀塘', '灣仔', '荔枝角', '元朗', '國內倉', '總庫']
-      exportData.push(headers)
+      
+      // 添加標題行
+      exportData.push(['產品代碼', '產品名稱', '產品類型', '尺寸', '價格', ...locations.map(l => l.name), '總庫存'])
+      
+      // 添加產品數據
       Object.values(groupedProducts).forEach(group => {
-        const sortedProducts = sortProductsBySize([...group.products])
-        sortedProducts.forEach(product => {
-          // 計算各地點的數量
-          const kwunTongQty = getQuantity(product, locations.find(l => l.name === '觀塘')?._id || '')
-          const wanChaiQty = getQuantity(product, locations.find(l => l.name === '灣仔')?._id || '')
-          const laiChiKokQty = getQuantity(product, locations.find(l => l.name === '荔枝角')?._id || '')
-          const yuenLongQty = getQuantity(product, locations.find(l => l.name === '元朗')?._id || '')
-          const domesticQty = getQuantity(product, locations.find(l => l.name === '國內倉')?._id || '')
-          
-          // 計算總庫存（觀塘+灣仔+荔枝角+元朗+國內倉）
-          const totalQty = kwunTongQty + wanChaiQty + laiChiKokQty + yuenLongQty + domesticQty
-          
+        group.products.forEach(product => {
           const row = [
             product.productCode,
             product.name,
+            product.productType,
             getProductSize(product),
-            kwunTongQty,
-            wanChaiQty,
-            laiChiKokQty,
-            yuenLongQty,
-            domesticQty,
-            totalQty
+            product.price,
+            ...locations.map(location => getQuantity(product, location._id)),
+            getTotalQuantity(product)
           ]
           exportData.push(row)
         })
       })
+      
+      // 創建工作表
       const ws = XLSX.utils.aoa_to_sheet(exportData)
       const wb = XLSX.utils.book_new()
-      XLSX.utils.book_append_sheet(wb, ws, '庫存管理')
+      XLSX.utils.book_append_sheet(wb, ws, '庫存報表')
+      
+      // 生成文件名
       const now = new Date()
       const timestamp = now.toISOString().slice(0, 19).replace(/:/g, '-')
-      const filename = `庫存管理_${timestamp}.xlsx`
+      const filename = `庫存報表_${timestamp}.xlsx`
+      
+      // 導出文件
       XLSX.writeFile(wb, filename)
-      alert('Excel匯出成功')
+      
+      alert('Excel文件導出成功！')
     } catch (error) {
-      console.error('匯出Excel錯誤:', error)
+      console.error('導出Excel失敗:', error)
       alert('匯出Excel失敗，請重試')
     }
   }
@@ -237,21 +232,37 @@ ${response.data.notFound?.length ? '未找到商品:\n' + response.data.notFound
 
   // 調貨功能
   async function doTransfer() {
-    if (!selectedProduct || !transferFrom || !transferTo || transferQuantity <= 0) {
-      alert('請填寫完整的調貨信息')
+    if (!transferFrom || !transferTo || !selectedProduct || !transferQuantity) {
+      alert('請填寫完整信息')
+      return
+    }
+
+    if (transferFrom === transferTo) {
+      alert('來源和目標門市不能相同')
+      return
+    }
+
+    if (transferQuantity <= 0) {
+      alert('調貨數量必須大於0')
+      return
+    }
+
+    const currentQuantity = getQuantity(selectedProduct, transferFrom)
+    if (currentQuantity < transferQuantity) {
+      alert(`庫存不足！當前庫存：${currentQuantity}，需要調貨：${transferQuantity}`)
       return
     }
 
     try {
       setLoading(true)
-      const response = await api.post('/products/transfer', {
+      const response = await api.post('/transfer', {
         productId: selectedProduct._id,
         fromLocationId: transferFrom,
         toLocationId: transferTo,
         quantity: transferQuantity
       })
-      
-      alert(`調貨成功！從 ${locations.find(l => l._id === transferFrom)?.name} 調出 ${transferQuantity} 件到 ${locations.find(l => l._id === transferTo)?.name}`)
+
+      alert(`調貨成功！已從${locations.find(l => l._id === transferFrom)?.name}調貨${transferQuantity}件到${locations.find(l => l._id === transferTo)?.name}`)
       setTransferOpen(false)
       setSelectedProduct(null)
       setTransferFrom('')
@@ -273,12 +284,14 @@ ${response.data.notFound?.length ? '未找到商品:\n' + response.data.notFound
       return
     }
     if (!selectedLocation) {
-      alert('請選擇地點')
+      alert('請選擇門市')
       return
     }
 
     const formData = new FormData()
-    formData.append('file', selectedFiles[0])
+    Array.from(selectedFiles).forEach(file => {
+      formData.append('files', file)
+    })
     formData.append('locationId', selectedLocation)
     formData.append('direction', 'incoming')
 
@@ -287,8 +300,8 @@ ${response.data.notFound?.length ? '未找到商品:\n' + response.data.notFound
       const response = await api.post('/import/excel', formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       })
-      
-      alert('Excel導入成功！')
+
+      alert(`Excel導入完成！處理了${response.data.processed || 0}個產品`)
       setExcelImportOpen(false)
       setSelectedFiles(null)
       setSelectedLocation('')
@@ -301,31 +314,33 @@ ${response.data.notFound?.length ? '未找到商品:\n' + response.data.notFound
     }
   }
 
-  // 清零功能
+  // 清零庫存功能
   async function doClearAll() {
-    if (!confirm('確定要清零所有庫存嗎？')) return
-    
-    try {
-      const response = await api.post('/import/clear-all')
-      
-      const resultMsg = `清零完成！
-      
-處理產品: ${response.data.processed || 0}
-更新產品: ${response.data.updatedCount || 0}
-錯誤數量: ${response.data.errors?.length || 0}
+    if (!selectedLocation) {
+      alert('請選擇門市')
+      return
+    }
 
-${response.data.errors?.length ? '錯誤詳情:\n' + response.data.errors.join('\n') : ''}`
-      
-      alert(resultMsg)
+    if (!confirm(`確定要清零${locations.find(l => l._id === selectedLocation)?.name}的所有庫存嗎？此操作不可逆！`)) {
+      return
+    }
+
+    try {
+      setLoading(true)
+      const response = await api.post('/clear', { locationId: selectedLocation })
+      alert(`清零完成！已清空${response.data.cleared || 0}個產品的庫存`)
       setClearOpen(false)
+      setSelectedLocation('')
       await load()
     } catch (error: any) {
       console.error('清零錯誤:', error)
       alert(`清零失敗: ${error.response?.data?.message || error.message}`)
+    } finally {
+      setLoading(false)
     }
   }
 
-  // 編輯群組
+  // 編輯組處理
   function handleEditGroup(group: ProductGroup) {
     setEditingGroup(group)
     setGroupEditForm({
@@ -334,30 +349,24 @@ ${response.data.errors?.length ? '錯誤詳情:\n' + response.data.errors.join('
     })
   }
 
-  // 保存群組編輯
+  function handleCancelGroupEdit() {
+    setEditingGroup(null)
+    setGroupEditForm({ name: '', productCode: '' })
+  }
+
   async function handleSaveGroupEdit(group: ProductGroup) {
     try {
-      const updatePromises = group.products.map(product => 
-        api.put(`/products/${product._id}`, {
-          name: groupEditForm.name,
-          productCode: groupEditForm.productCode,
-          productType: product.productType,
-          size: getProductSize(product),
-          price: product.price,
-          inventories: (product.inventories || []).map(inv => ({
-            locationId: typeof inv.locationId === 'object' && inv.locationId !== null 
-              ? inv.locationId._id 
-              : (inv.locationId ? inv.locationId.toString() : ''),
-            quantity: inv.quantity
-          }))
+      // 更新所有產品的產品代碼
+      for (const product of group.products) {
+        await api.put(`/products/${product._id}`, {
+          productCode: groupEditForm.productCode
         })
-      )
-      
-      await Promise.all(updatePromises)
-      alert(`產品組 "${group.name}" 更新成功！共更新 ${group.products.length} 個產品`)
+      }
+      alert('產品代碼更新成功！')
       setEditingGroup(null)
       await load()
     } catch (error: any) {
+      console.error('更新失敗:', error)
       alert(`更新失敗：${error.response?.data?.message || error.message}`)
     }
   }
@@ -418,58 +427,41 @@ ${response.data.errors?.length ? '錯誤詳情:\n' + response.data.errors.join('
       {/* 庫存表格 */}
       <div className="overflow-x-auto">
         <table className="min-w-full bg-white border border-gray-300">
-          <thead>
-            <tr className="bg-gray-100">
-              <th className="border border-gray-300 px-4 py-2 text-left">產品</th>
-              <th className="border border-gray-300 px-4 py-2 text-left">商品</th>
-              <th className="border border-gray-300 px-4 py-2 text-left">尺寸</th>
-              <th className="border border-gray-300 px-4 py-2 text-left">觀塘</th>
-              <th className="border border-gray-300 px-4 py-2 text-left">灣仔</th>
-              <th className="border border-gray-300 px-4 py-2 text-left">荔枝角</th>
-              <th className="border border-gray-300 px-4 py-2 text-left">元朗</th>
-              <th className="border border-gray-300 px-4 py-2 text-left">國內倉</th>
-              <th className="border border-gray-300 px-4 py-2 text-left">總庫</th>
-              <th className="border border-gray-300 px-4 py-2 text-left">操作</th>
+          <thead className="bg-gray-50">
+            <tr>
+              <th className="px-4 py-2 border-b text-left">產品代碼</th>
+              <th className="px-4 py-2 border-b text-left">產品名稱</th>
+              <th className="px-4 py-2 border-b text-left">產品類型</th>
+              <th className="px-4 py-2 border-b text-left">尺寸</th>
+              <th className="px-4 py-2 border-b text-left">價格</th>
+              {locations.map(location => (
+                <th key={location._id} className="px-4 py-2 border-b text-center">
+                  {location.name}
+                </th>
+              ))}
+              <th className="px-4 py-2 border-b text-center">總庫存</th>
+              <th className="px-4 py-2 border-b text-center">操作</th>
             </tr>
           </thead>
           <tbody>
-            {Object.values(groupedProducts).map((group, groupIndex) => (
-              <React.Fragment key={groupIndex}>
-                <tr className="bg-gray-50">
-                  <td colSpan={10} className="border border-gray-300 px-4 py-2 font-bold">
-                    {group.name} ({group.products.length} 個產品)
-                    <button
-                      onClick={() => handleEditGroup(group)}
-                      className="ml-4 bg-blue-500 text-white px-2 py-1 rounded text-sm hover:bg-blue-600"
-                    >
-                      編輯群組
-                    </button>
-                  </td>
-                </tr>
-                {sortProductsBySize([...group.products]).map((product, productIndex) => (
-                  <tr key={product._id} className={productIndex % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                    <td className="border border-gray-300 px-4 py-2">{product.productCode}</td>
-                    <td className="border border-gray-300 px-4 py-2">{product.name}</td>
-                    <td className="border border-gray-300 px-4 py-2">{getProductSize(product)}</td>
-                    <td className="border border-gray-300 px-4 py-2 text-center">
-                      {getQuantity(product, locations.find(l => l.name === '觀塘')?._id || '')}
-                    </td>
-                    <td className="border border-gray-300 px-4 py-2 text-center">
-                      {getQuantity(product, locations.find(l => l.name === '灣仔')?._id || '')}
-                    </td>
-                    <td className="border border-gray-300 px-4 py-2 text-center">
-                      {getQuantity(product, locations.find(l => l.name === '荔枝角')?._id || '')}
-                    </td>
-                    <td className="border border-gray-300 px-4 py-2 text-center">
-                      {getQuantity(product, locations.find(l => l.name === '元朗')?._id || '')}
-                    </td>
-                    <td className="border border-gray-300 px-4 py-2 text-center">
-                      {getQuantity(product, locations.find(l => l.name === '國內倉')?._id || '')}
-                    </td>
-                    <td className="border border-gray-300 px-4 py-2 text-center font-bold">
+            {Object.values(groupedProducts).map(group => (
+              <React.Fragment key={group.name}>
+                {group.products.map((product, index) => (
+                  <tr key={product._id} className={index === 0 ? 'bg-blue-50' : ''}>
+                    <td className="px-4 py-2 border-b">{product.productCode}</td>
+                    <td className="px-4 py-2 border-b">{product.name}</td>
+                    <td className="px-4 py-2 border-b">{product.productType}</td>
+                    <td className="px-4 py-2 border-b">{getProductSize(product)}</td>
+                    <td className="px-4 py-2 border-b">${product.price}</td>
+                    {locations.map(location => (
+                      <td key={location._id} className="px-4 py-2 border-b text-center">
+                        {getQuantity(product, location._id)}
+                      </td>
+                    ))}
+                    <td className="px-4 py-2 border-b text-center font-bold">
                       {getTotalQuantity(product)}
                     </td>
-                    <td className="border border-gray-300 px-4 py-2">
+                    <td className="px-4 py-2 border-b text-center">
                       <button
                         onClick={() => {
                           setSelectedProduct(product)
@@ -488,235 +480,152 @@ ${response.data.errors?.length ? '錯誤詳情:\n' + response.data.errors.join('
         </table>
       </div>
 
-      {/* 導入對話框 */}
+      {/* 進貨/出貨彈窗 */}
       {importOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white p-6 rounded-lg w-96">
-            <h3 className="text-lg font-bold mb-4">導入庫存</h3>
-            <div className="mb-4">
-              <label className="block text-sm font-medium mb-2">選擇文件</label>
-              <input
-                type="file"
-                multiple
-                accept=".pdf"
-                onChange={(e) => setSelectedFiles(e.target.files)}
-                className="w-full border border-gray-300 rounded px-3 py-2"
-              />
-            </div>
-            <div className="mb-4">
-              <label className="block text-sm font-medium mb-2">選擇地點</label>
-              <select
-                value={selectedLocation}
-                onChange={(e) => setSelectedLocation(e.target.value)}
-                className="w-full border border-gray-300 rounded px-3 py-2"
-              >
-                <option value="">請選擇地點</option>
-                {locations.map(location => (
-                  <option key={location._id} value={location._id}>
-                    {location.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="flex gap-2">
-              <button
-                onClick={() => doImport('incoming')}
-                className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
-              >
-                進貨
-              </button>
-              <button
-                onClick={() => doImport('outgoing')}
-                className="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600"
-              >
-                出貨
-              </button>
-              <button
-                onClick={() => setImportOpen(false)}
-                className="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600"
-              >
-                取消
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 調貨對話框 */}
-      {transferOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white p-6 rounded-lg w-96">
-            <h3 className="text-lg font-bold mb-4">調貨</h3>
-            {selectedProduct && (
-              <div className="mb-4">
-                <p className="text-sm text-gray-600">產品: {selectedProduct.productCode} - {selectedProduct.name}</p>
+        <div className="modal-backdrop">
+          <div className="modal">
+            <div className="header">導入庫存</div>
+            <div className="body">
+              <div>
+                <p>選擇門市：</p>
+                <select value={selectedLocation} onChange={e => setSelectedLocation(e.target.value)}>
+                  <option value="">請選擇門市</option>
+                  {locations.map(location => (
+                    <option key={location._id} value={location._id}>{location.name}</option>
+                  ))}
+                </select>
               </div>
-            )}
-            <div className="mb-4">
-              <label className="block text-sm font-medium mb-2">從</label>
-              <select
-                value={transferFrom}
-                onChange={(e) => setTransferFrom(e.target.value)}
-                className="w-full border border-gray-300 rounded px-3 py-2"
-              >
-                <option value="">請選擇來源地點</option>
-                {locations.map(location => (
-                  <option key={location._id} value={location._id}>
-                    {location.name}
-                  </option>
-                ))}
-              </select>
+              <div>
+                <p>選擇PDF檔案：</p>
+                <input 
+                  multiple 
+                  type="file" 
+                  accept=".pdf" 
+                  onChange={e => setSelectedFiles(e.target.files)} 
+                />
+              </div>
             </div>
-            <div className="mb-4">
-              <label className="block text-sm font-medium mb-2">到</label>
-              <select
-                value={transferTo}
-                onChange={(e) => setTransferTo(e.target.value)}
-                className="w-full border border-gray-300 rounded px-3 py-2"
-              >
-                <option value="">請選擇目標地點</option>
-                {locations.map(location => (
-                  <option key={location._id} value={location._id}>
-                    {location.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="mb-4">
-              <label className="block text-sm font-medium mb-2">數量</label>
-              <input
-                type="number"
-                min="1"
-                value={transferQuantity}
-                onChange={(e) => setTransferQuantity(parseInt(e.target.value) || 1)}
-                className="w-full border border-gray-300 rounded px-3 py-2"
-              />
-            </div>
-            <div className="flex gap-2">
-              <button
-                onClick={doTransfer}
-                className="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600"
-              >
-                確認調貨
-              </button>
-              <button
-                onClick={() => setTransferOpen(false)}
-                className="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600"
-              >
-                取消
-              </button>
+            <div className="footer">
+              <button className="btn secondary" onClick={() => setImportOpen(false)}>取消</button>
+              <button className="btn" onClick={() => doImport('incoming')}>進貨</button>
+              <button className="btn" onClick={() => doImport('outgoing')}>出貨</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Excel導入對話框 */}
+      {/* 調貨彈窗 */}
+      {transferOpen && (
+        <div className="modal-backdrop">
+          <div className="modal">
+            <div className="header">調貨</div>
+            <div className="body">
+              <div>
+                <p>選擇產品：</p>
+                <select 
+                  value={selectedProduct?._id || ''} 
+                  onChange={e => {
+                    const product = products.find(p => p._id === e.target.value)
+                    setSelectedProduct(product || null)
+                  }}
+                >
+                  <option value="">請選擇產品</option>
+                  {products.map(product => (
+                    <option key={product._id} value={product._id}>
+                      {product.productCode} - {product.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <p>來源門市：</p>
+                <select value={transferFrom} onChange={e => setTransferFrom(e.target.value)}>
+                  <option value="">請選擇來源門市</option>
+                  {locations.map(location => (
+                    <option key={location._id} value={location._id}>{location.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <p>目標門市：</p>
+                <select value={transferTo} onChange={e => setTransferTo(e.target.value)}>
+                  <option value="">請選擇目標門市</option>
+                  {locations.map(location => (
+                    <option key={location._id} value={location._id}>{location.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <p>調貨數量：</p>
+                <input 
+                  type="number" 
+                  value={transferQuantity} 
+                  onChange={e => setTransferQuantity(parseInt(e.target.value) || 0)}
+                  min="1"
+                />
+              </div>
+            </div>
+            <div className="footer">
+              <button className="btn secondary" onClick={() => setTransferOpen(false)}>取消</button>
+              <button className="btn" onClick={doTransfer}>確認調貨</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Excel導入彈窗 */}
       {excelImportOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white p-6 rounded-lg w-96">
-            <h3 className="text-lg font-bold mb-4">Excel導入</h3>
-            <div className="mb-4">
-              <label className="block text-sm font-medium mb-2">選擇Excel文件</label>
-              <input
-                type="file"
-                accept=".xlsx,.xls"
-                onChange={(e) => setSelectedFiles(e.target.files)}
-                className="w-full border border-gray-300 rounded px-3 py-2"
-              />
+        <div className="modal-backdrop">
+          <div className="modal">
+            <div className="header">Excel導入</div>
+            <div className="body">
+              <div>
+                <p>選擇門市：</p>
+                <select value={selectedLocation} onChange={e => setSelectedLocation(e.target.value)}>
+                  <option value="">請選擇門市</option>
+                  {locations.map(location => (
+                    <option key={location._id} value={location._id}>{location.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <p>選擇Excel檔案：</p>
+                <input 
+                  multiple 
+                  type="file" 
+                  accept=".xlsx,.xls" 
+                  onChange={e => setSelectedFiles(e.target.files)} 
+                />
+              </div>
             </div>
-            <div className="mb-4">
-              <label className="block text-sm font-medium mb-2">選擇地點</label>
-              <select
-                value={selectedLocation}
-                onChange={(e) => setSelectedLocation(e.target.value)}
-                className="w-full border border-gray-300 rounded px-3 py-2"
-              >
-                <option value="">請選擇地點</option>
-                {locations.map(location => (
-                  <option key={location._id} value={location._id}>
-                    {location.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="flex gap-2">
-              <button
-                onClick={doExcelImport}
-                className="bg-purple-500 text-white px-4 py-2 rounded hover:bg-purple-600"
-              >
-                導入
-              </button>
-              <button
-                onClick={() => setExcelImportOpen(false)}
-                className="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600"
-              >
-                取消
-              </button>
+            <div className="footer">
+              <button className="btn secondary" onClick={() => setExcelImportOpen(false)}>取消</button>
+              <button className="btn" onClick={doExcelImport}>導入</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* 清零對話框 */}
+      {/* 清零庫存彈窗 */}
       {clearOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white p-6 rounded-lg w-96">
-            <h3 className="text-lg font-bold mb-4">清零庫存</h3>
-            <p className="text-red-600 mb-4">確定要清零所有庫存嗎？此操作不可逆轉！</p>
-            <div className="flex gap-2">
-              <button
-                onClick={doClearAll}
-                className="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600"
-              >
-                確認清零
-              </button>
-              <button
-                onClick={() => setClearOpen(false)}
-                className="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600"
-              >
-                取消
-              </button>
+        <div className="modal-backdrop">
+          <div className="modal">
+            <div className="header">清零庫存</div>
+            <div className="body">
+              <div>
+                <p>選擇門市：</p>
+                <select value={selectedLocation} onChange={e => setSelectedLocation(e.target.value)}>
+                  <option value="">請選擇門市</option>
+                  {locations.map(location => (
+                    <option key={location._id} value={location._id}>{location.name}</option>
+                  ))}
+                </select>
+              </div>
+              <p className="text-red-600">警告：此操作將清空所選門市的所有庫存，且不可逆！</p>
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* 編輯群組對話框 */}
-      {editingGroup && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white p-6 rounded-lg w-96">
-            <h3 className="text-lg font-bold mb-4">編輯群組</h3>
-            <div className="mb-4">
-              <label className="block text-sm font-medium mb-2">群組名稱</label>
-              <input
-                type="text"
-                value={groupEditForm.name}
-                onChange={(e) => setGroupEditForm({...groupEditForm, name: e.target.value})}
-                className="w-full border border-gray-300 rounded px-3 py-2"
-              />
-            </div>
-            <div className="mb-4">
-              <label className="block text-sm font-medium mb-2">產品代碼</label>
-              <input
-                type="text"
-                value={groupEditForm.productCode}
-                onChange={(e) => setGroupEditForm({...groupEditForm, productCode: e.target.value})}
-                className="w-full border border-gray-300 rounded px-3 py-2"
-              />
-            </div>
-            <div className="flex gap-2">
-              <button
-                onClick={() => handleSaveGroupEdit(editingGroup)}
-                className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
-              >
-                保存
-              </button>
-              <button
-                onClick={() => setEditingGroup(null)}
-                className="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600"
-              >
-                取消
-              </button>
+            <div className="footer">
+              <button className="btn secondary" onClick={() => setClearOpen(false)}>取消</button>
+              <button className="btn bg-red-500 hover:bg-red-600" onClick={doClearAll}>確認清零</button>
             </div>
           </div>
         </div>
