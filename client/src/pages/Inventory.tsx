@@ -97,12 +97,22 @@ export default function Inventory() {
       return 0
     }
     const inventory = product.inventories.find(inv => {
+      // 檢查 locationId 是否為 null 或 undefined
+      if (!inv.locationId) {
+        return false
+      }
+      
       // 處理 populate 後的 locationId 對象
       if (typeof inv.locationId === 'object' && inv.locationId !== null) {
         return inv.locationId._id === locationId || inv.locationId._id.toString() === locationId
       }
-      // 處理原始的 ObjectId 字符串
-      return inv.locationId === locationId || inv.locationId.toString() === locationId
+      
+      // 處理字符串 ObjectId 的比較，加入 null 檢查
+      if (typeof inv.locationId === 'string') {
+        return inv.locationId === locationId || inv.locationId.toString() === locationId
+      }
+      
+      return false
     })
     return inventory ? inventory.quantity : 0
   }
