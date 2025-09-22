@@ -136,12 +136,12 @@ async function updateByCodeVariants(rawCode: string, qty: number, locationId: st
   if (variants.length === 0) return;
   const product = await Product.findOne({ productCode: { $in: variants } });
   if (!product) { summary.notFound.push(normalizeCode(rawCode)); return; }
-  summary.matched++;
-  const inv = product.inventories.find(i => String(i.locationId) === String(locationId));
-  if (inv) inv.quantity = direction === 'out' ? Math.max(0, inv.quantity - qty) : inv.quantity + qty;
-  else product.inventories.push({ locationId: new mongoose.Types.ObjectId(locationId), quantity: direction === 'out' ? 0 : qty });
-  await product.save();
-  summary.updated++;
+    summary.matched++;
+    const inv = product.inventories.find(i => String(i.locationId) === String(locationId));
+    if (inv) inv.quantity = direction === 'out' ? Math.max(0, inv.quantity - qty) : inv.quantity + qty;
+    else product.inventories.push({ locationId: new mongoose.Types.ObjectId(locationId), quantity: direction === 'out' ? 0 : qty });
+    await product.save();
+    summary.updated++;
 }
 
 // 進貨功能
@@ -167,7 +167,7 @@ router.post('/incoming', upload.array('files'), async (req, res) => {
       matched: 0, 
       created: 0,
       updated: 0, 
-      notFound: [] as string[],
+      notFound: [] as string[], 
       parsed: [] as any[],
       errors: [] as string[]
     };
@@ -182,11 +182,11 @@ router.post('/incoming', upload.array('files'), async (req, res) => {
         }
         
         if (rows.length === 0) {
-          const data = await pdf(file.buffer);
-          const text = data.text;
-          if (text) {
-            const lines = text.split(/\r?\n/).map((l: string) => l.trim()).filter(Boolean);
-            for (let i = 0; i < lines.length; i++) {
+            const data = await pdf(file.buffer);
+            const text = data.text;
+            if (text) {
+              const lines = text.split(/\r?\n/).map((l: string) => l.trim()).filter(Boolean);
+              for (let i = 0; i < lines.length; i++) {
               const m = lines[i].match(codePattern);
               if (!m) continue;
               for (let j = i; j <= i + 6 && j < lines.length; j++) {
@@ -274,7 +274,7 @@ router.post('/transfer', upload.array('files'), async (req, res) => {
       processed: 0,
       matched: 0, 
       updated: 0, 
-      notFound: [] as string[],
+      notFound: [] as string[], 
       parsed: [] as any[],
       errors: [] as string[]
     };
