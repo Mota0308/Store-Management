@@ -199,14 +199,35 @@ async function extractByPdfjs(buffer: Buffer): Promise<{ name: string; code: str
             console.log(`調試: 修正代碼 ${wsCodeMatch[1]} -> ${code}`);
           }
           
-          // 查找數量 - 避免误识别尺寸、规格中的数字
-          let qty = 1;
-          // 不在产品描述行中查找数量，因为容易误识别尺寸数字
-          // 产品描述行通常包含产品代码，应该跳过数量提取
-          console.log(`調試: 跳过产品描述行的数量提取，使用默认数量1`);
+          // 如果这是价格行但产品已经处理过了，跳过
+          if (line.includes('HK$') && productMap.has(`${code}-no-size-no-type`)) {
+            // 检查是否已有相同产品（无尺寸无购买类型）
+            const existingKey = Array.from(productMap.keys()).find(key => key.startsWith(`${code}-`));
+            if (existingKey) {
+              console.log(`調試: 跳过重复的价格行，产品 ${code} 已存在`);
+              continue;
+            }
+          }
           
-          // 在後續行查找數量
-          if (qty === 1) {
+          // 查找數量 - 智能提取策略
+          let qty = 1;
+          
+          // 如果这是价格行(包含HK$)，尝试从产品代码中提取数量
+          if (line.includes('HK$')) {
+            // 匹配模式: WS-078BK1HK$228.00 -> 提取数量1
+            const qtyFromPriceLineMatch = line.match(new RegExp(`${code}(\\d+)HK\\$`));
+            if (qtyFromPriceLineMatch) {
+              const extractedQty = parseInt(qtyFromPriceLineMatch[1], 10);
+              if (extractedQty >= 1 && extractedQty <= 99) {
+                qty = extractedQty;
+                console.log(`調試: 从价格行提取数量: ${qty}`);
+              }
+            }
+          } else {
+            // 产品描述行，跳过数量提取避免误识别尺寸数字
+            console.log(`調試: 跳过产品描述行的数量提取，使用默认数量1`);
+            
+            // 在後續行查找數量
             for (let j = i + 1; j < Math.min(i + 5, lines.length); j++) {
               const nextLine = lines[j];
               const qtyInNextLine = nextLine.match(/^\s*([1-9]\d{0,2})\s*$/);
