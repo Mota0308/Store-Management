@@ -199,16 +199,11 @@ async function extractByPdfjs(buffer: Buffer): Promise<{ name: string; code: str
             console.log(`調試: 修正代碼 ${wsCodeMatch[1]} -> ${code}`);
           }
           
-          // 查找數量
+          // 查找數量 - 避免误识别尺寸、规格中的数字
           let qty = 1;
-          const qtyInSameLine = line.match(/\b([1-9]\d{0,2})\b/);
-          if (qtyInSameLine) {
-            const extractedQty = parseInt(qtyInSameLine[1], 10);
-            if (extractedQty >= 1 && extractedQty <= 99) {
-              qty = extractedQty;
-              console.log(`調試: 在同行找到數量: ${qty}`);
-            }
-          }
+          // 不在产品描述行中查找数量，因为容易误识别尺寸数字
+          // 产品描述行通常包含产品代码，应该跳过数量提取
+          console.log(`調試: 跳过产品描述行的数量提取，使用默认数量1`);
           
           // 在後續行查找數量
           if (qty === 1) {
