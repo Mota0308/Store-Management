@@ -162,11 +162,11 @@ function extractPurchaseTypeAndSize(text: string): { purchaseType?: string; size
     const match = text.match(pattern);
     if (match) {
       const extractedSize = match[1];
-      const sizeNum = parseInt(extractedSize, 10);
+        const sizeNum = parseInt(extractedSize, 10);
       if (!isNaN(sizeNum) && sizeNum >= 0 && sizeNum <= 20) {
-        size = extractedSize;
-        break;
-      }
+          size = extractedSize;
+          break;
+        }
     }
   }
   
@@ -187,57 +187,47 @@ async function extractByPdfjs(buffer: Buffer): Promise<{ name: string; code: str
       for (let i = 0; i < lines.length; i++) {
         const line = lines[i];
         
+        // 只处理产品描述行，跳过价格行避免重复
         const wsCodeMatch = line.match(/(WS-\w+|NM\d+|AEP-WS-\d+\w*)/);
-        if (wsCodeMatch) {
+        if (wsCodeMatch && !line.includes('HK$')) {
           let code = wsCodeMatch[1];
           
           console.log(`調試: 第${i+1}行檢測到產品代碼: ${code}，行內容: "${line}"`);
           
-          // 修復1HK後綴
-          if (code.endsWith("1HK")) {
-            code = code.replace("1HK", "");
-            console.log(`調試: 修正代碼 ${wsCodeMatch[1]} -> ${code}`);
-          }
-          
-          // 如果这是价格行但产品已经处理过了，跳过
-          if (line.includes('HK$') && productMap.has(`${code}-no-size-no-type`)) {
-            // 检查是否已有相同产品（无尺寸无购买类型）
-            const existingKey = Array.from(productMap.keys()).find(key => key.startsWith(`${code}-`));
-            if (existingKey) {
-              console.log(`調試: 跳过重复的价格行，产品 ${code} 已存在`);
-              continue;
-            }
-          }
-          
-          // 查找數量 - 智能提取策略
+          // 查找數量 - 从后续行或价格行中提取
           let qty = 1;
+          console.log(`調試: 产品描述行，在后续行中查找数量`);
           
-          // 如果这是价格行(包含HK$)，尝试从产品代码中提取数量
-          if (line.includes('HK$')) {
-            // 匹配模式: WS-078BK1HK$228.00 -> 提取数量1
-            const qtyFromPriceLineMatch = line.match(new RegExp(`${code}(\\d+)HK\\$`));
-            if (qtyFromPriceLineMatch) {
-              const extractedQty = parseInt(qtyFromPriceLineMatch[1], 10);
-              if (extractedQty >= 1 && extractedQty <= 99) {
-                qty = extractedQty;
-                console.log(`調試: 从价格行提取数量: ${qty}`);
-              }
-            }
-          } else {
-            // 产品描述行，跳过数量提取避免误识别尺寸数字
-            console.log(`調試: 跳过产品描述行的数量提取，使用默认数量1`);
+          // 在後續行查找數量
+          for (let j = i + 1; j < Math.min(i + 5, lines.length); j++) {
+            const nextLine = lines[j];
             
-            // 在後續行查找數量
-            for (let j = i + 1; j < Math.min(i + 5, lines.length); j++) {
-              const nextLine = lines[j];
-              const qtyInNextLine = nextLine.match(/^\s*([1-9]\d{0,2})\s*$/);
-              if (qtyInNextLine) {
-                const extractedQty = parseInt(qtyInNextLine[1], 10);
+            // 跳过其他产品行
+            if (nextLine.match(/(WS-\w+|NM\d+|AEP-WS-\d+\w*)/) && !nextLine.includes('HK$')) {
+              break; // 遇到下一个产品，停止搜索
+            }
+            
+            // 从价格行提取数量
+            if (nextLine.includes('HK$') && nextLine.includes(code)) {
+              const qtyFromPriceLineMatch = nextLine.match(new RegExp(`${code}(\\d+)HK\\$`));
+              if (qtyFromPriceLineMatch) {
+                const extractedQty = parseInt(qtyFromPriceLineMatch[1], 10);
                 if (extractedQty >= 1 && extractedQty <= 99) {
                   qty = extractedQty;
-                  console.log(`調試: 在第${j+1}行找到數量: ${qty}`);
-                  break;
-                }
+                  console.log(`調試: 从价格行提取数量: ${qty}`);
+        break;
+      }
+    }
+  }
+  
+            // 从纯数字行提取数量（数量列）
+            const qtyInNextLine = nextLine.match(/^\s*([1-9]\d{0,2})\s*$/);
+            if (qtyInNextLine) {
+              const extractedQty = parseInt(qtyInNextLine[1], 10);
+              if (extractedQty >= 1 && extractedQty <= 99) {
+                qty = extractedQty;
+                console.log(`調試: 在第${j+1}行找到数量: ${qty}`);
+                break;
               }
             }
           }
@@ -394,9 +384,9 @@ async function updateByCodeVariants(code: string, qty: number, locationId: strin
       if (product.sizes) {
         for (const sizeToMatch of sizesToMatch) {
           if (product.sizes.includes(sizeToMatch)) {
-            matchedProduct = product;
+        matchedProduct = product;
             console.log(`調試: 成功匹配尺寸 "${sizeToMatch}" 在產品 ${product.productCode}`);
-            break;
+        break;
           }
         }
         if (matchedProduct) break;
@@ -577,7 +567,7 @@ router.post('/outgoing', upload.array('files'), async (req, res) => {
 router.post('/excel', upload.array('files'), async (req, res) => {
   try {
     console.log('调试: 收到Excel导入请求');
-    
+
     const files = req.files as Express.Multer.File[];
     
     if (!files || files.length === 0) {
@@ -942,9 +932,9 @@ async function extractTransferItems(buffer: Buffer): Promise<{ code: string; siz
       if (line.includes('商品詳情')) {
         inDataSection = true;
         console.log(`调试: 进入数据区域，第${i+1}行: "${line}"`);
-        continue;
-      }
-      
+          continue;
+        }
+        
       if (!inDataSection) continue;
       
       // 查找包含商品代码和数量的行
@@ -1080,7 +1070,7 @@ function mergeItems(items: { code: string; size: string; qty: number }[]): { cod
 // 改进的产品查找函数
 async function findProductByCode(code: string) {
   // 1. 直接匹配
-  let product = await Product.findOne({
+          let product = await Product.findOne({ 
     productCode: { $regex: new RegExp(`^${normalizeCode(code)}$`, 'i') }
   });
   
@@ -1153,7 +1143,7 @@ async function processTransferItem(
     }
     
     console.log(`调试: 找到产品 ${product.name} (${product.productCode})`);
-    summary.matched++;
+            summary.matched++;
     
     // 确保产品有指定的尺寸
     if (!product.sizes.includes(item.size)) {
@@ -1182,8 +1172,8 @@ async function processTransferItem(
     if (!toInventory) {
       toInventory = {
         locationId: new mongoose.Types.ObjectId(toLocationId),
-        quantity: 0
-      };
+                  quantity: 0 
+                };
       product.inventories.push(toInventory);
     }
     
@@ -1234,11 +1224,11 @@ router.post('/clear', async (req, res) => {
         // 将所有门市的库存设置为0
         for (const inventory of product.inventories) {
           inventory.quantity = 0;
-        }
-        
-        await product.save();
-        summary.updated++;
-        
+          }
+          
+          await product.save();
+          summary.updated++;
+          
         if (summary.updated % 100 === 0) {
           console.log(`调试: 已清零 ${summary.updated} 个商品`);
         }
@@ -1250,7 +1240,7 @@ router.post('/clear', async (req, res) => {
     }
     
     console.log(`调试: 清零完成 - 处理: ${summary.processed}, 更新: ${summary.updated}, 错误: ${summary.errors.length}`);
-    
+
     res.json(summary);
     
   } catch (error) {
