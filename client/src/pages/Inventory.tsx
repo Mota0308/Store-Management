@@ -70,6 +70,10 @@ export default function Inventory() {
   }>({
     size: ''
   })
+  // 修改分類狀態
+  const [categoryOpen, setCategoryOpen] = useState(false)
+  const [selectedCategoryGroup, setSelectedCategoryGroup] = useState<ProductGroup | null>(null)
+  const [newCategory, setNewCategory] = useState<string>('')
   // 編輯狀態
   const [editingProduct, setEditingProduct] = useState<string | null>(null)
   const [editForm, setEditForm] = useState<{
@@ -601,6 +605,44 @@ async function handleDeleteGroup(group: ProductGroup) {
     }
   }
 
+  // 新增：處理分類修改的函數
+  const handleCategoryChange = (group: ProductGroup) => {
+    setSelectedCategoryGroup(group)
+    // 獲取當前產品類型
+    const currentType = group.products[0]?.productType || ''
+    setNewCategory(currentType)
+    setCategoryOpen(true)
+  }
+
+  // 新增：提交分類修改的函數
+  const doCategoryChange = async () => {
+    try {
+      if (!selectedCategoryGroup || !newCategory) {
+        alert('請選擇產品類型')
+        return
+      }
+
+      // 批量更新該組所有產品的產品類型
+      const updatePromises = selectedCategoryGroup.products.map(product => 
+        api.put(`/products/${product._id}`, {
+          ...product,
+          productType: newCategory
+        })
+      )
+
+      await Promise.all(updatePromises)
+      
+      // 重新載入數據
+      load()
+      setCategoryOpen(false)
+      setSelectedCategoryGroup(null)
+      alert(`產品類型已更新為"${newCategory}"`)
+    } catch (error: any) {
+      console.error('更新產品類型失敗:', error)
+      alert(`更新失敗：${error.response?.data?.message || error.message}`)
+    }
+  }
+
 // Group products by name and productCode，並按尺寸排序
   const groupedProducts = (filteredProducts || []).reduce((groups, product) => {
   const key = `${product.name}-${product.productCode}`
@@ -694,8 +736,28 @@ function toggleGroup(groupKey: string) {
           {Object.values(groupedProducts).map((group: ProductGroup, groupIndex) => (
               <React.Fragment key={group.key}>
               <tr className="group-header" style={{ borderBottom: '2px solid #dc2626' }}>
-                <td colSpan={locations.length + 3} style={{ cursor: 'pointer' }} onClick={() => toggleGroup(group.key)}>
-                  {expandedGroups.has(group.key) ? '▼' : '?'} {group.name} ({group.productCode})
+                <td colSpan={locations.length + 2} style={{ cursor: 'pointer' }} onClick={() => toggleGroup(group.key)}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span>{expandedGroups.has(group.key) ? '▼' : '▶'} {group.name} ({group.productCode})</span>
+                    <button 
+                      className="btn secondary" 
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handleCategoryChange(group)
+                      }}
+                      style={{ 
+                        backgroundColor: '#6b7280', 
+                        color: 'white', 
+                        border: 'none',
+                        padding: '2px 6px',
+                        borderRadius: '3px',
+                        cursor: 'pointer',
+                        fontSize: '10px'
+                      }}
+                    >
+                      分類
+                    </button>
+                  </div>
                 </td>
                 <td style={{ textAlign: 'center' }}>
                   <button 
@@ -973,6 +1035,49 @@ function toggleGroup(groupKey: string) {
             <div className="footer">
               <button className="btn secondary" onClick={() => { setAddGroupOpen(false); setSelectedGroup(null); }}>取消</button>
               <button className="btn primary" onClick={doAddGroup}>添加尺寸</button>
+            </div>
+          </div>
+                  </div>
+        )}
+
+      {/* 修改分類對話框 */}
+      {categoryOpen && selectedCategoryGroup && (
+        <div className="modal-backdrop">
+          <div className="modal">
+            <div className="header">修改 "{selectedCategoryGroup.name}" 的產品類型</div>
+            <div className="body">
+              <div className="form-group">
+                <label>商品信息</label>
+                <div style={{ padding: '8px', backgroundColor: '#f3f4f6', borderRadius: '4px', marginBottom: '12px' }}>
+                  <p><strong>產品名稱：</strong>{selectedCategoryGroup.name}</p>
+                  <p><strong>產品編號：</strong>{selectedCategoryGroup.productCode}</p>
+                  <p><strong>當前類型：</strong>{selectedCategoryGroup.products[0]?.productType || '未設定'}</p>
+                  <p><strong>影響產品數：</strong>{selectedCategoryGroup.products.length} 個尺寸變體</p>
+                </div>
+              </div>
+              <div className="form-group">
+                <label>選擇新的產品類型</label>
+                <select
+                  value={newCategory}
+                  onChange={e => setNewCategory(e.target.value)}
+                  style={{ 
+                    width: '100%', 
+                    padding: '8px', 
+                    border: '1px solid #d1d5db', 
+                    borderRadius: '4px',
+                    fontSize: '14px'
+                  }}
+                >
+                  <option value="">請選擇產品類型</option>
+                  {productTypes.map(type => (
+                    <option key={type._id} value={type.name}>{type.name}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div className="footer">
+              <button className="btn secondary" onClick={() => { setCategoryOpen(false); setSelectedCategoryGroup(null); }}>取消</button>
+              <button className="btn primary" onClick={doCategoryChange}>更新分類</button>
             </div>
           </div>
         </div>
