@@ -318,11 +318,23 @@ function byY(a: any, b: any) { return b.transform[5] - a.transform[5]; }
 // 解析产品表格行的函数
 function parseProductTableRow(line: string, lines: string[], currentIndex: number) {
   try {
-    // 查找产品型号
-    const codeMatch = line.match(/\b((?:WS-\d+\w*)|(?:NM\d+))\b/);
-    if (!codeMatch) return null;
-    
-    const productCode = codeMatch[1];
+        // 查找产品型号 - 支持更多格式
+  const codeMatch = line.match(/\b((?:WS-\d+\w*)|(?:NM\d+)|(?:AEP-WS-\d+\w*)|(?:\d{12,15}))\b/);
+  if (!codeMatch) return null;
+  
+  const productCode = codeMatch[1];
+  
+  // 过滤掉不太可能是产品型号的纯数字（如价格、电话号码等）
+  if (/^\d+$/.test(productCode)) {
+    // 只接受12-15位的条形码作为产品型号
+    if (productCode.length < 12 || productCode.length > 15) {
+      return null;
+    }
+    // 如果行中包含明显的价格或电话号码标识，跳过
+    if (line.includes('HK$') || line.includes('+852') || line.includes('電話') || line.includes('訂單')) {
+      return null;
+    }
+  }
     
     // 查找包含尺寸和购买类型信息的后续行
     let size = '';
@@ -584,10 +596,20 @@ router.post('/outgoing', upload.array('files'), async (req, res) => {
 
                 // 在表格区域内解析产品信息
                 if (inProductTable) {
-                  // 查找包含产品型号的行
-                  const productMatch = line.match(/\b((?:WS-\d+\w*)|(?:NM\d+))\b/);
-                  if (productMatch && !line.includes('套裝') && !line.includes('發纏號碼')) {
-                    const productCode = productMatch[1];
+                                          // 查找包含产品型号的行 - 支持更多格式
+            const productMatch = line.match(/\b((?:WS-\d+\w*)|(?:NM\d+)|(?:AEP-WS-\d+\w*)|(?:\d{12,15}))\b/);
+            if (productMatch && !line.includes('套裝') && !line.includes('發纏號碼')) {
+              const productCode = productMatch[1];
+              
+              // 过滤掉不太可能是产品型号的纯数字
+              if (/^\d+$/.test(productCode)) {
+                if (productCode.length < 12 || productCode.length > 15) {
+                  continue;
+                }
+                if (line.includes('HK$') || line.includes('+852') || line.includes('電話') || line.includes('訂單')) {
+                  continue;
+                }
+              }
 
                     console.log(`调试: 第${pageNum}页第${i+1}行发现产品型号: ${productCode}`);
                     console.log(`调试: 产品行内容: ${line}`);
