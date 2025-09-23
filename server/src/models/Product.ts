@@ -9,7 +9,7 @@ export interface ProductDocument extends Document {
   name: string;
   productCode: string;
   productType: string;
-  sizes: string[];
+  sizes: string[];  // 修复：改回字符串数组
   price: number;
   imageUrl?: string;
   inventories: LocationInventory[];

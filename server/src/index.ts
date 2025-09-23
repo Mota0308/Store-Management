@@ -13,7 +13,7 @@ import uploadRouter from './routes/upload';
 import productTypesRouter from './routes/productTypes';
 import Location from './models/Location';
 
-dotenv.config();
+dotenv.config({ path: path.resolve(__dirname, '..', 'local.env') });
 
 const app = express();
 app.use(cors());
@@ -29,7 +29,7 @@ if (process.env.NODE_ENV === 'production') {
   app.use(express.static(path.resolve(__dirname, '..', '..', 'client', 'dist')));
 }
 
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb+srv://chenyaolin0308:9GUhZvnuEpAA1r6c@cluster0.0dhi0qc.mongodb.net/Storage?retryWrites=true&w=majority&appName=Cluster0';
+const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/Storage';
 
 async function seedLocations() {
   // 刪除屯門數據

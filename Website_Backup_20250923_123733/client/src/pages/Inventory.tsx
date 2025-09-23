@@ -23,7 +23,7 @@ interface Product {
   name: string
   productCode: string
   productType: string
-  sizes?: string[] | string
+  sizes?: string[]
   size?: string
   price: number
   inventories: Inventory[]
@@ -175,13 +175,8 @@ export default function Inventory() {
   }, [products, selectedType, searchTerm, sizeSearchTerm, sortBy, sortOrder])
 
   function getProductSize(product: Product): string {
-    // 处理各种格式的尺寸数据
-    if (product.sizes) {
-      if (Array.isArray(product.sizes) && product.sizes.length > 0) {
-        return product.sizes.join(', ')
-      } else if (typeof product.sizes === 'string' && product.sizes.trim()) {
-        return product.sizes
-      }
+    if (product.sizes && product.sizes.length > 0) {
+      return product.sizes.join(', ')
     }
     return product.size || ''
   }
@@ -489,22 +484,11 @@ ${response.data.errors?.length > 0 ? '錯誤詳情:\n' + response.data.errors.sl
 
   async function handleSaveEdit(productId: string) {
     try {
-      // 修复：将尺寸字符串转换为数组格式
-      const sizesArray = editForm.size ? editForm.size.split(',').map(s => s.trim()).filter(s => s) : [];
-      const updateData = {
-        ...editForm,
-        sizes: sizesArray, // 发送数组格式的尺寸
-        size: undefined // 移除單數字段
-      };
-      
-      console.log('發送更新數據:', updateData);
-      
-      const response = await api.put(`/products/${productId}`, updateData)
-      alert('商品更新成功')
+      const response = await api.put(`/products/${productId}`, editForm)
+    alert('商品更新成功')
       setEditingProduct(null)
       await load()
     } catch (error: any) {
-      console.error('更新錯誤:', error);
       alert(`更新失敗：${error.response?.data?.message || error.message}`)
     }
   }

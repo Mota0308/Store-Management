@@ -6,7 +6,7 @@ const getApiBaseUrl = () => {
     // 生產環境：使用相對路徑，因為前端和後端在同一個域名下
     return '/api'
   } else {
-    // 開發環境：使用localhost
+    // 開發環境：使用localhost，端口4001
     return 'http://localhost:4001/api'
   }
 }

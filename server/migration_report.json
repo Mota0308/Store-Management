@@ -1,0 +1,32 @@
+{
+  "timestamp": "2025-09-23T05:23:33.050Z",
+  "source": "Railway MongoDB",
+  "destination": "Local MongoDB",
+  "results": {
+    "locations": {
+      "source": 5,
+      "migrated": 5,
+      "success": true
+    },
+    "products": {
+      "source": 898,
+      "migrated": 898,
+      "success": true
+    },
+    "productTypes": {
+      "source": 3,
+      "migrated": 3,
+      "success": true
+    },
+    "A": {
+      "source": 0,
+      "migrated": 0,
+      "success": true
+    }
+  },
+  "summary": {
+    "totalCollections": 4,
+    "successfulCollections": 4,
+    "totalDocuments": 906
+  }
+}

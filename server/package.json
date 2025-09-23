@@ -5,19 +5,25 @@
   "scripts": {
     "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
     "build": "tsc",
-    "start": "node dist/index.js"
+    "start": "node dist/index.js",
+    "dev:local": "cross-env NODE_ENV=development MONGODB_URI=mongodb://localhost:27017/Storage_Local ts-node-dev --respawn --transpile-only src/index.ts",
+    "migrate": "node migrate_database.js"
   },
   "dependencies": {
+    "axios": "^1.12.2",
     "canvas": "^3.2.0",
     "cors": "^2.8.5",
+    "cross-env": "^10.0.0",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
+    "form-data": "^4.0.4",
     "helmet": "^7.1.0",
+    "mongodb": "^6.20.0",
     "mongoose": "^8.6.1",
     "morgan": "^1.10.0",
     "multer": "^1.4.5-lts.1",
     "pdf-parse": "^1.1.1",
-    "pdfjs-dist": "^3.7.107",
+    "pdfjs-dist": "^3.11.174",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
