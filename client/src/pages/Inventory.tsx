@@ -62,6 +62,21 @@ export default function Inventory() {
   
   // 清零狀態
   const [clearOpen, setClearOpen] = useState(false)
+  // 增加分組狀態
+  const [addGroupOpen, setAddGroupOpen] = useState(false)
+  const [addGroupForm, setAddGroupForm] = useState<{
+    name: string
+    productCode: string
+    productType: string
+    size: string
+    price: number
+  }>({
+    name: '',
+    productCode: '',
+    productType: '',
+    size: '',
+    price: 0
+  })
   // 編輯狀態
   const [editingProduct, setEditingProduct] = useState<string | null>(null)
   const [editForm, setEditForm] = useState<{
@@ -539,6 +554,51 @@ async function handleDeleteGroup(group: ProductGroup) {
   }
 }
 
+  // 新增：增加分組的函數
+  const handleAddGroup = () => {
+    setAddGroupForm({
+      name: '',
+      productCode: '',
+      productType: productTypes.length > 0 ? productTypes[0].name : '',
+      size: '',
+      price: 0
+    })
+    setAddGroupOpen(true)
+  }
+
+  // 新增：提交增加分組的函數
+  const doAddGroup = async () => {
+    try {
+      if (!addGroupForm.name || !addGroupForm.productCode || !addGroupForm.size) {
+        alert('請填寫產品名稱、編號和尺寸')
+        return
+      }
+
+      // 創建新產品，包含所有門市的庫存記錄
+      const locationIds = locations.map(location => location._id)
+      
+      const productData = {
+        name: addGroupForm.name,
+        productCode: addGroupForm.productCode,
+        productType: addGroupForm.productType,
+        sizes: [addGroupForm.size], // 新產品只有一個尺寸
+        price: addGroupForm.price,
+        locationIds: locationIds
+      }
+
+      console.log('創建新產品:', productData)
+      await api.post('/products', productData)
+      
+      // 重新載入數據
+      load()
+      setAddGroupOpen(false)
+      alert('新分組創建成功！')
+    } catch (error: any) {
+      console.error('創建分組失敗:', error)
+      alert(`創建失敗：${error.response?.data?.message || error.message}`)
+    }
+  }
+
 // Group products by name and productCode，並按尺寸排序
   const groupedProducts = (filteredProducts || []).reduce((groups, product) => {
   const key = `${product.name}-${product.productCode}`
@@ -649,10 +709,29 @@ function toggleGroup(groupKey: string) {
                       padding: '4px 8px',
                       borderRadius: '4px',
                       cursor: 'pointer',
-                      fontSize: '12px'
+                      fontSize: '12px',
+                      marginRight: '4px'
                     }}
                   >
                     刪除
+                  </button>
+                  <button 
+                    className="btn primary" 
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      handleAddGroup()
+                    }}
+                    style={{ 
+                      backgroundColor: '#2563eb', 
+                      color: 'white', 
+                      border: 'none',
+                      padding: '4px 8px',
+                      borderRadius: '4px',
+                      cursor: 'pointer',
+                      fontSize: '12px'
+                    }}
+                  >
+                    增加分組
                   </button>
                   </td>
                 </tr>
@@ -855,6 +934,70 @@ function toggleGroup(groupKey: string) {
             <div className="footer">
               <button className="btn secondary" onClick={() => setClearOpen(false)}>取消</button>
             <button className="btn danger" onClick={doClearAll}>確認清零</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 增加分組對話框 */}
+      {addGroupOpen && (
+        <div className="modal-backdrop">
+          <div className="modal">
+            <div className="header">增加新分組</div>
+            <div className="body">
+              <div className="form-group">
+                <label>產品名稱</label>
+                <input
+                  type="text"
+                  value={addGroupForm.name}
+                  onChange={e => setAddGroupForm(prev => ({ ...prev, name: e.target.value }))}
+                  placeholder="輸入產品名稱"
+                />
+              </div>
+              <div className="form-group">
+                <label>產品編號</label>
+                <input
+                  type="text"
+                  value={addGroupForm.productCode}
+                  onChange={e => setAddGroupForm(prev => ({ ...prev, productCode: e.target.value }))}
+                  placeholder="輸入產品編號"
+                />
+              </div>
+              <div className="form-group">
+                <label>產品類型</label>
+                <select
+                  value={addGroupForm.productType}
+                  onChange={e => setAddGroupForm(prev => ({ ...prev, productType: e.target.value }))}
+                >
+                  {productTypes.map(type => (
+                    <option key={type._id} value={type.name}>{type.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="form-group">
+                <label>尺寸</label>
+                <input
+                  type="text"
+                  value={addGroupForm.size}
+                  onChange={e => setAddGroupForm(prev => ({ ...prev, size: e.target.value }))}
+                  placeholder="輸入尺寸"
+                />
+              </div>
+              <div className="form-group">
+                <label>價格</label>
+                <input
+                  type="number"
+                  value={addGroupForm.price}
+                  onChange={e => setAddGroupForm(prev => ({ ...prev, price: parseFloat(e.target.value) || 0 }))}
+                  placeholder="輸入價格"
+                  min="0"
+                  step="0.01"
+                />
+              </div>
+            </div>
+            <div className="footer">
+              <button className="btn secondary" onClick={() => setAddGroupOpen(false)}>取消</button>
+              <button className="btn primary" onClick={doAddGroup}>創建分組</button>
             </div>
           </div>
         </div>
