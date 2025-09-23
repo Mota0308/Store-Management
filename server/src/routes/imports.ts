@@ -123,8 +123,8 @@ function extractPurchaseTypeAndSize(text: string): { purchaseType?: string; size
     /購買類型[：:]\s*([^，,\s]+)/,
     /購買[類型觊型][：:]\s*([^，,\s]+)/,
     /類型[：:]\s*([^，,\s]+)/,
-    /(上衣|褲子|套裝)/,
-    /(Top|Bottom|Set)/i
+    /(上衣|褲子)/,
+    /(Top|Bottom)/i
   ];
   
   // 匹配尺寸模式 - 只匹配明確的尺寸標識，避免誤提取產品代碼中的數字
@@ -150,10 +150,7 @@ function extractPurchaseTypeAndSize(text: string): { purchaseType?: string; size
         purchaseType = '褲子';
         break;
       }
-      if (type.includes('套裝') || type.toLowerCase().includes('set')) {
-        purchaseType = '套裝';
-        break;
-      }
+
     }
   }
   
