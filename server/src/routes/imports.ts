@@ -116,73 +116,54 @@ function normalizeCode(code: string): string {
   return code.replace(/[^a-zA-Z0-9-]/g, '').toUpperCase();
 }
 
-// 修改：同時提取購買類型和尺寸信息
+// 修改：同時提取購買類型和尺寸信息（基于备份的成熟实现）
 function extractPurchaseTypeAndSize(text: string): { purchaseType?: string; size?: string } {
   // 匹配購買類型模式
   const purchaseTypePatterns = [
-    // 最高優先級：最後位置的類型（緊鄰尺寸的位置）
-    /(上衣|褲子|套裝)\s*\|\s*\d+(?:\s|$)/,    // 例如: "上衣 | 10", "褲子 | 8"
-    /(上衣|褲子|套裝)\s+\d+(?:\s|$)/,         // 例如: "上衣 10", "褲子 8"
-    /(上衣|褲子|套裝)\s+[A-Z]+(?:\s|$)/,      // 例如: "上衣 XL"
-    // 其他位置的類型
+    /購買類型[：:]\s*([^，,\s]+)/,
+    /購買[類型觊型][：:]\s*([^，,\s]+)/,
+    /類型[：:]\s*([^，,\s]+)/,
     /(上衣|褲子|套裝)/,
-    /保暖(上衣|褲子)/,
-    /抓毛.*?(上衣|褲子)/,
-    /(上衣|褲子).*?保暖/,
-    /(上衣|褲子).*?抓毛/
+    /(Top|Bottom|Set)/i
   ];
   
-  // 匹配尺寸模式
+  // 匹配尺寸模式 - 只匹配明確的尺寸標識，避免誤提取產品代碼中的數字
   const sizePatterns = [
-    // 最高優先級：| 分隔格式 (WS-712專用)
-    /\|\s*(\d+)(?:\s|$)/,                     // 例如: "| 10"
-    // 從產品代碼末尾提取
-    /WS-\w+?(\d+)(?:\s|$)/,                   // 例如: WS-712TPP10 -> 10
-    /WS-\w+-([A-Z]+)(?:\s|$)/,                // 例如: WS-252BK-XXL -> XXL
-    // 行末尺寸
-    /\s(\d+)(?:\s|$)/,                        // 行末數字
-    /\s([A-Z]+)(?:\s|$)/,                     // 行末字母尺寸
+    /尺寸[：:]\s*([^，,\s]+)/,
+    /尺碼[：:]\s*([^，,\s]+)/,
+    /Size[：:]\s*([^，,\s]+)/i
   ];
   
   let purchaseType: string | undefined;
   let size: string | undefined;
   
-  // 提取購買類型
   for (const pattern of purchaseTypePatterns) {
     const match = text.match(pattern);
     if (match) {
       const type = match[1] || match[0];
-      
       // 標準化購買類型
-      if (type.includes('上衣')) {
+      if (type.includes('上衣') || type.toLowerCase().includes('top')) {
         purchaseType = '上衣';
         break;
       }
-      if (type.includes('褲子')) {
+      if (type.includes('褲子') || type.toLowerCase().includes('bottom')) {
         purchaseType = '褲子';
         break;
       }
-      if (type.includes('套裝')) {
+      if (type.includes('套裝') || type.toLowerCase().includes('set')) {
         purchaseType = '套裝';
         break;
       }
     }
   }
   
-  // 提取尺寸
+  // 只使用明確的尺寸標識
   for (const pattern of sizePatterns) {
     const match = text.match(pattern);
     if (match) {
       const extractedSize = match[1];
-      
-      // 驗證和處理尺寸
-      if (/^\d+$/.test(extractedSize)) {
-        const sizeNum = parseInt(extractedSize, 10);
-        if (!isNaN(sizeNum) && sizeNum >= 1 && sizeNum <= 30) {
-          size = extractedSize;
-          break;
-        }
-      } else if (/^[A-Z]+$/.test(extractedSize) && extractedSize.length <= 4) {
+      const sizeNum = parseInt(extractedSize, 10);
+      if (!isNaN(sizeNum) && sizeNum >= 0 && sizeNum <= 20) {
         size = extractedSize;
         break;
       }
@@ -191,6 +172,124 @@ function extractPurchaseTypeAndSize(text: string): { purchaseType?: string; size
   
   return { purchaseType, size };
 }
+
+// 成熟的PDF解析函数（从备份代码移植）
+async function extractByPdfjs(buffer: Buffer): Promise<{ name: string; code: string; qty: number; purchaseType?: string; size?: string }[]> {
+  const productMap = new Map<string, { name: string; code: string; qty: number; purchaseType?: string; size?: string }>(); // 用於累加相同產品的數量
+  
+  try {
+    const data = await pdf(buffer);
+    const text = data.text;
+    
+    if (text) {
+      const lines = text.split(/\r?\n/).map((line: string) => line.trim()).filter(Boolean);
+      
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        
+        const wsCodeMatch = line.match(/(WS-\w+|NM\d+|AEP-WS-\d+\w*)/);
+        if (wsCodeMatch) {
+          let code = wsCodeMatch[1];
+          
+          console.log(`調試: 第${i+1}行檢測到產品代碼: ${code}，行內容: "${line}"`);
+          
+          // 修復1HK後綴
+          if (code.endsWith("1HK")) {
+            code = code.replace("1HK", "");
+            console.log(`調試: 修正代碼 ${wsCodeMatch[1]} -> ${code}`);
+          }
+          
+          // 查找數量
+          let qty = 1;
+          const qtyInSameLine = line.match(/\b([1-9]\d{0,2})\b/);
+          if (qtyInSameLine) {
+            const extractedQty = parseInt(qtyInSameLine[1], 10);
+            if (extractedQty >= 1 && extractedQty <= 99) {
+              qty = extractedQty;
+              console.log(`調試: 在同行找到數量: ${qty}`);
+            }
+          }
+          
+          // 在後續行查找數量
+          if (qty === 1) {
+            for (let j = i + 1; j < Math.min(i + 5, lines.length); j++) {
+              const nextLine = lines[j];
+              const qtyInNextLine = nextLine.match(/^\s*([1-9]\d{0,2})\s*$/);
+              if (qtyInNextLine) {
+                const extractedQty = parseInt(qtyInNextLine[1], 10);
+                if (extractedQty >= 1 && extractedQty <= 99) {
+                  qty = extractedQty;
+                  console.log(`調試: 在第${j+1}行找到數量: ${qty}`);
+                  break;
+                }
+              }
+            }
+          }
+          
+          // 查找尺寸和購買類型
+          let size: string | undefined;
+          let purchaseType: string | undefined;
+          
+          for (let j = i + 1; j < Math.min(i + 10, lines.length); j++) {
+            const nextLine = lines[j];
+            
+            const extracted = extractPurchaseTypeAndSize(nextLine);
+            if (extracted.size && !size) {
+              size = extracted.size;
+              console.log(`調試: 找到尺寸: ${size}`);
+            }
+            if (extracted.purchaseType && !purchaseType) {
+              purchaseType = extracted.purchaseType;
+              console.log(`調試: 找到購買類型: ${purchaseType}`);
+            }
+            
+            // 如果遇到下一個商品代碼，停止搜索
+            if (nextLine.match(/(WS-\w+|NM\d+|AEP-WS-\d+\w*)/)) {
+              break;
+            }
+          }
+          
+          console.log(`調試: 提取結果 - 代碼: ${code}, 數量: ${qty}, 尺寸: ${size || '无'}, 購買類型: ${purchaseType || '无'}`);
+          
+          // 創建唯一標識符
+          const uniqueKey = `${code}-${size || "no-size"}-${purchaseType || "no-type"}`;
+          
+          // 檢查是否已經存在相同的產品組合
+          if (productMap.has(uniqueKey)) {
+            // 累加數量
+            const existingProduct = productMap.get(uniqueKey)!;
+            const oldQty = existingProduct.qty;
+            existingProduct.qty += qty;
+            console.log(`調試: ${code}累加 - 原數量: ${oldQty}, 新增: ${qty}, 總數: ${existingProduct.qty}`);
+          } else {
+            // 新產品組合
+            console.log(`調試: ${code}首次檢測 - 數量: ${qty}`);
+            productMap.set(uniqueKey, {
+              name: "",
+              code: code,
+              qty: qty,
+              purchaseType: purchaseType,
+              size: size
+            });
+          }
+        }
+      }
+    }
+  } catch (error) {
+    console.error("pdf-parse解析失敗:", error);
+  }
+  
+  // 將 Map 轉換為數組並輸出最終結果
+  const rows = Array.from(productMap.values());
+  console.log(`調試: 最終產品列表 (${rows.length}個產品):`);
+  rows.forEach(row => {
+    console.log(`調試: 最終結果 - 代碼: ${row.code}, 總數量: ${row.qty}, 尺寸: ${row.size || '无'}, 購買類型: ${row.purchaseType || '无'}`);
+  });
+  
+  return rows;
+}
+
+// 已删除旧的extractPurchaseTypeAndSizeOld函数
 
 // 修改：WS-712系列商品的特殊匹配函數
 async function updateWS712Product(rawCode: string, qty: number, locationId: string, summary: any, direction: 'out' | 'in', purchaseType?: string, size?: string) {
@@ -315,124 +414,9 @@ async function updateByCodeVariants(code: string, qty: number, locationId: strin
 // 輔助函數
 function byY(a: any, b: any) { return b.transform[5] - a.transform[5]; }
 
-// 解析产品表格行的函数
-function parseProductTableRow(line: string, lines: string[], currentIndex: number) {
-  try {
-        // 查找产品型号 - 支持更多格式
-  const codeMatch = line.match(/\b((?:WS-\d+\w*)|(?:NM\d+)|(?:AEP-WS-\d+\w*)|(?:\d{12,15}))\b/);
-  if (!codeMatch) return null;
-  
-  const productCode = codeMatch[1];
-  
-  // 过滤掉不太可能是产品型号的纯数字（如价格、电话号码等）
-  if (/^\d+$/.test(productCode)) {
-    // 只接受12-15位的条形码作为产品型号
-    if (productCode.length < 12 || productCode.length > 15) {
-      return null;
-    }
-    // 如果行中包含明显的价格或电话号码标识，跳过
-    if (line.includes('HK$') || line.includes('+852') || line.includes('電話') || line.includes('訂單')) {
-      return null;
-    }
-  }
-    
-    // 查找包含尺寸和购买类型信息的后续行
-    let size = '';
-    let purchaseType = '';
-    
-    // 在后续几行中查找详细信息行（通常在产品描述后的下一行）
-    for (let j = currentIndex + 1; j <= Math.min(lines.length - 1, currentIndex + 4); j++) {
-      const detailLine = lines[j];
-      
-      // 跳过价格行和无关行
-      if (detailLine.includes('HK$') || detailLine.includes(productCode)) {
-        continue;
-      }
-      
-      console.log(`调试: 检查第${j+1}行详细信息: ${detailLine}`);
-      
-      // 查找尺寸信息
-      const sizeMatch = detailLine.match(/尺寸?\s*[:：]?\s*([^\s,，]+)/);
-      if (sizeMatch) {
-        size = sizeMatch[1].trim();
-        console.log(`调试: 找到尺寸信息: ${size}`);
-      }
-      
-             // 查找购买类型信息 (处理字符编码问题，"類"可能显示为"觊")
-       const purchaseTypeMatch = detailLine.match(/購買[類觊]型\s*[:：]?\s*([^\s,，]+)/);
-       if (purchaseTypeMatch) {
-         purchaseType = purchaseTypeMatch[1].trim();
-         console.log(`调试: 找到购买类型: ${purchaseType}`);
-       }
-      
-             // 如果同时找到了尺寸和购买类型信息，就可以停止搜索了
-       if (size && purchaseType) {
-         break;
-       }
-    }
-    
-    // 查找数量 - 在后续行中查找数量+价格的组合
-    let quantity = 0;
-    
-    for (let j = currentIndex + 1; j <= Math.min(lines.length - 1, currentIndex + 4); j++) {
-      const nextLine = lines[j];
-      
-      // 查找格式如 "WS-258PK1HK$423.00HK$423.00" 的行
-      const qtyPriceMatch = nextLine.match(new RegExp(`${productCode}(\\d+)HK\\$`));
-      if (qtyPriceMatch) {
-        const qty = parseInt(qtyPriceMatch[1], 10);
-        if (qty > 0 && qty <= 50) { // 放宽数量限制到50
-          quantity = qty;
-          console.log(`调试: 在第${j+1}行找到数量 ${quantity}: ${nextLine}`);
-          break;
-        }
-      }
-      
-      // 特殊处理NM系列
-      if (productCode.startsWith('NM') && nextLine.includes(productCode) && nextLine.includes('HK$')) {
-        const nmMatch = nextLine.match(new RegExp(`${productCode}(\\d+)HK\\$`));
-        if (nmMatch) {
-          const qty = parseInt(nmMatch[1], 10);
-          if (qty > 0 && qty <= 50) {
-            quantity = qty;
-            console.log(`调试: NM系列在第${j+1}行找到数量 ${quantity}: ${nextLine}`);
-            break;
-          }
-        }
-      }
-    }
-    
-    if (quantity > 0) {
-      // 组合尺寸和购买类型用于数据库匹配
-      let combinedSize = '';
-      if (size && purchaseType) {
-        // 创建两种可能的组合格式：尺寸|购买类型 和 购买类型|尺寸
-        combinedSize = `${size} | ${purchaseType}`;
-        console.log(`调试: 组合尺寸格式: "${combinedSize}" (备选: "${purchaseType} | ${size}")`);
-      } else if (size) {
-        combinedSize = size;
-      } else if (purchaseType) {
-        combinedSize = purchaseType;
-      }
-      
-      console.log(`调试: 最终解析结果 - 型号: ${productCode}, 数量: ${quantity}, 组合尺寸: ${combinedSize || '无'}`);
-      return {
-        code: productCode,
-        quantity: quantity,
-        size: combinedSize || undefined,
-        purchaseType: undefined, // 不再单独使用购买类型，已组合到size中
-        // 保存原始信息用于备选匹配
-        originalSize: size || undefined,
-        originalPurchaseType: purchaseType || undefined
-      };
-    }
-    
-    return null;
-  } catch (error) {
-    console.error('解析产品行时出错:', error);
-    return null;
-  }
-}
+// 已删除错误的parseProductTableRow函数，使用成熟的extractByPdfjs替代
+
+// 已删除错误的parseTableColumnStructure函数，使用成熟的extractByPdfjs替代
 function byX(a: any, b: any) { return a.transform[4] - b.transform[4]; }
 
 // 進貨功能
@@ -468,9 +452,9 @@ router.post('/incoming', upload.array('files'), async (req, res) => {
       try {
         let rows: { name: string; code: string; qty: number; purchaseType?: string; size?: string }[] = [];
         
-        // 暂时禁用旧解析器避免冲突
+        // 使用成熟的PDF解析器
         try { 
-          // rows = await extractByPdfjs(file.buffer); 
+          rows = await extractByPdfjs(file.buffer); 
         } catch (pdfjsError) {
           console.log('PDF解析失敗:', pdfjsError);
         }
@@ -547,120 +531,15 @@ router.post('/outgoing', upload.array('files'), async (req, res) => {
       try {
         let rows: { name: string; code: string; qty: number; purchaseType?: string; size?: string; originalSize?: string; originalPurchaseType?: string }[] = [];
         try { 
-          // 暂时禁用旧解析器避免冲突
-          // rows = await extractByPdfjs(file.buffer); 
+          // 使用成熟的PDF解析器
+          rows = await extractByPdfjs(file.buffer); 
         } catch (pdfjsError) {
           console.log('PDF解析失敗:', pdfjsError);
         }
         
-                if (rows.length === 0) {
-          const data = await pdf(file.buffer);
-          console.log(`调试: PDF共有 ${data.numpages} 页`);
-
-          // 解析每一页
-          const allExtractedProducts = [];
-          
-          for (let pageNum = 1; pageNum <= data.numpages; pageNum++) {
-            console.log(`\n调试: 开始解析第 ${pageNum} 页`);
-            
-            // 解析指定页面
-            const pageData = await pdf(file.buffer, { max: pageNum, min: pageNum });
-            const text = pageData.text;
-            
-            if (text) {
-              console.log(`调试: 第 ${pageNum} 页文本长度: ${text.length} 字符`);
-
-              // 查找产品表格的开始和结束
-              const tableStartKeywords = ['商品詳情', '型號', '數量', '價格'];
-              const lines = text.split(/\r?\n/).map((l: string) => l.trim()).filter(Boolean);
-
-              let inProductTable = false;
-              const pageExtractedProducts = [];
-
-              for (let i = 0; i < lines.length; i++) {
-                const line = lines[i];
-
-                // 检测表格开始
-                if (tableStartKeywords.some(keyword => line.includes(keyword))) {
-                  inProductTable = true;
-                  console.log(`调试: 第${pageNum}页发现产品表格标题行 ${i+1}: ${line}`);
-                  continue;
-                }
-
-                // 检测表格结束
-                if (line.includes('--END--') || line.includes('總計') || line.includes('合計')) {
-                  inProductTable = false;
-                  console.log(`调试: 第${pageNum}页产品表格结束于第 ${i+1} 行`);
-                  break;
-                }
-
-                // 在表格区域内解析产品信息
-                if (inProductTable) {
-                                          // 查找包含产品型号的行 - 支持更多格式
-            const productMatch = line.match(/\b((?:WS-\d+\w*)|(?:NM\d+)|(?:AEP-WS-\d+\w*)|(?:\d{12,15}))\b/);
-            if (productMatch && !line.includes('套裝') && !line.includes('發纏號碼')) {
-              const productCode = productMatch[1];
-              
-              // 过滤掉不太可能是产品型号的纯数字
-              if (/^\d+$/.test(productCode)) {
-                if (productCode.length < 12 || productCode.length > 15) {
-                  continue;
-                }
-                if (line.includes('HK$') || line.includes('+852') || line.includes('電話') || line.includes('訂單')) {
-                  continue;
-                }
-              }
-
-                    console.log(`调试: 第${pageNum}页第${i+1}行发现产品型号: ${productCode}`);
-                    console.log(`调试: 产品行内容: ${line}`);
-
-                    // 分析当前行来提取信息
-                    const productInfo = parseProductTableRow(line, lines, i);
-
-                    if (productInfo) {
-                      pageExtractedProducts.push({
-                        name: '',
-                        code: productInfo.code,
-                        qty: productInfo.quantity,
-                        size: productInfo.size,
-                        purchaseType: productInfo.purchaseType,
-                        originalSize: productInfo.originalSize,
-                        originalPurchaseType: productInfo.originalPurchaseType
-                      });
-
-                      console.log(`调试: 第${pageNum}页成功解析产品 - 型号: ${productInfo.code}, 数量: ${productInfo.quantity}, 尺寸: ${productInfo.size || '无'}, 购买类型: ${productInfo.purchaseType || '无'}`);
-                    }
-                  }
-                }
-              }
-
-              console.log(`调试: 第${pageNum}页解析完成，提取到 ${pageExtractedProducts.length} 个产品`);
-              allExtractedProducts.push(...pageExtractedProducts);
-            } else {
-              console.log(`调试: 第${pageNum}页无文本内容`);
-            }
-          }
-
-          // 累加处理（跨页面）- 相同产品的数量要累加而不是去重
-          const productMap = new Map();
-
-          for (const product of allExtractedProducts) {
-            const key = `${product.code}-${product.size || ''}-${product.purchaseType || ''}`;
-            
-            if (productMap.has(key)) {
-              // 如果已存在，累加数量
-              const existingProduct = productMap.get(key);
-              existingProduct.qty += product.qty;
-              console.log(`调试: 累加产品 ${product.code} 数量: ${product.qty} -> 总计: ${existingProduct.qty}`);
-            } else {
-              // 如果不存在，新增产品
-              productMap.set(key, { ...product });
-              console.log(`调试: 新增产品 ${product.code} 数量: ${product.qty}`);
-            }
-          }
-
-          rows = Array.from(productMap.values());
-          console.log(`调试: 全部${data.numpages}页解析完成，原始产品 ${allExtractedProducts.length} 个，累加后 ${rows.length} 个产品`);
+                        if (rows.length === 0) {
+          // 使用成熟的行扫描解析方法
+          rows = await extractByPdfjs(file.buffer);
         }
         
         summary.parsed.push(...rows);
