@@ -530,11 +530,7 @@ router.post('/outgoing', upload.array('files'), async (req, res) => {
           rows = await extractByPdfjs(file.buffer); 
         } catch (pdfjsError) {
           console.log('PDF解析失敗:', pdfjsError);
-        }
-        
-                        if (rows.length === 0) {
-          // 使用成熟的行扫描解析方法
-          rows = await extractByPdfjs(file.buffer);
+          summary.errors.push(`PDF解析失败: ${pdfjsError instanceof Error ? pdfjsError.message : String(pdfjsError)}`);
         }
         
         summary.parsed.push(...rows);
