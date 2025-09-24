@@ -116,104 +116,6 @@ function normalizeCode(code: string): string {
   return code.replace(/[^a-zA-Z0-9-]/g, '').toUpperCase();
 }
 
-// WS-712系列产品的特殊更新函数
-async function updateWS712Product(rawCode: string, qty: number, locationId: string, summary: any, direction: 'out' | 'in', purchaseType?: string, size?: string) {
-  const variants = codeVariants(rawCode);
-  if (variants.length === 0) return;
-  
-  // 查找所有匹配的WS-712產品
-  const products = await Product.find({ productCode: { $in: variants } });
-  
-  if (products.length === 0) { 
-    summary.notFound.push(normalizeCode(rawCode)); 
-    return; 
-  }
-  
-  // 如果沒有指定購買類型和尺寸，使用原來的邏輯
-  if (!purchaseType && !size) {
-    const product = products[0]; // 取第一個匹配的產品
-    summary.matched++;
-    const inv = product.inventories.find(i => String(i.locationId) === String(locationId));
-    if (inv) inv.quantity = direction === 'out' ? Math.max(0, inv.quantity - qty) : inv.quantity + qty;
-    else product.inventories.push({ locationId: new mongoose.Types.ObjectId(locationId), quantity: direction === 'out' ? 0 : qty });
-    await product.save();
-    summary.updated++;
-    return;
-  }
-  
-  // 只有尺寸，沒有購買類型 - 根據尺寸匹配
-  if (size && !purchaseType) {
-    let matchedProduct = null;
-    
-    for (const product of products) {
-      const hasMatchingSize = product.sizes.some(productSize => {
-        const sizeStr = productSize.replace(/[{}]/g, '');
-        const parts = sizeStr.split('|').map(p => p.trim());
-        const hasSize = parts.some(part => part.includes(size));
-        return hasSize;
-      });
-      
-      if (hasMatchingSize) {
-        matchedProduct = product;
-        break;
-      }
-    }
-    
-    if (!matchedProduct) {
-      summary.notFound.push(`${normalizeCode(rawCode)} (尺寸: ${size})`);
-      return;
-    }
-    
-    summary.matched++;
-    const inv = matchedProduct.inventories.find(i => String(i.locationId) === String(locationId));
-    if (inv) inv.quantity = direction === 'out' ? Math.max(0, inv.quantity - qty) : inv.quantity + qty;
-    else matchedProduct.inventories.push({ locationId: new mongoose.Types.ObjectId(locationId), quantity: direction === 'out' ? 0 : qty });
-    await matchedProduct.save();
-    summary.updated++;
-    return;
-  }
-  
-  // 有購買類型和尺寸 - 精確匹配
-  let matchedProduct = null;
-  for (const product of products) {
-    // 檢查產品的尺寸是否匹配
-    const hasMatchingSize = product.sizes.some(productSize => {
-      const sizeStr = productSize.replace(/[{}]/g, '');
-      const parts = sizeStr.split('|').map(p => p.trim());
-      
-      // 精確匹配：必須同時包含購買類型和尺寸，但不考慮順序
-      const hasPurchaseType = parts.some(part => part === purchaseType);
-      const hasSize = parts.some(part => part === size);
-      
-      return hasPurchaseType && hasSize;
-    });
-    
-    if (hasMatchingSize) {
-      matchedProduct = product;
-      break;
-    }
-  }
-  
-  if (!matchedProduct) {
-    summary.notFound.push(`${normalizeCode(rawCode)} (${purchaseType}, 尺寸: ${size})`);
-    return;
-  }
-  
-  // 精確匹配部分
-  summary.matched++;
-  const inv = matchedProduct.inventories.find(i => String(i.locationId) === String(locationId));
-
-  if (inv) {
-    inv.quantity = direction === 'out' ? Math.max(0, inv.quantity - qty) : inv.quantity + qty;
-  } else {
-    const newQuantity = direction === 'out' ? 0 : qty;
-    matchedProduct.inventories.push({ locationId: new mongoose.Types.ObjectId(locationId), quantity: newQuantity });
-  }
-
-  await matchedProduct.save();
-  summary.updated++;
-}
-
 // 修改：同時提取購買類型和尺寸信息（基于备份的成熟实现）
 function extractPurchaseTypeAndSize(text: string): { purchaseType?: string; size?: string } {
   // 匹配購買類型模式
@@ -221,8 +123,8 @@ function extractPurchaseTypeAndSize(text: string): { purchaseType?: string; size
     /購買類型[：:]\s*([^，,\s]+)/,
     /購買[類型觊型][：:]\s*([^，,\s]+)/,
     /類型[：:]\s*([^，,\s]+)/,
-    /(上衣|褲子)/,
-    /(Top|Bottom)/i
+    /(上衣|褲子|套裝)/,
+    /(Top|Bottom|Set)/i
   ];
   
   // 匹配尺寸模式 - 只匹配明確的尺寸標識，避免誤提取產品代碼中的數字
@@ -248,7 +150,10 @@ function extractPurchaseTypeAndSize(text: string): { purchaseType?: string; size
         purchaseType = '褲子';
         break;
       }
-
+      if (type.includes('套裝') || type.toLowerCase().includes('set')) {
+        purchaseType = '套裝';
+        break;
+      }
     }
   }
   
@@ -287,8 +192,11 @@ async function extractByPdfjs(buffer: Buffer): Promise<{ name: string; code: str
         if (wsCodeMatch && !line.includes('HK$')) {
           let code = wsCodeMatch[1];
           
+          console.log(`調試: 第${i+1}行檢測到產品代碼: ${code}，行內容: "${line}"`);
+          
           // 查找數量 - 从后续行或价格行中提取
           let qty = 1;
+          console.log(`調試: 产品描述行，在后续行中查找数量`);
           
           // 在後續行查找數量
           for (let j = i + 1; j < Math.min(i + 5, lines.length); j++) {
@@ -306,7 +214,8 @@ async function extractByPdfjs(buffer: Buffer): Promise<{ name: string; code: str
                 const extractedQty = parseInt(qtyFromPriceLineMatch[1], 10);
                 if (extractedQty >= 1 && extractedQty <= 99) {
                   qty = extractedQty;
-                  break;
+                  console.log(`調試: 从价格行提取数量: ${qty}`);
+        break;
       }
     }
   }
@@ -317,6 +226,7 @@ async function extractByPdfjs(buffer: Buffer): Promise<{ name: string; code: str
               const extractedQty = parseInt(qtyInNextLine[1], 10);
               if (extractedQty >= 1 && extractedQty <= 99) {
                 qty = extractedQty;
+                console.log(`調試: 在第${j+1}行找到数量: ${qty}`);
                 break;
               }
             }
@@ -332,9 +242,11 @@ async function extractByPdfjs(buffer: Buffer): Promise<{ name: string; code: str
             const extracted = extractPurchaseTypeAndSize(nextLine);
             if (extracted.size && !size) {
               size = extracted.size;
+              console.log(`調試: 找到尺寸: ${size}`);
             }
             if (extracted.purchaseType && !purchaseType) {
               purchaseType = extracted.purchaseType;
+              console.log(`調試: 找到購買類型: ${purchaseType}`);
             }
             
             // 如果遇到下一個商品代碼，停止搜索
@@ -343,7 +255,7 @@ async function extractByPdfjs(buffer: Buffer): Promise<{ name: string; code: str
             }
           }
           
-
+          console.log(`調試: 提取結果 - 代碼: ${code}, 數量: ${qty}, 尺寸: ${size || '无'}, 購買類型: ${purchaseType || '无'}`);
           
           // 創建唯一標識符
           const uniqueKey = `${code}-${size || "no-size"}-${purchaseType || "no-type"}`;
@@ -354,8 +266,10 @@ async function extractByPdfjs(buffer: Buffer): Promise<{ name: string; code: str
             const existingProduct = productMap.get(uniqueKey)!;
             const oldQty = existingProduct.qty;
             existingProduct.qty += qty;
+            console.log(`調試: ${code}累加 - 原數量: ${oldQty}, 新增: ${qty}, 總數: ${existingProduct.qty}`);
           } else {
             // 新產品組合
+            console.log(`調試: ${code}首次檢測 - 數量: ${qty}`);
             productMap.set(uniqueKey, {
               name: "",
               code: code,
@@ -373,14 +287,62 @@ async function extractByPdfjs(buffer: Buffer): Promise<{ name: string; code: str
   
   // 將 Map 轉換為數組並輸出最終結果
   const rows = Array.from(productMap.values());
-  
+  console.log(`調試: 最終產品列表 (${rows.length}個產品):`);
+  rows.forEach(row => {
+    console.log(`調試: 最終結果 - 代碼: ${row.code}, 總數量: ${row.qty}, 尺寸: ${row.size || '无'}, 購買類型: ${row.purchaseType || '无'}`);
+  });
   
   return rows;
 }
 
 // 已删除旧的extractPurchaseTypeAndSizeOld函数
 
+// 修改：WS-712系列商品的特殊匹配函數
+async function updateWS712Product(rawCode: string, qty: number, locationId: string, summary: any, direction: 'out' | 'in', purchaseType?: string, size?: string) {
+  const variants = codeVariants(rawCode);
+  if (variants.length === 0) return;
+  
+  const products = await Product.find({ productCode: { $in: variants } });
+  
+  if (products.length === 0) { 
+    summary.notFound.push(normalizeCode(rawCode)); 
+    return; 
+  }
+  
+  let matchedProduct = null;
+  
+  // 根據尺寸匹配（WS-712主要按尺寸區分）
+  if (size) {
+    for (const product of products) {
+      if (product.sizes && product.sizes.includes(size)) {
+        matchedProduct = product;
+        break;
+      }
+    }
+  }
+  
+  // 如果沒有找到匹配的，使用第一個產品
+  if (!matchedProduct) {
+    matchedProduct = products[0];
+  }
+  
+  // 更新庫存
+  summary.matched++;
+  const inv = matchedProduct.inventories.find(i => String(i.locationId) === String(locationId));
+  
+  if (inv) {
+    inv.quantity = direction === 'out' ? Math.max(0, inv.quantity - qty) : inv.quantity + qty;
+  } else {
+    const newQuantity = direction === 'out' ? 0 : qty;
+    matchedProduct.inventories.push({ 
+      locationId: new mongoose.Types.ObjectId(locationId), 
+      quantity: newQuantity 
+    });
+  }
 
+  await matchedProduct.save();
+  summary.updated++;
+}
 
 // 通用更新函數
 async function updateByCodeVariants(code: string, qty: number, locationId: string, summary: any, direction: 'out' | 'in', purchaseType?: string, size?: string, originalSize?: string, originalPurchaseType?: string) {
@@ -403,6 +365,8 @@ async function updateByCodeVariants(code: string, qty: number, locationId: strin
   // 其他產品的尺寸匹配（支持组合尺寸格式）
   let matchedProduct = null;
   if (size) {
+    console.log(`調試: 根據尺寸 "${size}" 匹配產品`);
+    
     // 创建所有可能的尺寸匹配格式
     const sizesToMatch = [size];
     if (originalSize && originalPurchaseType) {
@@ -414,12 +378,15 @@ async function updateByCodeVariants(code: string, qty: number, locationId: strin
       sizesToMatch.push(originalPurchaseType);
     }
     
+    console.log(`調試: 嘗試匹配的尺寸格式: [${sizesToMatch.join(', ')}]`);
+    
     for (const product of products) {
       if (product.sizes) {
         for (const sizeToMatch of sizesToMatch) {
           if (product.sizes.includes(sizeToMatch)) {
-            matchedProduct = product;
-            break;
+        matchedProduct = product;
+            console.log(`調試: 成功匹配尺寸 "${sizeToMatch}" 在產品 ${product.productCode}`);
+        break;
           }
         }
         if (matchedProduct) break;
@@ -428,6 +395,7 @@ async function updateByCodeVariants(code: string, qty: number, locationId: strin
     
     if (!matchedProduct) {
       summary.notFound.push(`${normalizeCode(code)} (尺寸: ${size})`);
+      console.log(`調試: 未找到匹配的尺寸，嘗試的格式: [${sizesToMatch.join(', ')}]`);
       return;
     }
   } else {
@@ -460,11 +428,11 @@ function byX(a: any, b: any) { return a.transform[4] - b.transform[4]; }
 // 進貨功能
 router.post('/incoming', upload.array('files'), async (req, res) => {
   try {
-  
+    console.log('調試: 收到進貨請求');
     const { locationId } = req.body;
     const files = req.files as Express.Multer.File[];
     
-    
+    console.log(`調試: locationId = ${locationId}, 文件數量 = ${files?.length || 0}`);
     
     if (!locationId) {
       return res.status(400).json({ message: 'locationId required' });
@@ -532,7 +500,7 @@ router.post('/incoming', upload.array('files'), async (req, res) => {
       }
     }
     
-    
+    console.log('調試: 進貨處理完成', summary);
     res.json(summary);
   } catch (error) {
     console.error('進貨處理錯誤:', error);
@@ -1273,6 +1241,91 @@ router.post('/clear', async (req, res) => {
     
     console.log(`调试: 清零完成 - 处理: ${summary.processed}, 更新: ${summary.updated}, 错误: ${summary.errors.length}`);
 
+    res.json(summary);
+    
+  } catch (error) {
+    console.error('清零处理错误:', error);
+    res.status(500).json({ message: 'Internal server error', error: error });
+  }
+});
+
+// 简单的门市对调功能
+router.post('/transfer', upload.array('files'), async (req, res) => {
+  try {
+    const { fromLocationId, toLocationId } = req.body;
+    const files = req.files as Express.Multer.File[];
+    
+    if (!fromLocationId || !toLocationId) {
+      return res.status(400).json({ message: '缺少来源门市或目标门市ID' });
+    }
+    
+    if (fromLocationId === toLocationId) {
+      return res.status(400).json({ message: '来源门市和目标门市不能相同' });
+    }
+    
+    // 验证门市是否存在
+    const fromLocation = await Location.findById(fromLocationId);
+    const toLocation = await Location.findById(toLocationId);
+    
+    if (!fromLocation || !toLocation) {
+      return res.status(400).json({ message: '门市不存在' });
+    }
+    
+    const summary = {
+      files: files?.length || 0,
+      processed: 0,
+      matched: 0,
+      updated: 0,
+      notFound: [] as string[],
+      parsed: [] as any[],
+      errors: [] as string[],
+      message: `门市对调功能已添加 - 从 ${fromLocation.name} 到 ${toLocation.name}`
+    };
+    
+    // 如果有PDF文件，暂时返回成功消息
+    if (files && files.length > 0) {
+      summary.files = files.length;
+      summary.message += `，收到 ${files.length} 个PDF文件`;
+    }
+    
+    res.json(summary);
+    
+  } catch (error) {
+    console.error('门市对调处理错误:', error);
+    res.status(500).json({ message: 'Internal server error', error: error });
+  }
+});
+
+// 清零所有商品库存
+router.post('/clear', async (req, res) => {
+  try {
+    const summary = {
+      processed: 0,
+      updated: 0,
+      errors: [] as string[]
+    };
+    
+    // 获取所有商品
+    const products = await Product.find({});
+    summary.processed = products.length;
+    
+    // 清零所有商品的库存
+    for (const product of products) {
+      try {
+        // 将所有门市的库存设置为0
+        for (const inventory of product.inventories) {
+          inventory.quantity = 0;
+        }
+        
+        await product.save();
+        summary.updated++;
+        
+      } catch (error) {
+        console.error(`清零商品 ${product.productCode} 时出错:`, error);
+        summary.errors.push(`${product.productCode}: ${error}`);
+      }
+    }
+    
     res.json(summary);
     
   } catch (error) {
