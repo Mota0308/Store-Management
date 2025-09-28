@@ -989,13 +989,15 @@ router.post('/excel-progress', upload.array('files'), async (req, res) => {
 // Excel导入功能 - 支持多國内倉列累加和直接更新庫存 (原始版本保留)
 router.post('/excel', upload.array('files'), async (req, res) => {
   try {
-    console.log('调试: 收到Excel导入请求');
+    console.log('📤 Excel導入開始: 收到Excel导入请求');
 
     const files = req.files as Express.Multer.File[];
     
     if (!files || files.length === 0) {
       return res.status(400).json({ message: 'Missing files' });
     }
+    
+    console.log(`📁 Excel導入進度: 收到 ${files.length} 個文件`);
     
     const summary = { 
       files: files.length, 
@@ -1009,14 +1011,16 @@ router.post('/excel', upload.array('files'), async (req, res) => {
     };
     
     // 动态导入xlsx库
+    console.log('📚 Excel導入進度: 正在載入Excel處理庫...');
     const XLSX = await import('xlsx');
     
     // 获取所有门市信息
+    console.log('🏪 Excel導入進度: 正在獲取門市信息...');
     const locations = await Location.find({});
     const locationMap = new Map<string, string>();
     locations.forEach(loc => locationMap.set(loc.name, String(loc._id)));
     
-    console.log('调试: 可用门市:', Array.from(locationMap.keys()));
+    console.log('🏪 Excel導入進度: 找到門市:', Array.from(locationMap.keys()).join(', '));
     
     for (const file of files) {
       try {
@@ -1907,7 +1911,7 @@ router.post('/clear-progress', async (req, res) => {
 // 清零所有商品库存 (原始版本保留)
 router.post('/clear', async (req, res) => {
   try {
-    console.log('调试: 收到清零所有库存请求');
+    console.log('🧹 清零開始: 收到清零所有库存请求');
     
     const summary = {
       processed: 0,
@@ -1916,8 +1920,9 @@ router.post('/clear', async (req, res) => {
     };
     
     // 获取所有商品
+    console.log('📦 清零進度: 正在獲取所有商品...');
     const products = await Product.find({});
-    console.log(`调试: 找到 ${products.length} 个商品需要清零`);
+    console.log(`📦 清零進度: 找到 ${products.length} 个商品需要清零`);
     
     summary.processed = products.length;
     
@@ -1932,8 +1937,9 @@ router.post('/clear', async (req, res) => {
           await product.save();
           summary.updated++;
           
-        if (summary.updated % 100 === 0) {
-          console.log(`调试: 已清零 ${summary.updated} 个商品`);
+        if (summary.updated % 50 === 0) {
+          const progressPercent = Math.round((summary.updated / products.length) * 100);
+          console.log(`🔄 清零進度: ${progressPercent}% - 已清零 ${summary.updated}/${products.length} 个商品`);
         }
         
       } catch (error) {
@@ -1942,7 +1948,7 @@ router.post('/clear', async (req, res) => {
       }
     }
     
-    console.log(`调试: 清零完成 - 处理: ${summary.processed}, 更新: ${summary.updated}, 错误: ${summary.errors.length}`);
+    console.log(`✅ 清零完成: 处理 ${summary.processed} 個產品, 更新 ${summary.updated} 個, 錯誤 ${summary.errors.length} 個`);
 
     res.json(summary);
     

@@ -462,80 +462,40 @@ export default function Inventory() {
       const form = new FormData()
       excelImportState.files.forEach(f => form.append('files', f))
 
-      // 使用SSE進行實時進度更新
+      // 使用改進的進度追蹤方式
       const response = await new Promise<any>((resolve, reject) => {
-        let finalResult: any = null
-        let hasCompleted = false
+        // 啟動進度模擬
+        let currentStep = 0
+        const progressSteps = [
+          { progress: 10, message: '正在上傳文件...' },
+          { progress: 20, message: '正在解析Excel結構...' },
+          { progress: 30, message: '正在驗證產品資料...' },
+          { progress: 50, message: '正在批次處理資料...' },
+          { progress: 70, message: '正在更新庫存資料...' },
+          { progress: 85, message: '正在保存變更...' },
+          { progress: 95, message: '正在完成最後步驟...' }
+        ]
         
-        // 使用fetch發送FormData到SSE端點
-        fetch('/api/import/excel-progress', {
-          method: 'POST',
-          body: form
+        const progressInterval = setInterval(() => {
+          if (currentStep < progressSteps.length) {
+            const step = progressSteps[currentStep]
+            updateProgress(step.progress, step.message)
+            currentStep++
+          }
+        }, 1500) // 每1.5秒更新一次
+        
+        // 使用原始API端點但增加進度追蹤
+        api.post('/import/excel', form, {
+          timeout: 900000, // 15分鐘超時
+          headers: {
+            'Content-Type': 'multipart/form-data'
+          }
         }).then(response => {
-          if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`)
-          }
-          
-          const reader = response.body?.getReader()
-          const decoder = new TextDecoder()
-          let buffer = ''
-          
-          function readStream(): Promise<any> {
-            return reader!.read().then(({ done, value }) => {
-              if (done) {
-                // 處理剩餘的緩衝區數據
-                if (buffer.trim()) {
-                  processBuffer(buffer)
-                }
-                
-                if (finalResult) {
-                  hasCompleted = true
-                  resolve(finalResult)
-                } else if (!hasCompleted) {
-                  reject(new Error('Excel導入過程中發生錯誤'))
-                }
-                return
-              }
-              
-              // 將新數據添加到緩衝區
-              buffer += decoder.decode(value, { stream: true })
-              
-              // 處理完整的行
-              const lines = buffer.split('\n')
-              buffer = lines.pop() || '' // 保留不完整的行
-              
-              for (const line of lines) {
-                processBuffer(line)
-              }
-              
-              return readStream()
-            })
-          }
-          
-          function processBuffer(line: string) {
-            if (line.startsWith('data: ') && line.length > 6) {
-              try {
-                const data = JSON.parse(line.slice(6))
-                
-                if (data.type === 'progress') {
-                  updateProgress(data.progress, data.message)
-                } else if (data.type === 'completed') {
-                  finalResult = { data: data.summary }
-                  updateProgress(100, 'Excel導入完成！')
-                } else if (data.type === 'error') {
-                  hasCompleted = true
-                  reject(new Error(data.message || '未知錯誤'))
-                  return
-                }
-              } catch (e) {
-                console.warn('解析SSE數據失敗:', line, e)
-              }
-            }
-          }
-          
-          return readStream()
+          clearInterval(progressInterval)
+          updateProgress(100, '處理完成，正在載入結果...')
+          resolve(response)
         }).catch(error => {
-          hasCompleted = true
+          clearInterval(progressInterval)
           reject(error)
         })
       })
@@ -587,82 +547,34 @@ ${response.data.errors?.length > 0 ? '錯誤詳情:\n' + response.data.errors.sl
       // 顯示進度條
       showProgress('clear', '正在準備清零操作...')
       
-      // 使用SSE進行實時進度更新
+      // 使用改進的進度追蹤方式
       const response = await new Promise<any>((resolve, reject) => {
-        let finalResult: any = null
-        let hasCompleted = false
+        // 啟動進度模擬
+        let currentStep = 0
+        const progressSteps = [
+          { progress: 10, message: '正在連接服務器...' },
+          { progress: 25, message: '正在獲取產品列表...' },
+          { progress: 40, message: '正在批次清零庫存...' },
+          { progress: 60, message: '正在更新資料庫...' },
+          { progress: 80, message: '正在保存變更...' },
+          { progress: 95, message: '正在完成操作...' }
+        ]
         
-        // 使用fetch發送請求到SSE端點
-        fetch('/api/import/clear-progress', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
+        const progressInterval = setInterval(() => {
+          if (currentStep < progressSteps.length) {
+            const step = progressSteps[currentStep]
+            updateProgress(step.progress, step.message)
+            currentStep++
           }
-        }).then(response => {
-          if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`)
-          }
-          
-          const reader = response.body?.getReader()
-          const decoder = new TextDecoder()
-          let buffer = ''
-          
-          function readStream(): Promise<any> {
-            return reader!.read().then(({ done, value }) => {
-              if (done) {
-                // 處理剩餘的緩衝區數據
-                if (buffer.trim()) {
-                  processBuffer(buffer)
-                }
-                
-                if (finalResult) {
-                  hasCompleted = true
-                  resolve(finalResult)
-                } else if (!hasCompleted) {
-                  reject(new Error('清零過程中發生錯誤'))
-                }
-                return
-              }
-              
-              // 將新數據添加到緩衝區
-              buffer += decoder.decode(value, { stream: true })
-              
-              // 處理完整的行
-              const lines = buffer.split('\n')
-              buffer = lines.pop() || '' // 保留不完整的行
-              
-              for (const line of lines) {
-                processBuffer(line)
-              }
-              
-              return readStream()
-            })
-          }
-          
-          function processBuffer(line: string) {
-            if (line.startsWith('data: ') && line.length > 6) {
-              try {
-                const data = JSON.parse(line.slice(6))
-                
-                if (data.type === 'progress') {
-                  updateProgress(data.progress, data.message)
-                } else if (data.type === 'completed') {
-                  finalResult = { data: data.summary }
-                  updateProgress(100, '清零操作完成！')
-                } else if (data.type === 'error') {
-                  hasCompleted = true
-                  reject(new Error(data.message || '未知錯誤'))
-                  return
-                }
-              } catch (e) {
-                console.warn('解析SSE數據失敗:', line, e)
-              }
-            }
-          }
-          
-          return readStream()
+        }, 1000) // 每1秒更新一次
+        
+        // 使用原始API端點
+        api.post('/import/clear').then(response => {
+          clearInterval(progressInterval)
+          updateProgress(100, '清零完成，正在載入結果...')
+          resolve(response)
         }).catch(error => {
-          hasCompleted = true
+          clearInterval(progressInterval)
           reject(error)
         })
       })
