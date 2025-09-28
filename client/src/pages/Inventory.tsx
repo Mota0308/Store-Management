@@ -966,11 +966,12 @@ function toggleGroup(groupKey: string) {
               <div style={{ marginBottom: '16px' }}>
                 <p><strong>Excel格式要求：</strong></p>
                 <ul style={{ margin: '8px 0', paddingLeft: '20px' }}>
-                <li>必須包含列：商品詳情、型號、商品選項、觀塘、灣仔、荔枝角、元朗、國?倉</li>
-                  <li>商品詳情：產品名稱（支持變體：商品名稱、產品名稱、產品、名稱、商品）</li>
-                  <li>型號：產品編號（支持變體：產品編號、編號、貨號、SKU、產品代碼）</li>
-                  <li>商品選項：尺寸（支持變體：尺寸、規格、選項、尺碼）</li>
-                  <li>各門市列：對應的庫存數量（支持變體：觀塘店、灣仔店等）</li>
+                  <li><strong>必須包含列：</strong>商品編號、商品名稱、尺寸、各門市庫存列</li>
+                  <li><strong>商品編號：</strong>支持變體（編號、產品編號、貨號、SKU、產品代碼、型號等）</li>
+                  <li><strong>商品名稱：</strong>支持變體（產品、商品詳情、商品名稱、產品名稱、名稱、商品等）</li>
+                  <li><strong>尺寸：</strong>支持變體（尺寸、規格、選項、尺碼、商品選項等）</li>
+                  <li><strong>門市庫存：</strong>觀塘、灣仔、荔枝角、元朗、國內倉（支持多列相同名稱自動累加）</li>
+                  <li><strong>更新方式：</strong>直接替換現有庫存數量，不是累加</li>
                 </ul>
               </div>
               <div>
