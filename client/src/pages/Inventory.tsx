@@ -441,7 +441,7 @@ export default function Inventory() {
     })
   }
 
-  // Excel導入功能 - 完全修復版本
+  // Excel導入功能 - 使用SSE實時進度
   async function doExcelImport() {
     if (excelImportState.files.length === 0) {
       alert('請選擇Excel檔案')
@@ -462,33 +462,63 @@ export default function Inventory() {
       const form = new FormData()
       excelImportState.files.forEach(f => form.append('files', f))
 
-      // 開始進度模擬
-      updateProgress(10, '正在上傳文件...')
-      
-      // 創建一個Promise來處理進度更新
-      const progressMessages = [
-        '正在解析Excel結構...',
-        '正在驗證產品資料...',
-        '正在批次處理資料...',
-        '正在更新庫存資料...',
-        '正在保存變更...'
-      ]
-      const progressPromise = simulateProgress(12000, progressMessages) // 12秒模擬進度
-      
-      updateProgress(20, '正在解析Excel內容...')
-
-      // 使用更長的超時時間
-      const responsePromise = api.post('/import/excel', form, {
-        timeout: 900000, // 15分鐘超時
-        headers: {
-          'Content-Type': 'multipart/form-data'
-        }
+      // 使用SSE進行實時進度更新
+      const response = await new Promise<any>((resolve, reject) => {
+        // 使用fetch發送FormData到SSE端點
+        fetch('/api/import/excel-progress', {
+          method: 'POST',
+          body: form
+        }).then(response => {
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`)
+          }
+          
+          const reader = response.body?.getReader()
+          const decoder = new TextDecoder()
+          
+          let finalResult: any = null
+          
+          function readStream(): Promise<any> {
+            return reader!.read().then(({ done, value }) => {
+              if (done) {
+                if (finalResult) {
+                  resolve(finalResult)
+                } else {
+                  reject(new Error('流結束但沒有收到最終結果'))
+                }
+                return
+              }
+              
+              const chunk = decoder.decode(value)
+              const lines = chunk.split('\n')
+              
+              for (const line of lines) {
+                if (line.startsWith('data: ')) {
+                  try {
+                    const data = JSON.parse(line.slice(6))
+                    
+                    if (data.type === 'progress') {
+                      updateProgress(data.progress, data.message)
+                    } else if (data.type === 'completed') {
+                      finalResult = { data: data.summary }
+                      updateProgress(100, 'Excel導入完成！')
+                    } else if (data.type === 'error') {
+                      reject(new Error(data.message || '未知錯誤'))
+                      return
+                    }
+                  } catch (e) {
+                    console.warn('解析SSE數據失敗:', line, e)
+                  }
+                }
+              }
+              
+              return readStream()
+            })
+          }
+          
+          return readStream()
+        }).catch(reject)
       })
-
-      // 等待API響應或進度完成
-      const [response] = await Promise.all([responsePromise, progressPromise])
-      
-      updateProgress(100, 'Excel導入完成！')
       
       // 短暫延遲以顯示完成狀態
       await new Promise(resolve => setTimeout(resolve, 500))
@@ -515,14 +545,12 @@ ${response.data.errors?.length > 0 ? '錯誤詳情:\n' + response.data.errors.sl
       console.error('Excel導入錯誤:', error)
     
       let errorMsg = 'Excel導入失敗：'
-      if (error.code === 'ECONNABORTED') {
+      if (error.message.includes('timeout') || error.code === 'ECONNABORTED') {
         errorMsg += '處理超時，請嘗試使用較小的文件或檢查網絡連接'
-      } else if (error.response?.status === 413) {
+      } else if (error.message.includes('413')) {
         errorMsg += '文件太大，請使用較小的文件'
-      } else if (error.response?.data?.message) {
-        errorMsg += error.response.data.message
       } else {
-        errorMsg += error.message
+        errorMsg += error.message || '未知錯誤'
       }
       
       alert(errorMsg)

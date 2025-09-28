@@ -657,7 +657,336 @@ function analyzeExcelColumns(headerRow: any[]): {
   return columnMapping;
 }
 
-// Excel导入功能 - 支持多國内倉列累加和直接更新庫存
+// 進度報告函數
+function sendProgress(res: any, progress: number, message: string, data?: any) {
+  const progressData = {
+    progress: Math.min(100, Math.max(0, progress)),
+    message,
+    timestamp: new Date().toISOString(),
+    ...data
+  };
+  
+  console.log(`进度更新: ${progress}% - ${message}`);
+  
+  // 如果是SSE連接，發送進度事件
+  if (res.headersSent && res.write) {
+    res.write(`data: ${JSON.stringify({ type: 'progress', ...progressData })}\n\n`);
+  }
+}
+
+// Excel导入功能 - 支持多國内倉列累加和直接更新庫存 (SSE版本)
+router.post('/excel-progress', upload.array('files'), async (req, res) => {
+  // 設置SSE標頭
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    'Connection': 'keep-alive',
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Headers': 'Cache-Control'
+  });
+
+  try {
+    sendProgress(res, 0, '開始處理Excel文件...');
+
+    const files = req.files as Express.Multer.File[];
+    
+    if (!files || files.length === 0) {
+      sendProgress(res, 0, '錯誤：未找到文件');
+      res.write(`data: ${JSON.stringify({ type: 'error', message: 'Missing files' })}\n\n`);
+      res.end();
+      return;
+    }
+    
+    const summary = { 
+      files: files.length, 
+      processed: 0,
+      matched: 0, 
+      created: 0,
+      updated: 0, 
+      notFound: [] as string[], 
+      parsed: [] as any[],
+      errors: [] as string[]
+    };
+    
+    sendProgress(res, 5, '正在導入Excel處理庫...');
+    
+    // 动态导入xlsx库
+    const XLSX = await import('xlsx');
+    
+    sendProgress(res, 10, '正在獲取門市信息...');
+    
+    // 获取所有门市信息
+    const locations = await Location.find({});
+    const locationMap = new Map<string, string>();
+    locations.forEach(loc => locationMap.set(loc.name, String(loc._id)));
+    
+    console.log('调试: 可用门市:', Array.from(locationMap.keys()));
+    sendProgress(res, 15, `找到 ${locations.length} 個門市: ${Array.from(locationMap.keys()).join(', ')}`);
+    
+    for (const file of files) {
+      try {
+        sendProgress(res, 20, `正在處理文件: ${file.originalname}`);
+        console.log(`调试: 处理文件 ${file.originalname}`);
+        
+        // 解析Excel文件
+        const workbook = XLSX.read(file.buffer, { type: 'buffer' });
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+        
+        if (jsonData.length < 2) {
+          const errorMsg = 'Excel文件格式错误：至少需要标题行和数据行';
+          summary.errors.push(errorMsg);
+          sendProgress(res, 25, `錯誤: ${errorMsg}`);
+          continue;
+        }
+        
+        sendProgress(res, 30, `Excel解析完成，共 ${jsonData.length} 行數據`);
+        console.log(`调试: Excel数据行数: ${jsonData.length}`);
+        
+        // 動態檢測列標題和位置
+        const headerRow = jsonData[0] as any[];
+        const columnMapping = analyzeExcelColumns(headerRow);
+        
+        console.log('调试: 检测到的列映射:', columnMapping);
+        sendProgress(res, 35, '列結構分析完成', { 
+          detectedColumns: Object.keys(columnMapping.LOCATIONS).length + 3 
+        });
+        
+        // 创建门市名称映射表（处理繁简体问题）
+        const locationNameMapping: { [key: string]: string } = {
+          '观塘': '觀塘',
+          '湾仔': '灣仔', 
+          '荔枝角': '荔枝角',
+          '元朗': '元朗',
+          '国内仓': '國内倉'
+        };
+        
+        // 第一階段：收集並累加所有產品數據
+        const productDataMap = new Map<string, {
+          productCode: string,
+          productName: string,
+          size: string,
+          locations: { [locationName: string]: number }
+        }>();
+        
+        sendProgress(res, 40, '開始處理數據行...');
+        
+        // 处理数据行（跳过标题行）
+        for (let i = 1; i < jsonData.length; i++) {
+          const row = jsonData[i] as any[];
+          
+          if (!row || row.length === 0) continue;
+          
+          const productCode = row[columnMapping.CODE]?.toString()?.trim();
+          const productName = row[columnMapping.NAME]?.toString()?.trim();
+          const size = row[columnMapping.SIZE]?.toString()?.trim();
+          
+          if (!productCode) {
+            console.log(`调试: 第${i+1}行缺少商品型号，跳过`);
+            continue;
+          }
+          
+          const productKey = `${productCode}|${size || ''}`;
+          
+          // 初始化產品數據
+          if (!productDataMap.has(productKey)) {
+            productDataMap.set(productKey, {
+              productCode,
+              productName,
+              size,
+              locations: {}
+            });
+          }
+          
+          const productData = productDataMap.get(productKey)!;
+          
+          // 處理各門市的庫存數據
+          for (const [excelLocationName, columnIndices] of Object.entries(columnMapping.LOCATIONS) as [string, number | number[]][]) {
+            let totalQuantity = 0;
+            
+            // 如果是數組，表示有多個相同名稱的列（如多個國內倉列）
+            if (Array.isArray(columnIndices)) {
+              for (const columnIndex of columnIndices) {
+                const quantity = parseInt(row[columnIndex]) || 0;
+                totalQuantity += quantity;
+                console.log(`调试: ${productCode}(${size}) ${excelLocationName}列${columnIndex}: ${quantity}`);
+              }
+            } else {
+              totalQuantity = parseInt(row[columnIndices]) || 0;
+            }
+            
+            // 累加到產品數據中（如果同一產品在多行出現）
+            if (!productData.locations[excelLocationName]) {
+              productData.locations[excelLocationName] = 0;
+            }
+            productData.locations[excelLocationName] += totalQuantity;
+            
+            console.log(`调试: ${productCode}(${size}) ${excelLocationName} 累计数量: ${productData.locations[excelLocationName]}`);
+          }
+          
+          summary.processed++;
+          
+          // 定期發送進度更新
+          if (i % 10 === 0) {
+            const progress = 40 + (i / jsonData.length) * 20; // 40-60%
+            sendProgress(res, progress, `處理數據行 ${i}/${jsonData.length}`);
+          }
+        }
+        
+        sendProgress(res, 60, `數據收集完成，共找到 ${productDataMap.size} 個唯一產品`);
+        
+        // 第二階段：批次更新數據庫中的庫存（直接替換，不是累加）
+        const productEntries = Array.from(productDataMap.entries());
+        const batchSize = 50; // 每批處理50個產品
+        
+        console.log(`调试: 开始批次处理 ${productEntries.length} 个产品，每批 ${batchSize} 个`);
+        sendProgress(res, 65, `開始批次更新 ${productEntries.length} 個產品，每批 ${batchSize} 個`);
+        
+        for (let i = 0; i < productEntries.length; i += batchSize) {
+          const batch = productEntries.slice(i, i + batchSize);
+          const batchNum = Math.floor(i / batchSize) + 1;
+          const totalBatches = Math.ceil(productEntries.length / batchSize);
+          
+          console.log(`调试: 处理批次 ${batchNum}/${totalBatches}`);
+          sendProgress(res, 65 + (i / productEntries.length) * 30, `處理批次 ${batchNum}/${totalBatches}`);
+          
+          // 批次處理產品
+          const updatePromises = batch.map(async ([productKey, productData]) => {
+            try {
+              console.log(`调debug: 更新产品库存 - 型号: ${productData.productCode}, 尺寸: ${productData.size}`);
+              
+              // 使用改进的产品查找逻辑
+              let product = await findProductByCodeAndSize(productData.productCode, productData.size);
+              
+              if (!product) {
+                console.log(`调试: 未找到商品 ${productData.productCode} (尺寸: ${productData.size})`);
+                return { type: 'notFound', data: `${productData.productCode} (${productData.size})` };
+              }
+              
+              console.log(`调试: 找到商品 ${product.productCode} - ${product.name}`);
+              
+              // 更新各门市的库存（直接替換）
+              let hasUpdates = false;
+              for (const [excelLocationName, totalQuantity] of Object.entries(productData.locations)) {
+                // 使用映射表获取数据库中的门市名称
+                const dbLocationName = locationNameMapping[excelLocationName] || excelLocationName;
+                
+                if (locationMap.has(dbLocationName)) {
+                  const locationId = locationMap.get(dbLocationName)!;
+                  
+                  // 查找或创建库存记录
+                  let inventory = product.inventories.find((inv: any) => 
+                    String(inv.locationId) === locationId
+                  );
+                  
+                  if (!inventory) {
+                    inventory = { 
+                      locationId: new mongoose.Types.ObjectId(locationId), 
+                      quantity: 0 
+                    };
+                    product.inventories.push(inventory);
+                    console.log(`调试: 为 ${product.productCode} 创建新的库存记录 - ${dbLocationName}`);
+                  }
+                  
+                  // 直接設置庫存數量（替換而不是累加）
+                  const oldQuantity = inventory.quantity;
+                  inventory.quantity = totalQuantity;
+                  
+                  if (totalQuantity !== oldQuantity) {
+                    hasUpdates = true;
+                    console.log(`调试: ${product.productCode}(${productData.size}) ${excelLocationName}->${dbLocationName} 库存直接更新: ${oldQuantity} -> ${totalQuantity}`);
+                  }
+                } else {
+                  console.log(`调试: 未找到门市 ${excelLocationName} (映射为 ${dbLocationName})`);
+                }
+              }
+              
+              // 保存产品更新
+              if (hasUpdates || product.inventories.some((inv: any) => inv.isNew)) {
+                await product.save();
+                console.log(`调试: 已保存产品 ${product.productCode}(${productData.size})`);
+                return { 
+                  type: 'updated', 
+                  data: {
+                    name: productData.productName,
+                    code: productData.productCode,
+                    size: productData.size
+                  }
+                };
+              }
+              
+              return { 
+                type: 'matched', 
+                data: {
+                  name: productData.productName,
+                  code: productData.productCode,
+                  size: productData.size
+                }
+              };
+              
+            } catch (error) {
+              console.error(`调试: 处理产品 ${productData.productCode} 时出错:`, error);
+              return { type: 'error', data: `${productData.productCode}: ${error}` };
+            }
+          });
+          
+          // 等待當前批次完成
+          const batchResults = await Promise.all(updatePromises);
+          
+          // 統計結果
+          batchResults.forEach(result => {
+            switch (result.type) {
+              case 'notFound':
+                summary.notFound.push(result.data as string);
+                break;
+              case 'updated':
+                summary.updated++;
+                summary.matched++;
+                summary.parsed.push(result.data as any);
+                break;
+              case 'matched':
+                summary.matched++;
+                summary.parsed.push(result.data as any);
+                break;
+              case 'error':
+                summary.errors.push(result.data as string);
+                break;
+            }
+          });
+          
+          console.log(`调试: 批次 ${batchNum} 完成，已处理 ${Math.min(i + batchSize, productEntries.length)}/${productEntries.length} 个产品`);
+          
+          // 在批次之間稍作停頓，避免資料庫壓力過大
+          if (i + batchSize < productEntries.length) {
+            await new Promise(resolve => setTimeout(resolve, 100)); // 100ms 停頓
+          }
+        }
+        
+      } catch (error) {
+        console.error('处理Excel文件时出错:', error);
+        const errorMsg = `Excel文件处理错误: ${error}`;
+        summary.errors.push(errorMsg);
+        sendProgress(res, 95, `錯誤: ${errorMsg}`);
+      }
+    }
+    
+    sendProgress(res, 100, 'Excel導入完成！');
+    console.log('调试: Excel导入完成', summary);
+    
+    // 發送最終結果
+    res.write(`data: ${JSON.stringify({ type: 'completed', summary })}\n\n`);
+    res.end();
+    
+  } catch (error) {
+    console.error('Excel导入处理错误:', error);
+    sendProgress(res, 0, `嚴重錯誤: ${error}`);
+    res.write(`data: ${JSON.stringify({ type: 'error', message: 'Internal server error', error: error })}\n\n`);
+    res.end();
+  }
+});
+
+// Excel导入功能 - 支持多國内倉列累加和直接更新庫存 (原始版本保留)
 router.post('/excel', upload.array('files'), async (req, res) => {
   try {
     console.log('调试: 收到Excel导入请求');
