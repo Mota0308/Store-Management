@@ -16,6 +16,17 @@ import Location from './models/Location';
 dotenv.config({ path: path.resolve(__dirname, '..', 'local.env') });
 
 const app = express();
+
+// 增加請求超時設置
+app.use((req, res, next) => {
+  // 為Excel導入設置更長的超時時間（15分鐘）
+  if (req.path === '/api/import/excel') {
+    req.setTimeout(900000); // 15分鐘
+    res.setTimeout(900000); // 15分鐘
+  }
+  next();
+});
+
 app.use(cors());
 app.use(helmet());
 app.use(morgan('dev'));
@@ -80,7 +91,12 @@ async function start() {
     console.log('正在連接 MongoDB...');
     console.log('MongoDB URI:', MONGODB_URI.replace(/\/\/.*@/, '//***:***@')); // 隱藏密碼
     
-    await mongoose.connect(MONGODB_URI, { dbName: 'Storage' });
+    await mongoose.connect(MONGODB_URI, { 
+      dbName: 'Storage',
+      maxPoolSize: 10, // 最大連接池大小
+      serverSelectionTimeoutMS: 5000, // 服務器選擇超時
+      socketTimeoutMS: 45000, // Socket超時
+    });
     console.log('MongoDB 連接成功');
     console.log('數據庫名稱:', mongoose.connection.db?.databaseName);
     console.log('MongoDB 連接狀態:', mongoose.connection.readyState);

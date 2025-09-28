@@ -62,6 +62,19 @@ export default function Inventory() {
   
   // 清零狀態
   const [clearOpen, setClearOpen] = useState(false)
+  
+  // 進度條狀態
+  const [progressState, setProgressState] = useState<{
+    isVisible: boolean
+    progress: number
+    message: string
+    type: 'excel' | 'clear' | null
+  }>({
+    isVisible: false,
+    progress: 0,
+    message: '',
+    type: null
+  })
   // 增加分組狀態
   const [addGroupOpen, setAddGroupOpen] = useState(false)
   const [selectedGroup, setSelectedGroup] = useState<ProductGroup | null>(null)
@@ -373,38 +386,117 @@ export default function Inventory() {
     }
   }
 
+  // 進度條控制函數
+  function showProgress(type: 'excel' | 'clear', message: string) {
+    setProgressState({
+      isVisible: true,
+      progress: 0,
+      message,
+      type
+    })
+  }
+  
+  function updateProgress(progress: number, message?: string) {
+    setProgressState(prev => ({
+      ...prev,
+      progress: Math.min(100, Math.max(0, progress)),
+      message: message || prev.message
+    }))
+  }
+  
+  function hideProgress() {
+    setProgressState({
+      isVisible: false,
+      progress: 0,
+      message: '',
+      type: null
+    })
+  }
+  
+  // 模擬進度更新函數
+  function simulateProgress(duration: number = 5000, messages?: string[]) {
+    return new Promise<void>((resolve) => {
+      let currentProgress = 0
+      const steps = 20
+      const stepDuration = duration / steps
+      const messageInterval = Math.floor(steps / (messages?.length || 4))
+      let messageIndex = 0
+      
+      const interval = setInterval(() => {
+        currentProgress += 5
+        
+        // 更新進度消息
+        if (messages && currentProgress % (messageInterval * 5) === 0 && messageIndex < messages.length) {
+          updateProgress(currentProgress, messages[messageIndex])
+          messageIndex++
+        } else {
+          updateProgress(currentProgress)
+        }
+        
+        if (currentProgress >= 100) {
+          clearInterval(interval)
+          resolve()
+        }
+      }, stepDuration)
+    })
+  }
+
   // Excel導入功能 - 完全修復版本
   async function doExcelImport() {
-  if (excelImportState.files.length === 0) {
-    alert('請選擇Excel檔案')
+    if (excelImportState.files.length === 0) {
+      alert('請選擇Excel檔案')
       return
     }
 
-  // 檢查文件大小
+    // 檢查文件大小
     const totalSize = excelImportState.files.reduce((sum, file) => sum + file.size, 0)
-  if (totalSize > 10 * 1024 * 1024) { // 10MB限制
-    alert('文件總大小超過10MB，請使用較小的文件')
+    if (totalSize > 10 * 1024 * 1024) { // 10MB限制
+      alert('文件總大小超過10MB，請使用較小的文件')
       return
     }
 
-  try {
-    // ?示?理中提示
-    const processingMsg = '正在處理Excel文件，請稍候...\n這可能需要幾分鐘時間，請不要關閉頁面。'
-    alert(processingMsg)
-    
-    const form = new FormData()
-    excelImportState.files.forEach(f => form.append('files', f))
+    try {
+      // 顯示進度條
+      showProgress('excel', '正在準備Excel文件...')
+      
+      const form = new FormData()
+      excelImportState.files.forEach(f => form.append('files', f))
 
-    // 使用更?的超???
-    const response = await api.post('/import/excel', form, {
-      timeout: 300000, // 5分?超?
-      headers: {
-        'Content-Type': 'multipart/form-data'
-      }
+      // 開始進度模擬
+      updateProgress(10, '正在上傳文件...')
+      
+      // 創建一個Promise來處理進度更新
+      const progressMessages = [
+        '正在解析Excel結構...',
+        '正在驗證產品資料...',
+        '正在批次處理資料...',
+        '正在更新庫存資料...',
+        '正在保存變更...'
+      ]
+      const progressPromise = simulateProgress(12000, progressMessages) // 12秒模擬進度
+      
+      updateProgress(20, '正在解析Excel內容...')
+
+      // 使用更長的超時時間
+      const responsePromise = api.post('/import/excel', form, {
+        timeout: 900000, // 15分鐘超時
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
       })
 
-    // ?示???果
-    const resultMsg = `Excel導入完成！
+      // 等待API響應或進度完成
+      const [response] = await Promise.all([responsePromise, progressPromise])
+      
+      updateProgress(100, 'Excel導入完成！')
+      
+      // 短暫延遲以顯示完成狀態
+      await new Promise(resolve => setTimeout(resolve, 500))
+      
+      hideProgress()
+
+      // 顯示結果
+      const resultMsg = `Excel導入完成！
     
 處理行數: ${response.data.processed}
 匹配產品: ${response.data.matched}
@@ -414,37 +506,59 @@ export default function Inventory() {
 
 ${response.data.errors?.length > 0 ? '錯誤詳情:\n' + response.data.errors.slice(0, 5).join('\n') + (response.data.errors.length > 5 ? '\n...' : '') : '無錯誤'}`
     
-    alert(resultMsg)
+      alert(resultMsg)
       setExcelImportOpen(false)
       await load()
+      
     } catch (error: any) {
+      hideProgress()
       console.error('Excel導入錯誤:', error)
     
-    let errorMsg = 'Excel導入失敗：'
-    if (error.code === 'ECONNABORTED') {
-      errorMsg += '處理超時，請嘗試使用較小的文件或檢查網絡連接'
-    } else if (error.response?.status === 413) {
-      errorMsg += '文件太大，請使用較小的文件'
-    } else if (error.response?.data?.message) {
-      errorMsg += error.response.data.message
-    } else {
-      errorMsg += error.message
-    }
-    
-    alert(errorMsg)
+      let errorMsg = 'Excel導入失敗：'
+      if (error.code === 'ECONNABORTED') {
+        errorMsg += '處理超時，請嘗試使用較小的文件或檢查網絡連接'
+      } else if (error.response?.status === 413) {
+        errorMsg += '文件太大，請使用較小的文件'
+      } else if (error.response?.data?.message) {
+        errorMsg += error.response.data.message
+      } else {
+        errorMsg += error.message
+      }
+      
+      alert(errorMsg)
     }
   }
 
-// 清零所有商品數量
+  // 清零所有商品數量
   async function doClearAll() {
-  if (!confirm('確定要清零所有商品的數量嗎？此操作不可撤銷！')) {
+    if (!confirm('確定要清零所有商品的數量嗎？此操作不可撤銷！')) {
       return
     }
 
     try {
-    const response = await api.post('/import/clear')
-    
-    const resultMsg = `清零完成！
+      // 顯示進度條
+      showProgress('clear', '正在準備清零操作...')
+      
+      updateProgress(10, '正在連接服務器...')
+      
+      // 創建進度模擬
+      const progressPromise = simulateProgress(3000) // 3秒模擬進度
+      
+      updateProgress(30, '正在清零產品數量...')
+      
+      const responsePromise = api.post('/import/clear')
+      
+      // 等待API響應和進度完成
+      const [response] = await Promise.all([responsePromise, progressPromise])
+      
+      updateProgress(100, '清零操作完成！')
+      
+      // 短暫延遲以顯示完成狀態
+      await new Promise(resolve => setTimeout(resolve, 500))
+      
+      hideProgress()
+      
+      const resultMsg = `清零完成！
     
 處理產品: ${response.data.processed}
 更新產品: ${response.data.updated}
@@ -452,20 +566,22 @@ ${response.data.errors?.length > 0 ? '錯誤詳情:\n' + response.data.errors.sl
 
 ${response.data.errors?.length > 0 ? '錯誤詳情:\n' + response.data.errors.slice(0, 5).join('\n') + (response.data.errors.length > 5 ? '\n...' : '') : '無錯誤'}`
     
-    alert(resultMsg)
+      alert(resultMsg)
       setClearOpen(false)
       await load()
+      
     } catch (error: any) {
+      hideProgress()
       console.error('清零錯誤:', error)
     
-    let errorMsg = '清零失敗：'
-    if (error.response?.data?.message) {
-      errorMsg += error.response.data.message
-    } else {
-      errorMsg += error.message
-    }
-    
-    alert(errorMsg)
+      let errorMsg = '清零失敗：'
+      if (error.response?.data?.message) {
+        errorMsg += error.response.data.message
+      } else {
+        errorMsg += error.message
+      }
+      
+      alert(errorMsg)
     }
   }
 
@@ -982,6 +1098,33 @@ function toggleGroup(groupKey: string) {
             <div className="footer">
               <button className="btn secondary" onClick={() => setExcelImportOpen(false)}>取消</button>
               <button className="btn" onClick={doExcelImport}>進行導入</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 進度條彈窗 */}
+      {progressState.isVisible && (
+        <div className="modal-backdrop">
+          <div className="modal progress-modal">
+            <div className="header">
+              {progressState.type === 'excel' ? 'Excel導入進度' : '清零操作進度'}
+            </div>
+            <div className="body">
+              <div className="progress-container">
+                <div className="progress-message">{progressState.message}</div>
+                <div className="progress-bar-container">
+                  <div 
+                    className="progress-bar" 
+                    style={{ width: `${progressState.progress}%` }}
+                  ></div>
+                </div>
+                <div className="progress-percentage">{Math.round(progressState.progress)}%</div>
+              </div>
+              <div className="progress-warning">
+                <p><strong>請勿關閉此頁面</strong></p>
+                <p>操作正在進行中，請耐心等待...</p>
+              </div>
             </div>
           </div>
         </div>

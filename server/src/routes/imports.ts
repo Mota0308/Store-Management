@@ -785,70 +785,126 @@ router.post('/excel', upload.array('files'), async (req, res) => {
           summary.processed++;
         }
         
-        // 第二階段：更新數據庫中的庫存（直接替換，不是累加）
-        for (const [productKey, productData] of productDataMap.entries()) {
-          console.log(`调试: 更新产品库存 - 型号: ${productData.productCode}, 尺寸: ${productData.size}`);
+        // 第二階段：批次更新數據庫中的庫存（直接替換，不是累加）
+        const productEntries = Array.from(productDataMap.entries());
+        const batchSize = 50; // 每批處理50個產品
+        
+        console.log(`调试: 开始批次处理 ${productEntries.length} 个产品，每批 ${batchSize} 个`);
+        
+        for (let i = 0; i < productEntries.length; i += batchSize) {
+          const batch = productEntries.slice(i, i + batchSize);
+          console.log(`调试: 处理批次 ${Math.floor(i / batchSize) + 1}/${Math.ceil(productEntries.length / batchSize)}`);
           
-          // 使用改进的产品查找逻辑
-          let product = await findProductByCodeAndSize(productData.productCode, productData.size);
-          
-          if (!product) {
-            console.log(`调试: 未找到商品 ${productData.productCode} (尺寸: ${productData.size})`);
-            summary.notFound.push(`${productData.productCode} (${productData.size})`);
-            continue;
-          }
-          
-          console.log(`调试: 找到商品 ${product.productCode} - ${product.name}`);
-          summary.matched++;
-          
-          // 更新各门市的库存（直接替換）
-          let hasUpdates = false;
-          for (const [excelLocationName, totalQuantity] of Object.entries(productData.locations)) {
-            // 使用映射表获取数据库中的门市名称
-            const dbLocationName = locationNameMapping[excelLocationName] || excelLocationName;
-            
-            if (locationMap.has(dbLocationName)) {
-              const locationId = locationMap.get(dbLocationName)!;
+          // 批次處理產品
+          const updatePromises = batch.map(async ([productKey, productData]) => {
+            try {
+              console.log(`调debug: 更新产品库存 - 型号: ${productData.productCode}, 尺寸: ${productData.size}`);
               
-              // 查找或创建库存记录
-              let inventory = product.inventories.find((inv: any) => 
-                String(inv.locationId) === locationId
-              );
+              // 使用改进的产品查找逻辑
+              let product = await findProductByCodeAndSize(productData.productCode, productData.size);
               
-              if (!inventory) {
-                inventory = { 
-                  locationId: new mongoose.Types.ObjectId(locationId), 
-                  quantity: 0 
+              if (!product) {
+                console.log(`调试: 未找到商品 ${productData.productCode} (尺寸: ${productData.size})`);
+                return { type: 'notFound', data: `${productData.productCode} (${productData.size})` };
+              }
+              
+              console.log(`调试: 找到商品 ${product.productCode} - ${product.name}`);
+              
+              // 更新各门市的库存（直接替換）
+              let hasUpdates = false;
+              for (const [excelLocationName, totalQuantity] of Object.entries(productData.locations)) {
+                // 使用映射表获取数据库中的门市名称
+                const dbLocationName = locationNameMapping[excelLocationName] || excelLocationName;
+                
+                if (locationMap.has(dbLocationName)) {
+                  const locationId = locationMap.get(dbLocationName)!;
+                  
+                  // 查找或创建库存记录
+                  let inventory = product.inventories.find((inv: any) => 
+                    String(inv.locationId) === locationId
+                  );
+                  
+                  if (!inventory) {
+                    inventory = { 
+                      locationId: new mongoose.Types.ObjectId(locationId), 
+                      quantity: 0 
+                    };
+                    product.inventories.push(inventory);
+                    console.log(`调试: 为 ${product.productCode} 创建新的库存记录 - ${dbLocationName}`);
+                  }
+                  
+                  // 直接設置庫存數量（替換而不是累加）
+                  const oldQuantity = inventory.quantity;
+                  inventory.quantity = totalQuantity;
+                  
+                  if (totalQuantity !== oldQuantity) {
+                    hasUpdates = true;
+                    console.log(`调试: ${product.productCode}(${productData.size}) ${excelLocationName}->${dbLocationName} 库存直接更新: ${oldQuantity} -> ${totalQuantity}`);
+                  }
+                } else {
+                  console.log(`调试: 未找到门市 ${excelLocationName} (映射为 ${dbLocationName})`);
+                }
+              }
+              
+              // 保存产品更新
+              if (hasUpdates || product.inventories.some((inv: any) => inv.isNew)) {
+                await product.save();
+                console.log(`调试: 已保存产品 ${product.productCode}(${productData.size})`);
+                return { 
+                  type: 'updated', 
+                  data: {
+                    name: productData.productName,
+                    code: productData.productCode,
+                    size: productData.size
+                  }
                 };
-                product.inventories.push(inventory);
-                console.log(`调试: 为 ${product.productCode} 创建新的库存记录 - ${dbLocationName}`);
               }
               
-              // 直接設置庫存數量（替換而不是累加）
-              const oldQuantity = inventory.quantity;
-              inventory.quantity = totalQuantity;
+              return { 
+                type: 'matched', 
+                data: {
+                  name: productData.productName,
+                  code: productData.productCode,
+                  size: productData.size
+                }
+              };
               
-              if (totalQuantity !== oldQuantity) {
-                hasUpdates = true;
-                console.log(`调试: ${product.productCode}(${productData.size}) ${excelLocationName}->${dbLocationName} 库存直接更新: ${oldQuantity} -> ${totalQuantity}`);
-              }
-            } else {
-              console.log(`调试: 未找到门市 ${excelLocationName} (映射为 ${dbLocationName})`);
+            } catch (error) {
+              console.error(`调试: 处理产品 ${productData.productCode} 时出错:`, error);
+              return { type: 'error', data: `${productData.productCode}: ${error}` };
             }
-          }
-          
-          // 保存产品更新
-          if (hasUpdates || product.inventories.some((inv: any) => inv.isNew)) {
-            await product.save();
-            summary.updated++;
-            console.log(`调试: 已保存产品 ${product.productCode}(${productData.size})`);
-          }
-          
-          summary.parsed.push({
-            name: productData.productName,
-            code: productData.productCode,
-            size: productData.size
           });
+          
+          // 等待當前批次完成
+          const batchResults = await Promise.all(updatePromises);
+          
+          // 統計結果
+          batchResults.forEach(result => {
+            switch (result.type) {
+              case 'notFound':
+                summary.notFound.push(result.data as string);
+                break;
+              case 'updated':
+                summary.updated++;
+                summary.matched++;
+                summary.parsed.push(result.data as any);
+                break;
+              case 'matched':
+                summary.matched++;
+                summary.parsed.push(result.data as any);
+                break;
+              case 'error':
+                summary.errors.push(result.data as string);
+                break;
+            }
+          });
+          
+          console.log(`调试: 批次 ${Math.floor(i / batchSize) + 1} 完成，已处理 ${Math.min(i + batchSize, productEntries.length)}/${productEntries.length} 个产品`);
+          
+          // 在批次之間稍作停頓，避免資料庫壓力過大
+          if (i + batchSize < productEntries.length) {
+            await new Promise(resolve => setTimeout(resolve, 100)); // 100ms 停頓
+          }
         }
         
       } catch (error) {
