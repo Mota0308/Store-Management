@@ -1818,7 +1818,93 @@ async function processTransferItem(
   }
 }
 
-// 清零所有商品库存
+// 清零所有商品库存 (SSE版本)
+router.post('/clear-progress', async (req, res) => {
+  // 設置SSE標頭
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    'Connection': 'keep-alive',
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Headers': 'Cache-Control'
+  });
+
+  try {
+    sendProgress(res, 0, '開始清零操作...');
+    console.log('调试: 收到清零所有库存请求');
+    
+    const summary = {
+      processed: 0,
+      updated: 0,
+      errors: [] as string[]
+    };
+    
+    sendProgress(res, 10, '正在獲取所有商品...');
+    
+    // 获取所有商品
+    const products = await Product.find({});
+    console.log(`调试: 找到 ${products.length} 个商品需要清零`);
+    sendProgress(res, 20, `找到 ${products.length} 個商品需要清零`);
+    
+    summary.processed = products.length;
+    
+    // 批次清零商品
+    const batchSize = 100;
+    const totalBatches = Math.ceil(products.length / batchSize);
+    
+    for (let i = 0; i < products.length; i += batchSize) {
+      const batch = products.slice(i, i + batchSize);
+      const batchNum = Math.floor(i / batchSize) + 1;
+      
+      sendProgress(res, 20 + (i / products.length) * 70, `正在清零批次 ${batchNum}/${totalBatches}...`);
+      
+      // 批次處理
+      const updatePromises = batch.map(async (product) => {
+        try {
+          // 将所有门市的库存设置为0
+          for (const inventory of product.inventories) {
+            inventory.quantity = 0;
+          }
+          
+          await product.save();
+          return { success: true, productCode: product.productCode };
+          
+        } catch (error) {
+          console.error(`清零商品 ${product.productCode} 时出错:`, error);
+          return { success: false, productCode: product.productCode, error: `${error}` };
+        }
+      });
+      
+      const batchResults = await Promise.all(updatePromises);
+      
+      // 統計結果
+      batchResults.forEach(result => {
+        if (result.success) {
+          summary.updated++;
+        } else {
+          summary.errors.push(`${result.productCode}: ${result.error}`);
+        }
+      });
+      
+      console.log(`调试: 批次 ${batchNum} 完成，已清零 ${Math.min(i + batchSize, products.length)}/${products.length} 个商品`);
+    }
+    
+    sendProgress(res, 100, '清零操作完成！');
+    console.log(`调试: 清零完成 - 处理: ${summary.processed}, 更新: ${summary.updated}, 错误: ${summary.errors.length}`);
+
+    // 發送最終結果
+    res.write(`data: ${JSON.stringify({ type: 'completed', summary })}\n\n`);
+    res.end();
+    
+  } catch (error) {
+    console.error('清零处理错误:', error);
+    sendProgress(res, 0, `清零操作失敗: ${error}`);
+    res.write(`data: ${JSON.stringify({ type: 'error', message: 'Internal server error', error: error })}\n\n`);
+    res.end();
+  }
+});
+
+// 清零所有商品库存 (原始版本保留)
 router.post('/clear', async (req, res) => {
   try {
     console.log('调试: 收到清零所有库存请求');
