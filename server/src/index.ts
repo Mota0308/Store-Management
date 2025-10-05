@@ -43,11 +43,8 @@ if (process.env.NODE_ENV === 'production') {
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/Storage';
 
 async function seedLocations() {
-  // 刪除屯門數據
-  await Location.deleteMany({ name: '屯門' });
-  console.log('已刪除屯門數據');
-  
-  const names = ['觀塘', '灣仔', '荔枝角', '元朗', '國内倉'];
+  // 確保所有門市都存在（按照正確順序）
+  const names = ['觀塘', '灣仔', '荔枝角', '元朗', '元朗倉(觀塘)', '元朗倉(灣仔)', '元朗倉(荔枝角)', '屯門', '國内倉'];
   for (const name of names) {
     const existing = await Location.findOne({ name });
     if (!existing) {
