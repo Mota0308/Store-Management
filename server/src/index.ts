@@ -44,7 +44,7 @@ const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/Storag
 
 async function seedLocations() {
   // 確保所有門市都存在（按照正確順序）
-  const names = ['觀塘', '灣仔', '荔枝角', '元朗', '元朗倉(觀塘)', '元朗倉(灣仔)', '元朗倉(荔枝角)', '屯門', '國内倉'];
+  const names = ['觀塘', '灣仔', '荔枝角', '元朗', '元朗觀塘倉', '元朗灣仔倉', '元朗荔枝角倉', '屯門', '國内倉'];
   for (const name of names) {
     const existing = await Location.findOne({ name });
     if (!existing) {

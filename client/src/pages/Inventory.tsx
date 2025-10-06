@@ -107,8 +107,8 @@ export default function Inventory() {
 
   useEffect(() => {
     api.get('/locations').then((r: any) => {
-      // 按照指定順序排序：觀塘，灣仔，荔枝角，元朗，元朗倉(觀塘)，元朗倉(灣仔)，元朗倉(荔枝角)，屯門，國内倉
-      const order = ['觀塘', '灣仔', '荔枝角', '元朗', '元朗倉(觀塘)', '元朗倉(灣仔)', '元朗倉(荔枝角)', '屯門', '國内倉'];
+      // 按照指定順序排序：觀塘，灣仔，荔枝角，元朗，元朗觀塘倉，元朗灣仔倉，元朗荔枝角倉，屯門，國内倉
+      const order = ['觀塘', '灣仔', '荔枝角', '元朗', '元朗觀塘倉', '元朗灣仔倉', '元朗荔枝角倉', '屯門', '國内倉'];
       const sortedLocations = r.data.sort((a: Location, b: Location) => {
         const aIndex = order.indexOf(a.name);
         const bIndex = order.indexOf(b.name);
@@ -295,7 +295,7 @@ export default function Inventory() {
       const exportData = []
       
       // 添加表頭
-      const headers = ['編號', '產品', '尺寸', '觀塘', '灣仔', '荔枝角', '元朗', '元朗倉(觀塘)', '元朗倉(灣仔)', '元朗倉(荔枝角)', '屯門', '國内倉']
+      const headers = ['編號', '產品', '尺寸', '觀塘', '灣仔', '荔枝角', '元朗', '元朗觀塘倉', '元朗灣仔倉', '元朗荔枝角倉', '屯門', '國内倉']
       exportData.push(headers)
       
       // 添加產品數據
@@ -312,9 +312,9 @@ export default function Inventory() {
             getQuantity(product, locations.find(l => l.name === '灣仔')?._id || ''),
             getQuantity(product, locations.find(l => l.name === '荔枝角')?._id || ''),
             getQuantity(product, locations.find(l => l.name === '元朗')?._id || ''),
-            getQuantity(product, locations.find(l => l.name === '元朗倉(觀塘)')?._id || ''),
-            getQuantity(product, locations.find(l => l.name === '元朗倉(灣仔)')?._id || ''),
-            getQuantity(product, locations.find(l => l.name === '元朗倉(荔枝角)')?._id || ''),
+            getQuantity(product, locations.find(l => l.name === '元朗觀塘倉')?._id || ''),
+            getQuantity(product, locations.find(l => l.name === '元朗灣仔倉')?._id || ''),
+            getQuantity(product, locations.find(l => l.name === '元朗荔枝角倉')?._id || ''),
             getQuantity(product, locations.find(l => l.name === '屯門')?._id || ''),
             getQuantity(product, locations.find(l => l.name === '國内倉')?._id || '')
           ]
@@ -1120,7 +1120,7 @@ function toggleGroup(groupKey: string) {
                   <li><strong>商品編號：</strong>支持變體（編號、產品編號、貨號、SKU、產品代碼、型號等）</li>
                   <li><strong>商品名稱：</strong>支持變體（產品、商品詳情、商品名稱、產品名稱、名稱、商品等）</li>
                   <li><strong>尺寸：</strong>支持變體（尺寸、規格、選項、尺碼、商品選項等）</li>
-                  <li><strong>門市庫存：</strong>觀塘、灣仔、荔枝角、元朗、元朗倉(觀塘)、元朗倉(灣仔)、元朗倉(荔枝角)、屯門、國內倉（支持多列相同名稱自動累加）</li>
+                  <li><strong>門市庫存：</strong>觀塘、灣仔、荔枝角、元朗、元朗觀塘倉、元朗灣仔倉、元朗荔枝角倉、屯門、國內倉（支持多列相同名稱自動累加）</li>
                   <li><strong>更新方式：</strong>直接替換現有庫存數量，不是累加</li>
                 </ul>
               </div>
