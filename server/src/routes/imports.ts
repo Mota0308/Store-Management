@@ -630,11 +630,10 @@ function analyzeExcelColumns(headerRow: any[]): {
       continue;
     }
     
-    // 檢測門市列
+    // 檢測門市列 - 使用完全匹配邏輯
     for (const [locationKey, variants] of Object.entries(locationVariants)) {
       if (variants.some(variant => 
-        header.toLowerCase().includes(variant.toLowerCase()) || 
-        variant.toLowerCase().includes(header.toLowerCase())
+        header.toLowerCase().trim() === variant.toLowerCase().trim()
       )) {
         // 如果已經存在這個門市的列，轉換為數組以支持多列
         if (columnMapping.LOCATIONS[locationKey]) {
