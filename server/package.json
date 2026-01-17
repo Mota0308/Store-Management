@@ -7,7 +7,11 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "dev:local": "cross-env NODE_ENV=development MONGODB_URI=mongodb://localhost:27017/Storage_Local ts-node-dev --respawn --transpile-only src/index.ts",
-    "migrate": "node migrate_database.js"
+    "migrate": "node migrate_database.js",
+    "create-users": "node create_test_users.js",
+    "create-users:prod": "node create_test_users.js --production",
+    "update-password": "node update_user_password.js",
+    "update-password:prod": "node update_user_password.js --production"
   },
   "dependencies": {
     "axios": "^1.12.2",
