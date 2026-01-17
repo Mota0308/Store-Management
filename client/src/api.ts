@@ -16,9 +16,28 @@ const api = axios.create({
   timeout: 300000 // 5分钟超时，足够处理大文件
 })
 
-// 請求攔截器
+// 從 localStorage 獲取 token
+const getToken = () => {
+  return localStorage.getItem('token')
+}
+
+// 保存 token 到 localStorage
+export const setToken = (token: string) => {
+  localStorage.setItem('token', token)
+}
+
+// 移除 token
+export const removeToken = () => {
+  localStorage.removeItem('token')
+}
+
+// 請求攔截器 - 添加認證 token
 api.interceptors.request.use(
   (config) => {
+    const token = getToken()
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`
+    }
     console.log(`API Request: ${config.method?.toUpperCase()} ${config.url}`)
     return config
   },
@@ -37,8 +56,11 @@ api.interceptors.response.use(
   (error) => {
     console.error('API Response Error:', error)
     if (error.response?.status === 401) {
-      // 可以在這裡處理認證錯誤
-      console.log('Unauthorized access')
+      // 認證失敗，清除 token 並重定向到登入頁面
+      removeToken()
+      if (window.location.pathname !== '/login') {
+        window.location.href = '/login'
+      }
     }
     return Promise.reject(error)
   }

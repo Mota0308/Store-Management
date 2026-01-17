@@ -11,6 +11,7 @@ import locationsRouter from './routes/locations';
 import importRouter from './routes/imports';
 import uploadRouter from './routes/upload';
 import productTypesRouter from './routes/productTypes';
+import authRouter from './routes/auth';
 import Location from './models/Location';
 
 dotenv.config({ path: path.resolve(__dirname, '..', 'local.env') });
@@ -114,6 +115,7 @@ async function start() {
     await seedLocations();
     await migrateAtoProductsIfNeeded();
 
+    app.use('/api/auth', authRouter);
     app.use('/api/products', productsRouter);
     app.use('/api/locations', locationsRouter);
     app.use('/api/import', importRouter);

@@ -1,6 +1,7 @@
 ﻿import { useEffect, useState } from 'react'
-import { Outlet, Link, useLocation } from 'react-router-dom'
+import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom'
 import api from '../api'
+import { useAuth } from '../contexts/AuthContext'
 
 type Location = { _id: string; name: string }
 
@@ -8,6 +9,8 @@ export default function App() {
   const [locations, setLocations] = useState<Location[]>([])
   const location = useLocation()
   const [menuOpen, setMenuOpen] = useState(false)
+  const { user, logout } = useAuth()
+  const navigate = useNavigate()
 
   useEffect(() => {
     api.get('/locations').then(r => setLocations(r.data))
@@ -17,6 +20,11 @@ export default function App() {
   useEffect(() => {
     setMenuOpen(false)
   }, [location.pathname])
+
+  const handleLogout = () => {
+    logout()
+    navigate('/login')
+  }
 
   return (
     <div className="app">
@@ -36,6 +44,19 @@ export default function App() {
       <div className={`sidebar ${menuOpen ? 'open' : ''}`}>
         <h2 style={{ color: 'white', margin: '0 0 20px 0', fontSize: '18px' }}>庫存管理系統</h2>
 
+        {user && (
+          <div style={{ 
+            padding: '12px 16px', 
+            marginBottom: '16px', 
+            background: 'rgba(255, 255, 255, 0.1)', 
+            borderRadius: '8px',
+            fontSize: '14px'
+          }}>
+            <div style={{ color: '#e5e7eb', marginBottom: '4px' }}>用戶: {user.username}</div>
+            <div style={{ color: '#9ca3af', fontSize: '12px' }}>{user.email}</div>
+          </div>
+        )}
+
         <Link 
           to="/" 
           className="nav-link"
@@ -46,7 +67,9 @@ export default function App() {
             textDecoration: 'none',
             borderRadius: '8px',
             fontWeight: 500,
-            transition: 'all 0.2s'
+            transition: 'all 0.2s',
+            display: 'block',
+            marginBottom: '8px'
           }}
         >
           庫存
@@ -62,11 +85,37 @@ export default function App() {
             textDecoration: 'none',
             borderRadius: '8px',
             fontWeight: 500,
-            transition: 'all 0.2s'
+            transition: 'all 0.2s',
+            display: 'block',
+            marginBottom: '8px'
           }}
         >
           添加產品
         </Link>
+
+        <button
+          onClick={handleLogout}
+          style={{
+            width: '100%',
+            padding: '12px 16px',
+            background: 'transparent',
+            color: '#e5e7eb',
+            border: '1px solid rgba(255, 255, 255, 0.2)',
+            borderRadius: '8px',
+            fontWeight: 500,
+            cursor: 'pointer',
+            transition: 'all 0.2s',
+            marginTop: '16px'
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)'
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = 'transparent'
+          }}
+        >
+          登出
+        </button>
       </div>
 
       {/* Content area */}

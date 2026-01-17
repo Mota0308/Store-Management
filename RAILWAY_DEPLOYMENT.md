@@ -23,7 +23,13 @@
 NODE_ENV=production
 PORT=4001
 MONGODB_URI=mongodb+srv://chenyaolin0308:9GUhZvnuEpAA1r6c@cluster0.0dhi0qc.mongodb.net/Storage?retryWrites=true&w=majority&appName=Cluster0
+JWT_SECRET=your-secret-key-change-in-production
 ```
+
+**重要提示**：
+- `JWT_SECRET` 用於 JWT token 的簽名和驗證，請使用一個強隨機字符串
+- 建議使用至少 32 個字符的隨機字符串
+- 可以使用以下命令生成：`node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`
 
 ### 4. 配置構建設置
 Railway 會自動檢測到這是一個 Node.js 項目，並使用以下設置：
@@ -58,6 +64,7 @@ Project_Q/
 ```
 
 ## 功能特點
+-  用戶認證系統（註冊、登入、登出）
 -  產品管理（添加、編輯、刪除）
 -  庫存管理（多門市庫存追蹤）
 -  PDF 導入功能（進貨/出貨）
@@ -70,6 +77,7 @@ Project_Q/
 - **後端**: Node.js, Express, TypeScript
 - **數據庫**: MongoDB Atlas
 - **部署**: Railway
+- **認證**: JWT (jsonwebtoken), bcrypt
 - **文件上傳**: Multer
 - **PDF 處理**: pdf-parse, pdfjs-dist
 
@@ -78,6 +86,8 @@ Project_Q/
 2. 生產環境中前端和後端運行在同一個端口
 3. 所有 API 請求會自動路由到 `/api` 路徑
 4. 靜態文件由 Express 服務器提供
+5. **首次部署後，需要註冊一個管理員帳號才能使用系統**
+6. 所有需要認證的頁面會自動重定向到登入頁面
 
 ## 故障排除
 如果部署失敗，請檢查：
