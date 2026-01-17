@@ -72,12 +72,18 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
+    // 檢查 JWT_SECRET 是否設置
+    if (!JWT_SECRET || JWT_SECRET === 'your-secret-key-change-in-production') {
+      console.error('警告: JWT_SECRET 未正確設置');
+    }
+
     // 查找用戶（支持用戶名或電子郵件登入）
     const user = await User.findOne({
       $or: [{ username }, { email: username }]
     });
 
     if (!user) {
+      console.log(`登入失敗: 用戶不存在 - ${username}`);
       res.status(401).json({ error: '用戶名或密碼錯誤' });
       return;
     }
@@ -86,26 +92,33 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
     const isPasswordValid = await user.comparePassword(password);
 
     if (!isPasswordValid) {
+      console.log(`登入失敗: 密碼錯誤 - ${username}`);
       res.status(401).json({ error: '用戶名或密碼錯誤' });
       return;
     }
 
     // 生成 JWT Token
-    const token = jwt.sign(
-      { userId: user._id },
-      JWT_SECRET,
-      { expiresIn: '7d' }
-    );
+    try {
+      const token = jwt.sign(
+        { userId: user._id },
+        JWT_SECRET,
+        { expiresIn: '7d' }
+      );
 
-    res.json({
-      message: '登入成功',
-      token,
-      user: {
-        id: user._id,
-        username: user.username,
-        email: user.email
-      }
-    });
+      console.log(`登入成功: ${username}`);
+      res.json({
+        message: '登入成功',
+        token,
+        user: {
+          id: user._id,
+          username: user.username,
+          email: user.email
+        }
+      });
+    } catch (jwtError) {
+      console.error('JWT 生成錯誤:', jwtError);
+      res.status(500).json({ error: '生成認證令牌時發生錯誤' });
+    }
   } catch (error) {
     console.error('登入錯誤:', error);
     res.status(500).json({ error: '登入過程中發生錯誤' });

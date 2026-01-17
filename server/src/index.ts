@@ -14,7 +14,18 @@ import productTypesRouter from './routes/productTypes';
 import authRouter from './routes/auth';
 import Location from './models/Location';
 
-dotenv.config({ path: path.resolve(__dirname, '..', 'local.env') });
+// 加載環境變量（優先使用系統環境變量，開發環境使用 local.env）
+if (process.env.NODE_ENV !== 'production') {
+  dotenv.config({ path: path.resolve(__dirname, '..', 'local.env') });
+} else {
+  // 生產環境直接使用系統環境變量
+  dotenv.config();
+}
+
+// 檢查關鍵環境變量
+if (!process.env.JWT_SECRET || process.env.JWT_SECRET === 'your-secret-key-change-in-production') {
+  console.warn('⚠️  警告: JWT_SECRET 未正確設置，請在環境變量中設置 JWT_SECRET');
+}
 
 const app = express();
 
