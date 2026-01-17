@@ -9,12 +9,20 @@ export default function App() {
   const [locations, setLocations] = useState<Location[]>([])
   const location = useLocation()
   const [menuOpen, setMenuOpen] = useState(false)
-  const { user, logout } = useAuth()
+  const { user, logout, isAuthenticated } = useAuth()
   const navigate = useNavigate()
 
   useEffect(() => {
-    api.get('/locations').then(r => setLocations(r.data))
-  }, [])
+    // 只在用戶已認證時加載 locations
+    if (isAuthenticated) {
+      api.get('/locations')
+        .then(r => setLocations(r.data))
+        .catch(err => {
+          console.error('Failed to load locations:', err)
+          // 如果獲取 locations 失敗，不阻止頁面顯示
+        })
+    }
+  }, [isAuthenticated])
 
   // Close mobile menu on route change
   useEffect(() => {

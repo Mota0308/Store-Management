@@ -56,9 +56,11 @@ api.interceptors.response.use(
   (error) => {
     console.error('API Response Error:', error)
     if (error.response?.status === 401) {
-      // 認證失敗，清除 token 並重定向到登入頁面
+      // 認證失敗，清除 token
       removeToken()
-      if (window.location.pathname !== '/login') {
+      // 只有在非登入頁面且不是認證檢查請求時才重定向
+      const isAuthCheck = error.config?.url?.includes('/auth/me')
+      if (!isAuthCheck && window.location.pathname !== '/login') {
         window.location.href = '/login'
       }
     }
