@@ -295,7 +295,7 @@ export default function AddProduct() {
 
           <div className="actions">
             <button className="btn" type="submit" disabled={uploading}>加入清單</button>
-            <button type="button" className="btn secondary" onClick={() => { setForm({ name: '', productCode: '', productType: '', sizes: '' }); setImageUrl(undefined) }}>重置當前</button>
+            <button type="button" className="btn secondary" onClick={() => { setForm({ name: '', productCode: '', productType: '', sizes: '', points: '' }); setImageUrl(undefined) }}>重置當前</button>
           </div>
         </form>
       </div>
