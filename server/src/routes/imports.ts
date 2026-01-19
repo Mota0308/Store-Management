@@ -1,10 +1,12 @@
 ﻿// 修復後的完整 imports.ts 文件 - 支持數量累加
-import express from 'express';
+import express, { Request, Response } from 'express';
 import multer from 'multer';
 import mongoose from 'mongoose';
 import Product from '../models/Product';
 import Location from '../models/Location';
 import pdf from 'pdf-parse';
+import { authenticate, AuthRequest } from '../middleware/auth';
+import InvoiceImport from '../models/InvoiceImport';
 
 const router = express.Router();
 
@@ -1966,6 +1968,259 @@ router.post('/clear', async (req, res) => {
   } catch (error) {
     console.error('清零处理错误:', error);
     res.status(500).json({ message: 'Internal server error', error: error });
+  }
+});
+
+// 用户类型到门市名称的映射
+const USER_TYPE_TO_LOCATION: { [key: string]: string } = {
+  'store1': '觀塘',
+  'store2': '灣仔',
+  'store3': '荔枝角',
+  'store4': '屯門',
+  'store5': '國内倉'
+};
+
+// 从发票PDF提取订单信息（专门用于发票格式）
+async function extractFromInvoicePDF(buffer: Buffer): Promise<{
+  orderNumber?: string;
+  orderDate?: Date;
+  items: Array<{ productCode: string; quantity: number }>;
+}> {
+  const data = await pdf(buffer);
+  const text = data.text;
+  
+  const result: {
+    orderNumber?: string;
+    orderDate?: Date;
+    items: Array<{ productCode: string; quantity: number }>;
+  } = {
+    items: []
+  };
+
+  // 提取订单编号
+  const orderNumberMatch = text.match(/訂單編號[：:]\s*(\d+)/);
+  if (orderNumberMatch) {
+    result.orderNumber = orderNumberMatch[1];
+  }
+
+  // 提取订单日期
+  const orderDateMatch = text.match(/訂單日期[：:]\s*(\d{4}[-\/]\d{1,2}[-\/]\d{1,2})/);
+  if (orderDateMatch) {
+    const dateStr = orderDateMatch[1].replace(/\//g, '-');
+    result.orderDate = new Date(dateStr);
+  }
+
+  // 提取商品信息（型号和数量）
+  const lines = text.split(/\r?\n/).map((line: string) => line.trim()).filter(Boolean);
+  const productMap = new Map<string, number>(); // 用于累加相同产品的数量
+
+  // 查找"商品詳情"表格区域
+  let inProductSection = false;
+  
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    
+    // 检测商品详情表格开始
+    if (line.includes('商品詳情') || line.includes('型號') || line.includes('數量')) {
+      inProductSection = true;
+      continue;
+    }
+    
+    // 检测表格结束
+    if (inProductSection && (line.includes('--END--') || line.includes('SHAREmall'))) {
+      break;
+    }
+    
+    if (!inProductSection) continue;
+    
+    // 匹配产品代码（WS-xxx, AEP-WS-xxx, NMxxx等，排除会员代码NM300/NM800）
+    const codeMatch = line.match(/(WS-\w+|AEP-WS-\w+|124525821-\d+)/);
+    
+    if (codeMatch) {
+      const productCode = codeMatch[1];
+      
+      // 在同一行或后续行查找数量
+      let quantity = 1;
+      
+      // 尝试在同一行查找数量（表格格式：| 型号 | 数量 |）
+      const sameLineQty = line.match(/\|\s*(\d+)\s*\|/);
+      if (sameLineQty) {
+        quantity = parseInt(sameLineQty[1], 10);
+      } else {
+        // 在后续行查找数量
+        for (let j = i + 1; j < Math.min(i + 3, lines.length); j++) {
+          const nextLine = lines[j];
+          
+          // 跳过其他产品代码
+          if (nextLine.match(/(WS-\w+|AEP-WS-\w+|NM\d+|124525821-\d+)/)) {
+            break;
+          }
+          
+          // 从表格格式中提取数量
+          const qtyMatch = nextLine.match(/\|\s*(\d+)\s*\|/);
+          if (qtyMatch) {
+            quantity = parseInt(qtyMatch[1], 10);
+            break;
+          }
+        }
+      }
+      
+      // 累加相同产品的数量
+      if (productMap.has(productCode)) {
+        productMap.set(productCode, productMap.get(productCode)! + quantity);
+      } else {
+        productMap.set(productCode, quantity);
+      }
+    }
+  }
+
+  // 转换为数组
+  result.items = Array.from(productMap.entries()).map(([productCode, quantity]) => ({
+    productCode,
+    quantity
+  }));
+
+  return result;
+}
+
+// 发票导入API端点（需要认证）
+router.post('/invoice', authenticate, upload.array('files'), async (req: AuthRequest, res: Response) => {
+  try {
+    const files = req.files as Express.Multer.File[];
+    const userId = req.user!.id;
+    const userType = req.user!.type;
+    
+    if (!files || files.length === 0) {
+      return res.status(400).json({ error: '請上傳發票PDF檔案' });
+    }
+    
+    // 根据用户类型确定门市
+    let locationName: string | null = null;
+    if (userType === 'manager') {
+      return res.status(400).json({ error: '管理員無法導入發票，請使用店員賬號' });
+    } else {
+      locationName = USER_TYPE_TO_LOCATION[userType];
+      if (!locationName) {
+        return res.status(400).json({ error: '無效的用戶類型' });
+      }
+    }
+    
+    // 查找门市ID
+    const location = await Location.findOne({ name: locationName });
+    if (!location) {
+      return res.status(404).json({ error: `找不到門市：${locationName}` });
+    }
+    const locationId = location._id.toString();
+    
+    const summary = { 
+      files: files.length, 
+      processed: 0,
+      matched: 0, 
+      updated: 0, 
+      notFound: [] as string[], 
+      parsed: [] as any[],
+      errors: [] as string[],
+      savedRecords: [] as any[]
+    };
+    
+    for (const file of files) {
+      try {
+        // 从发票PDF提取订单信息
+        const orderInfo = await extractFromInvoicePDF(file.buffer);
+        
+        console.log(`處理發票 - 訂單編號: ${orderInfo.orderNumber}, 日期: ${orderInfo.orderDate}, 產品數: ${orderInfo.items.length}`);
+        
+        // 检查是否已经导入过这个订单
+        if (orderInfo.orderNumber) {
+          const existingImport = await InvoiceImport.findOne({
+            userId: new mongoose.Types.ObjectId(userId),
+            orderNumber: orderInfo.orderNumber
+          });
+          
+          if (existingImport) {
+            summary.errors.push(`訂單 ${orderInfo.orderNumber} 已導入過，跳過`);
+            continue;
+          }
+        }
+        
+        const invoiceItems: Array<{ productCode: string; quantity: number; productId?: mongoose.Types.ObjectId }> = [];
+        let fileMatched = 0;
+        let fileUpdated = 0;
+        const fileNotFound: string[] = [];
+        
+        // 对每个产品进行出库操作
+        for (const item of orderInfo.items) {
+          const variants = codeVariants(item.productCode);
+          const products = await Product.find({ productCode: { $in: variants } });
+          
+          if (products.length === 0) {
+            fileNotFound.push(item.productCode);
+            invoiceItems.push({ productCode: item.productCode, quantity: item.quantity });
+            continue;
+          }
+          
+          // 使用第一个匹配的产品
+          const product = products[0];
+          fileMatched++;
+          
+          // 更新库存（出库操作）
+          const inv = product.inventories.find((i: any) => String(i.locationId) === locationId);
+          if (inv) {
+            inv.quantity = Math.max(0, inv.quantity - item.quantity);
+            fileUpdated++;
+          } else {
+            // 如果没有库存记录，创建新的（数量为0，因为出库）
+            product.inventories.push({
+              locationId: new mongoose.Types.ObjectId(locationId),
+              quantity: 0
+            });
+            fileUpdated++;
+          }
+          
+          await product.save();
+          
+          invoiceItems.push({
+            productCode: item.productCode,
+            quantity: item.quantity,
+            productId: product._id
+          });
+        }
+        
+        summary.processed += orderInfo.items.length;
+        summary.matched += fileMatched;
+        summary.updated += fileUpdated;
+        summary.notFound.push(...fileNotFound);
+        summary.parsed.push(...orderInfo.items);
+        
+        // 保存导入记录到数据库
+        const invoiceImport = await InvoiceImport.create({
+          userId: new mongoose.Types.ObjectId(userId),
+          locationId: new mongoose.Types.ObjectId(locationId),
+          orderNumber: orderInfo.orderNumber,
+          orderDate: orderInfo.orderDate,
+          items: invoiceItems,
+          processed: orderInfo.items.length,
+          matched: fileMatched,
+          updated: fileUpdated,
+          notFound: fileNotFound
+        });
+        
+        summary.savedRecords.push({
+          orderNumber: orderInfo.orderNumber,
+          orderDate: orderInfo.orderDate,
+          importId: invoiceImport._id
+        });
+        
+      } catch (error) {
+        console.error('處理發票文件時出錯:', error);
+        summary.errors.push(`文件處理錯誤: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+    
+    res.json(summary);
+  } catch (error) {
+    console.error('發票導入處理錯誤:', error);
+    res.status(500).json({ error: '發票導入處理錯誤' });
   }
 });
 

@@ -1,6 +1,5 @@
 ﻿import React, { useState, useEffect } from 'react'
 import api from '../api'
-import * as XLSX from 'xlsx'
 import { useAuth } from '../contexts/AuthContext'
 
 // 定義類型接口
@@ -76,33 +75,9 @@ export default function Inventory() {
   
   const visibleLocations = getVisibleLocations()
   
-  // 導入庫存狀態
-  const [importOpen, setImportOpen] = useState(false)
-  const [importState, setImportState] = useState<{ locationId: string; files: File[] }>({ locationId: '', files: [] })
-  
-  // 門市對調狀態
-  const [transferOpen, setTransferOpen] = useState(false)
-  const [transferState, setTransferState] = useState<{ fromLocationId: string; toLocationId: string; files: File[] }>({ fromLocationId: '', toLocationId: '', files: [] })
-  
-  // Excel導入狀態
-  const [excelImportOpen, setExcelImportOpen] = useState(false)
-  const [excelImportState, setExcelImportState] = useState<{ files: File[] }>({ files: [] })
-  
-  // 清零狀態
-  const [clearOpen, setClearOpen] = useState(false)
-  
-  // 進度條狀態
-  const [progressState, setProgressState] = useState<{
-    isVisible: boolean
-    progress: number
-    message: string
-    type: 'excel' | 'clear' | null
-  }>({
-    isVisible: false,
-    progress: 0,
-    message: '',
-    type: null
-  })
+  // 發票導入狀態
+  const [invoiceImportOpen, setInvoiceImportOpen] = useState(false)
+  const [invoiceImportFiles, setInvoiceImportFiles] = useState<File[]>([])
   // 增加分組狀態
   const [addGroupOpen, setAddGroupOpen] = useState(false)
   const [selectedGroup, setSelectedGroup] = useState<ProductGroup | null>(null)
@@ -316,334 +291,46 @@ export default function Inventory() {
     return sortOrder === 'asc' ? '↓' : '↑'
   }
 
-  // 新增：導出Excel功能
-  function exportToExcel() {
-    try {
-      // 準備數據
-      const exportData = []
-      
-      // 添加表頭（根據可見地點）
-      const headers = ['編號', '產品', '尺寸', ...visibleLocations.map(l => l.name)]
-      if (user?.type === 'manager') {
-        headers.push('總計')
-      }
-      exportData.push(headers)
-      
-      // 添加產品數據
-      Object.values(groupedProducts).forEach(group => {
-        // 對每個組內的產品按尺寸排序
-        const sortedProducts = sortProductsBySize([...group.products])
-        
-        sortedProducts.forEach(product => {
-          const row = [
-            product.productCode,
-            product.name,
-            getProductSize(product),
-            ...visibleLocations.map(location => getQuantity(product, location._id))
-          ]
-          if (user?.type === 'manager') {
-            row.push(getTotalQuantity(product))
-          }
-          exportData.push(row)
-        })
-      })
-      
-      // 創建工作簿
-      const ws = XLSX.utils.aoa_to_sheet(exportData)
-      const wb = XLSX.utils.book_new()
-      XLSX.utils.book_append_sheet(wb, ws, '庫存報表')
-      
-      // 生成文件名
-      const now = new Date()
-      const timestamp = now.toISOString().slice(0, 19).replace(/:/g, '-')
-      const filename = `庫存報表_${timestamp}.xlsx`
-      
-      // 導出文件
-      XLSX.writeFile(wb, filename)
-      
-      alert('Excel文件導出成功！')
-    } catch (error) {
-      console.error('導出Excel失敗:', error)
-      alert('導出Excel失敗，請重試')
-    }
-  }
-
-  // 導入庫存功能
-  async function doImport(type: 'incoming' | 'outgoing') {
-    if (importState.locationId === '') {
-      alert('請選擇門市')
-      return
-    }
-    if (importState.files.length === 0) {
-      alert('請選擇PDF檔案')
+  // 發票導入功能
+  async function doInvoiceImport() {
+    if (invoiceImportFiles.length === 0) {
+      alert('請選擇發票PDF檔案')
       return
     }
 
     try {
       const form = new FormData()
-      form.append('locationId', importState.locationId)
-      importState.files.forEach(f => form.append('files', f))
+      invoiceImportFiles.forEach(f => form.append('files', f))
       
-      // 修復：根據type調用不同的API端點
-      const response = await api.post(`/import/${type}`, form)
-      alert(`${type === 'incoming' ? '進貨' : '出貨'}完成\n處理:${response.data.processed}  匹配:${response.data.matched}  新增:${response.data.created}  更新:${response.data.updated}\n未找到: ${response.data.notFound?.join(', ') || '無'}`)
-      setImportOpen(false)
-      await load()
-    } catch (error: any) {
-      alert(`${type === 'incoming' ? '進貨' : '出貨'}失敗：${error.response?.data?.message || error.message}`)
-    }
-  }
-
-  // 門市對調功能
-  async function doTransfer() {
-    if (transferState.fromLocationId === '' || transferState.toLocationId === '') {
-      alert('請選擇來源門市和目標門市')
-      return
-    }
-    if (transferState.files.length === 0) {
-      alert('請選擇PDF檔案')
-      return
-    }
-
-    try {
-      const form = new FormData()
-      form.append('fromLocationId', transferState.fromLocationId)
-      form.append('toLocationId', transferState.toLocationId)
-      transferState.files.forEach(f => form.append('files', f))
-      
-      const response = await api.post('/import/transfer', form)
-      alert(`門市對調完成\n處理:${response.data.processed}  匹配:${response.data.matched}  更新:${response.data.updated}\n未找到: ${response.data.notFound?.join(', ') || '無'}`)
-      setTransferOpen(false)
-      await load()
-    } catch (error: any) {
-      alert(`門市對調失敗：${error.response?.data?.message || error.message}`)
-    }
-  }
-
-  // 進度條控制函數
-  function showProgress(type: 'excel' | 'clear', message: string) {
-    setProgressState({
-      isVisible: true,
-      progress: 0,
-      message,
-      type
-    })
-  }
-  
-  function updateProgress(progress: number, message?: string) {
-    setProgressState(prev => ({
-      ...prev,
-      progress: Math.min(100, Math.max(0, progress)),
-      message: message || prev.message
-    }))
-  }
-  
-  function hideProgress() {
-    setProgressState({
-      isVisible: false,
-      progress: 0,
-      message: '',
-      type: null
-    })
-  }
-  
-  // 模擬進度更新函數
-  function simulateProgress(duration: number = 5000, messages?: string[]) {
-    return new Promise<void>((resolve) => {
-      let currentProgress = 0
-      const steps = 20
-      const stepDuration = duration / steps
-      const messageInterval = Math.floor(steps / (messages?.length || 4))
-      let messageIndex = 0
-      
-      const interval = setInterval(() => {
-        currentProgress += 5
-        
-        // 更新進度消息
-        if (messages && currentProgress % (messageInterval * 5) === 0 && messageIndex < messages.length) {
-          updateProgress(currentProgress, messages[messageIndex])
-          messageIndex++
-        } else {
-          updateProgress(currentProgress)
-        }
-        
-        if (currentProgress >= 100) {
-          clearInterval(interval)
-          resolve()
-        }
-      }, stepDuration)
-    })
-  }
-
-  // Excel導入功能 - 使用SSE實時進度
-  async function doExcelImport() {
-    if (excelImportState.files.length === 0) {
-      alert('請選擇Excel檔案')
-      return
-    }
-
-    // 檢查文件大小
-    const totalSize = excelImportState.files.reduce((sum, file) => sum + file.size, 0)
-    if (totalSize > 10 * 1024 * 1024) { // 10MB限制
-      alert('文件總大小超過10MB，請使用較小的文件')
-      return
-    }
-
-    try {
-      // 顯示進度條
-      showProgress('excel', '正在準備Excel文件...')
-      
-      const form = new FormData()
-      excelImportState.files.forEach(f => form.append('files', f))
-
-      // 使用改進的進度追蹤方式
-      const response = await new Promise<any>((resolve, reject) => {
-        // 啟動進度模擬
-        let currentStep = 0
-        const progressSteps = [
-          { progress: 10, message: '正在上傳文件...' },
-          { progress: 20, message: '正在解析Excel結構...' },
-          { progress: 30, message: '正在驗證產品資料...' },
-          { progress: 50, message: '正在批次處理資料...' },
-          { progress: 70, message: '正在更新庫存資料...' },
-          { progress: 85, message: '正在保存變更...' },
-          { progress: 95, message: '正在完成最後步驟...' }
-        ]
-        
-        const progressInterval = setInterval(() => {
-          if (currentStep < progressSteps.length) {
-            const step = progressSteps[currentStep]
-            updateProgress(step.progress, step.message)
-            currentStep++
-          }
-        }, 1500) // 每1.5秒更新一次
-        
-        // 使用原始API端點但增加進度追蹤
-        api.post('/import/excel', form, {
-          timeout: 900000, // 15分鐘超時
-          headers: {
-            'Content-Type': 'multipart/form-data'
-          }
-        }).then(response => {
-          clearInterval(progressInterval)
-          updateProgress(100, '處理完成，正在載入結果...')
-          resolve(response)
-        }).catch(error => {
-          clearInterval(progressInterval)
-          reject(error)
-        })
+      const response = await api.post('/import/invoice', form, {
+        headers: { 'Content-Type': 'multipart/form-data' }
       })
       
-      // 短暫延遲以顯示完成狀態
-      await new Promise(resolve => setTimeout(resolve, 500))
+      const successCount = response.data.savedRecords?.length || 0
+      const errorCount = response.data.errors?.length || 0
       
-      hideProgress()
-
-      // 顯示結果
-      const resultMsg = `Excel導入完成！
-    
-處理行數: ${response.data.processed}
-匹配產品: ${response.data.matched}
-新增產品: ${response.data.created}
-更新產品: ${response.data.updated}
-錯誤數量: ${response.data.errors?.length || 0}
-
-${response.data.errors?.length > 0 ? '錯誤詳情:\n' + response.data.errors.slice(0, 5).join('\n') + (response.data.errors.length > 5 ? '\n...' : '') : '無錯誤'}`
-    
-      alert(resultMsg)
-      setExcelImportOpen(false)
-      await load()
-      
-    } catch (error: any) {
-      hideProgress()
-      console.error('Excel導入錯誤:', error)
-    
-      let errorMsg = 'Excel導入失敗：'
-      if (error.message.includes('timeout') || error.code === 'ECONNABORTED') {
-        errorMsg += '處理超時，請嘗試使用較小的文件或檢查網絡連接'
-      } else if (error.message.includes('413')) {
-        errorMsg += '文件太大，請使用較小的文件'
-      } else {
-        errorMsg += error.message || '未知錯誤'
+      let message = `導入完成\n`
+      message += `處理: ${response.data.processed} 個產品\n`
+      message += `匹配: ${response.data.matched} 個\n`
+      message += `更新: ${response.data.updated} 個\n`
+      if (response.data.notFound?.length > 0) {
+        message += `未找到: ${response.data.notFound.join(', ')}\n`
       }
+      if (errorCount > 0) {
+        message += `錯誤: ${errorCount} 個\n`
+      }
+      message += `成功保存: ${successCount} 筆記錄`
       
-      alert(errorMsg)
+      alert(message)
+      setInvoiceImportOpen(false)
+      setInvoiceImportFiles([])
+      await load()
+    } catch (error: any) {
+      alert(`導入失敗：${error.response?.data?.error || error.message}`)
     }
   }
+  
 
-  // 清零所有商品數量 - 使用SSE實時進度
-  async function doClearAll() {
-    if (!confirm('確定要清零所有商品的數量嗎？此操作不可撤銷！')) {
-      return
-    }
-
-    try {
-      // 顯示進度條
-      showProgress('clear', '正在準備清零操作...')
-      
-      // 使用改進的進度追蹤方式
-      const response = await new Promise<any>((resolve, reject) => {
-        // 啟動進度模擬
-        let currentStep = 0
-        const progressSteps = [
-          { progress: 10, message: '正在連接服務器...' },
-          { progress: 25, message: '正在獲取產品列表...' },
-          { progress: 40, message: '正在批次清零庫存...' },
-          { progress: 60, message: '正在更新資料庫...' },
-          { progress: 80, message: '正在保存變更...' },
-          { progress: 95, message: '正在完成操作...' }
-        ]
-        
-        const progressInterval = setInterval(() => {
-          if (currentStep < progressSteps.length) {
-            const step = progressSteps[currentStep]
-            updateProgress(step.progress, step.message)
-            currentStep++
-          }
-        }, 1000) // 每1秒更新一次
-        
-        // 使用原始API端點
-        api.post('/import/clear').then(response => {
-          clearInterval(progressInterval)
-          updateProgress(100, '清零完成，正在載入結果...')
-          resolve(response)
-        }).catch(error => {
-          clearInterval(progressInterval)
-          reject(error)
-        })
-      })
-      
-      // 短暫延遲以顯示完成狀態
-      await new Promise(resolve => setTimeout(resolve, 500))
-      
-      hideProgress()
-      
-      const resultMsg = `清零完成！
-    
-處理產品: ${response.data.processed}
-更新產品: ${response.data.updated}
-錯誤數量: ${response.data.errors?.length || 0}
-
-${response.data.errors?.length > 0 ? '錯誤詳情:\n' + response.data.errors.slice(0, 5).join('\n') + (response.data.errors.length > 5 ? '\n...' : '') : '無錯誤'}`
-    
-      alert(resultMsg)
-      setClearOpen(false)
-      await load()
-      
-    } catch (error: any) {
-      hideProgress()
-      console.error('清零錯誤:', error)
-    
-      let errorMsg = '清零失敗：'
-      if (error.message) {
-        errorMsg += error.message
-      } else {
-        errorMsg += '未知錯誤'
-      }
-      
-      alert(errorMsg)
-    }
-  }
 
 // 編輯和刪除處理函數 - 修復版本
   function handleEdit(product: Product) {
@@ -883,11 +570,7 @@ function toggleGroup(groupKey: string) {
         </div>
         
         <div className="spacer" />
-      <button className="btn" onClick={exportToExcel}>導出Excel</button>
-        <button className="btn" onClick={() => setExcelImportOpen(true)}>導入Excel</button>
-      <button className="btn" onClick={() => setClearOpen(true)}>清零</button>
-        <button className="btn" onClick={() => setImportOpen(true)}>導入庫存</button>
-        <button className="btn" onClick={() => setTransferOpen(true)}>門市對調</button>
+        <button className="btn" onClick={() => setInvoiceImportOpen(true)}>導入庫存</button>
       </div>
 
       <div className="table-container">
@@ -1075,141 +758,33 @@ function toggleGroup(groupKey: string) {
         </table>
       </div>
 
-      {/* 導入庫存彈窗 */}
-      {importOpen && (
+      {/* 發票導入彈窗 */}
+      {invoiceImportOpen && (
         <div className="modal-backdrop">
           <div className="modal">
-            <div className="header">導入庫存</div>
+            <div className="header">導入庫存（發票）</div>
             <div className="body">
               <div>
-                <p>選擇門市：</p>
-                <select value={importState.locationId} onChange={e => setImportState(s => ({ ...s, locationId: e.target.value }))}>
-                  <option value="">請選擇門市</option>
-                  {visibleLocations.map(location => (
-                    <option key={location._id} value={location._id}>{location.name}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <p>選擇PDF檔案：</p>
-                <input multiple type="file" accept=".pdf" onChange={e => setImportState(s => ({ ...s, files: Array.from(e.target.files || []) }))} />
-              </div>
-            </div>
-            <div className="footer">
-              <button className="btn secondary" onClick={() => setImportOpen(false)}>取消</button>
-              <button className="btn" onClick={() => doImport('incoming')}>進貨</button>
-              <button className="btn" onClick={() => doImport('outgoing')}>出貨</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 門市對調彈窗 */}
-      {transferOpen && (
-        <div className="modal-backdrop">
-          <div className="modal">
-            <div className="header">門市對調</div>
-            <div className="body">
-              <div>
-                <p>來源門市：</p>
-                <select value={transferState.fromLocationId} onChange={e => setTransferState(s => ({ ...s, fromLocationId: e.target.value }))}>
-                  <option value="">請選擇來源門市</option>
-                  {visibleLocations.map(location => (
-                    <option key={location._id} value={location._id}>{location.name}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <p>目標門市：</p>
-                <select value={transferState.toLocationId} onChange={e => setTransferState(s => ({ ...s, toLocationId: e.target.value }))}>
-                  <option value="">請選擇目標門市</option>
-                  {visibleLocations.map(location => (
-                    <option key={location._id} value={location._id}>{location.name}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <p>選擇PDF檔案：</p>
-                <input multiple type="file" accept=".pdf" onChange={e => setTransferState(s => ({ ...s, files: Array.from(e.target.files || []) }))} />
-              </div>
-            </div>
-            <div className="footer">
-              <button className="btn secondary" onClick={() => setTransferOpen(false)}>取消</button>
-              <button className="btn" onClick={doTransfer}>進行</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Excel導入彈窗 */}
-      {excelImportOpen && (
-        <div className="modal-backdrop">
-          <div className="modal">
-            <div className="header">導入Excel</div>
-            <div className="body">
-              <div style={{ marginBottom: '16px' }}>
-                <p><strong>Excel格式要求：</strong></p>
-                <ul style={{ margin: '8px 0', paddingLeft: '20px' }}>
-                  <li><strong>必須包含列：</strong>商品編號、商品名稱、尺寸、各門市庫存列</li>
-                  <li><strong>商品編號：</strong>支持變體（編號、產品編號、貨號、SKU、產品代碼、型號等）</li>
-                  <li><strong>商品名稱：</strong>支持變體（產品、商品詳情、商品名稱、產品名稱、名稱、商品等）</li>
-                  <li><strong>尺寸：</strong>支持變體（尺寸、規格、選項、尺碼、商品選項等）</li>
-                  <li><strong>門市庫存：</strong>觀塘、灣仔、荔枝角、元朗、元朗觀塘倉、元朗灣仔倉、元朗荔枝角倉、屯門、國內倉（支持多列相同名稱自動累加）</li>
-                  <li><strong>更新方式：</strong>直接替換現有庫存數量，不是累加</li>
-                </ul>
-              </div>
-              <div>
-                <p>選擇Excel檔案：</p>
-                <input multiple type="file" accept=".xlsx,.xls" onChange={e => setExcelImportState(s => ({ ...s, files: Array.from(e.target.files || []) }))} />
-              </div>
-            </div>
-            <div className="footer">
-              <button className="btn secondary" onClick={() => setExcelImportOpen(false)}>取消</button>
-              <button className="btn" onClick={doExcelImport}>進行導入</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 進度條彈窗 */}
-      {progressState.isVisible && (
-        <div className="modal-backdrop">
-          <div className="modal progress-modal">
-            <div className="header">
-              {progressState.type === 'excel' ? 'Excel導入進度' : '清零操作進度'}
-            </div>
-            <div className="body">
-              <div className="progress-container">
-                <div className="progress-message">{progressState.message}</div>
-                <div className="progress-bar-container">
-                  <div 
-                    className="progress-bar" 
-                    style={{ width: `${progressState.progress}%` }}
-                  ></div>
+                <p>選擇發票PDF檔案：</p>
+                <input 
+                  multiple 
+                  type="file" 
+                  accept=".pdf" 
+                  onChange={e => setInvoiceImportFiles(Array.from(e.target.files || []))} 
+                />
+                <div style={{ marginTop: '8px', fontSize: '12px', color: '#6b7280' }}>
+                  支持多個發票PDF檔案，系統會自動從發票中提取產品型號和數量進行出庫操作
+                  <br />
+                  當前賬號：{user?.username} ({user?.type}) - 將更新對應門市的庫存
                 </div>
-                <div className="progress-percentage">{Math.round(progressState.progress)}%</div>
               </div>
-              <div className="progress-warning">
-                <p><strong>請勿關閉此頁面</strong></p>
-                <p>操作正在進行中，請耐心等待...</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-    {/* 清零確認對話框 */}
-      {clearOpen && (
-        <div className="modal-backdrop">
-          <div className="modal">
-          <div className="header">清零所有商品數量</div>
-            <div className="body">
-            <p>?? 警告：此操作將把所有商品的庫存數量設為0，此操作不可撤銷！</p>
-            <p>確定要繼續嗎？</p>
             </div>
             <div className="footer">
-              <button className="btn secondary" onClick={() => setClearOpen(false)}>取消</button>
-            <button className="btn danger" onClick={doClearAll}>確認清零</button>
+              <button className="btn secondary" onClick={() => {
+                setInvoiceImportOpen(false)
+                setInvoiceImportFiles([])
+              }}>取消</button>
+              <button className="btn" onClick={doInvoiceImport}>導入</button>
             </div>
           </div>
         </div>
