@@ -11,7 +11,9 @@
     "create-users": "node create_test_users.js",
     "create-users:prod": "node create_test_users.js --production",
     "update-password": "node update_user_password.js",
-    "update-password:prod": "node update_user_password.js --production"
+    "update-password:prod": "node update_user_password.js --production",
+    "mongodb:update": "node direct_update_mongodb.js",
+    "mongodb:list": "node direct_update_mongodb.js --list"
   },
   "dependencies": {
     "axios": "^1.12.2",
