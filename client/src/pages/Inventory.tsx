@@ -1,6 +1,7 @@
 ﻿import React, { useState, useEffect } from 'react'
 import api from '../api'
 import * as XLSX from 'xlsx'
+import { useAuth } from '../contexts/AuthContext'
 
 // 定義類型接口
 interface Location {
@@ -37,6 +38,7 @@ interface ProductGroup {
 }
 
 export default function Inventory() {
+  const { user } = useAuth()
   const [locations, setLocations] = useState<Location[]>([])
   const [productTypes, setProductTypes] = useState<ProductType[]>([])
   const [products, setProducts] = useState<Product[]>([])
@@ -47,6 +49,32 @@ export default function Inventory() {
   const [sortBy, setSortBy] = useState<string>('')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
+  
+  // 根據用戶類型過濾可見的地點
+  const getVisibleLocations = (): Location[] => {
+    if (!user) return []
+    
+    const userType = user.type
+    if (userType === 'manager') {
+      return locations  // manager 可以看到所有地點
+    }
+    
+    // 各 store 只能看到對應的地點
+    const locationMap: { [key: string]: string } = {
+      'store1': '觀塘',
+      'store2': '灣仔',
+      'store3': '荔枝角',
+      'store4': '屯門',
+      'store5': '國内倉'
+    }
+    
+    const allowedLocationName = locationMap[userType]
+    if (!allowedLocationName) return []
+    
+    return locations.filter(loc => loc.name === allowedLocationName)
+  }
+  
+  const visibleLocations = getVisibleLocations()
   
   // 導入庫存狀態
   const [importOpen, setImportOpen] = useState(false)
@@ -107,8 +135,8 @@ export default function Inventory() {
 
   useEffect(() => {
     api.get('/locations').then((r: any) => {
-      // 按照指定順序排序：觀塘，灣仔，荔枝角，元朗，元朗觀塘倉，元朗灣仔倉，元朗荔枝角倉，屯門，國内倉
-      const order = ['觀塘', '灣仔', '荔枝角', '元朗', '元朗觀塘倉', '元朗灣仔倉', '元朗荔枝角倉', '屯門', '國内倉'];
+      // 按照指定順序排序：觀塘，灣仔，荔枝角，屯門，國内倉
+      const order = ['觀塘', '灣仔', '荔枝角', '屯門', '國内倉'];
       const sortedLocations = r.data.sort((a: Location, b: Location) => {
         const aIndex = order.indexOf(a.name);
         const bIndex = order.indexOf(b.name);
@@ -294,8 +322,11 @@ export default function Inventory() {
       // 準備數據
       const exportData = []
       
-      // 添加表頭
-      const headers = ['編號', '產品', '尺寸', '觀塘', '灣仔', '荔枝角', '元朗', '元朗觀塘倉', '元朗灣仔倉', '元朗荔枝角倉', '屯門', '國内倉']
+      // 添加表頭（根據可見地點）
+      const headers = ['編號', '產品', '尺寸', ...visibleLocations.map(l => l.name)]
+      if (user?.type === 'manager') {
+        headers.push('總計')
+      }
       exportData.push(headers)
       
       // 添加產品數據
@@ -308,16 +339,11 @@ export default function Inventory() {
             product.productCode,
             product.name,
             getProductSize(product),
-            getQuantity(product, locations.find(l => l.name === '觀塘')?._id || ''),
-            getQuantity(product, locations.find(l => l.name === '灣仔')?._id || ''),
-            getQuantity(product, locations.find(l => l.name === '荔枝角')?._id || ''),
-            getQuantity(product, locations.find(l => l.name === '元朗')?._id || ''),
-            getQuantity(product, locations.find(l => l.name === '元朗觀塘倉')?._id || ''),
-            getQuantity(product, locations.find(l => l.name === '元朗灣仔倉')?._id || ''),
-            getQuantity(product, locations.find(l => l.name === '元朗荔枝角倉')?._id || ''),
-            getQuantity(product, locations.find(l => l.name === '屯門')?._id || ''),
-            getQuantity(product, locations.find(l => l.name === '國内倉')?._id || '')
+            ...visibleLocations.map(location => getQuantity(product, location._id))
           ]
+          if (user?.type === 'manager') {
+            row.push(getTotalQuantity(product))
+          }
           exportData.push(row)
         })
       })
@@ -729,7 +755,7 @@ async function handleDeleteGroup(group: ProductGroup) {
       }
 
       // 創建新產品（同一商品組的新尺寸變體）
-      const locationIds = locations.map(location => location._id)
+      const locationIds = visibleLocations.map(location => location._id)
       const baseProduct = selectedGroup.products[0] // 使用組內第一個產品作為模板
       
       const productData = {
@@ -871,15 +897,17 @@ function toggleGroup(groupKey: string) {
               <th>產品</th>
               <th>編號</th>
               <th>尺寸</th>
-              {locations.map(location => (
+              {visibleLocations.map(location => (
                 <th key={location._id} onClick={() => handleSort(location._id)} style={{ cursor: 'pointer' }}>
                   {location.name} {getSortIcon(location._id)}
                 </th>
               ))}
-              <th onClick={() => handleSort('total')} style={{ cursor: 'pointer' }}>
-                總計 {getSortIcon('total')}
-              </th>
-              <th>操作</th>
+              {user?.type === 'manager' && (
+                <th onClick={() => handleSort('total')} style={{ cursor: 'pointer' }}>
+                  總計 {getSortIcon('total')}
+                </th>
+              )}
+              {user?.type === 'manager' && <th>操作</th>}
             </tr>
           </thead>
           <tbody>
@@ -983,7 +1011,7 @@ function toggleGroup(groupKey: string) {
                             style={{ width: '100%', padding: '4px 8px', border: '1px solid #d1d5db', borderRadius: '4px' }}
                           />
                         </td>
-                        {locations.map(location => {
+                        {visibleLocations.map(location => {
                           const inventory = editForm.inventories.find(inv => inv.locationId === location._id)
                           return (
                             <td key={location._id}>
@@ -1002,13 +1030,17 @@ function toggleGroup(groupKey: string) {
                             </td>
                           )
                         })}
-                        <td>{(editForm.inventories || []).reduce((sum, inv) => sum + inv.quantity, 0)}</td>
-                        <td>
-                          <div className="actions">
-                            <button className="btn" onClick={() => handleSaveEdit(product._id)}>保存</button>
-                            <button className="btn secondary" onClick={handleCancelEdit}>取消</button>
-                          </div>
-                        </td>
+                        {user?.type === 'manager' && (
+                          <td>{(editForm.inventories || []).reduce((sum, inv) => sum + inv.quantity, 0)}</td>
+                        )}
+                        {user?.type === 'manager' && (
+                          <td>
+                            <div className="actions">
+                              <button className="btn" onClick={() => handleSaveEdit(product._id)}>保存</button>
+                              <button className="btn secondary" onClick={handleCancelEdit}>取消</button>
+                            </div>
+                          </td>
+                        )}
                       </>
                     ) : (
                       // 顯示模式
@@ -1016,7 +1048,7 @@ function toggleGroup(groupKey: string) {
                         <td>{product.name}</td>
                         <td>{product.productCode}</td>
                         <td>{getProductSize(product)}</td>
-                      {locations.map(location => {
+                      {visibleLocations.map(location => {
                         const quantity = getQuantity(product, location._id)
                         return (
                           <td key={location._id} className={quantity === 0 ? 'highlight-cell' : ''}>
@@ -1024,13 +1056,15 @@ function toggleGroup(groupKey: string) {
                           </td>
                         )
                       })}
-                        <td>{getTotalQuantity(product)}</td>
-                        <td>
-                          <div className="actions">
-                            <button className="btn ghost" onClick={() => handleEdit(product)}>編輯</button>
-                            <button className="btn ghost" onClick={() => handleDelete(product)}>刪除</button>
-                          </div>
-                        </td>
+                        {user?.type === 'manager' && <td>{getTotalQuantity(product)}</td>}
+                        {user?.type === 'manager' && (
+                          <td>
+                            <div className="actions">
+                              <button className="btn ghost" onClick={() => handleEdit(product)}>編輯</button>
+                              <button className="btn ghost" onClick={() => handleDelete(product)}>刪除</button>
+                            </div>
+                          </td>
+                        )}
                       </>
                     )}
                   </tr>
@@ -1051,7 +1085,7 @@ function toggleGroup(groupKey: string) {
                 <p>選擇門市：</p>
                 <select value={importState.locationId} onChange={e => setImportState(s => ({ ...s, locationId: e.target.value }))}>
                   <option value="">請選擇門市</option>
-                  {locations.map(location => (
+                  {visibleLocations.map(location => (
                     <option key={location._id} value={location._id}>{location.name}</option>
                   ))}
                 </select>
@@ -1080,7 +1114,7 @@ function toggleGroup(groupKey: string) {
                 <p>來源門市：</p>
                 <select value={transferState.fromLocationId} onChange={e => setTransferState(s => ({ ...s, fromLocationId: e.target.value }))}>
                   <option value="">請選擇來源門市</option>
-                  {locations.map(location => (
+                  {visibleLocations.map(location => (
                     <option key={location._id} value={location._id}>{location.name}</option>
                   ))}
                 </select>
@@ -1089,7 +1123,7 @@ function toggleGroup(groupKey: string) {
                 <p>目標門市：</p>
                 <select value={transferState.toLocationId} onChange={e => setTransferState(s => ({ ...s, toLocationId: e.target.value }))}>
                   <option value="">請選擇目標門市</option>
-                  {locations.map(location => (
+                  {visibleLocations.map(location => (
                     <option key={location._id} value={location._id}>{location.name}</option>
                   ))}
                 </select>

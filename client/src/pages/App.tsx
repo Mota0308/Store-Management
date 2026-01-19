@@ -7,22 +7,29 @@ type Location = { _id: string; name: string }
 
 export default function App() {
   const [locations, setLocations] = useState<Location[]>([])
+  const [restockCount, setRestockCount] = useState(0)
   const location = useLocation()
   const [menuOpen, setMenuOpen] = useState(false)
   const { user, logout, isAuthenticated } = useAuth()
   const navigate = useNavigate()
 
   useEffect(() => {
-    // 只在用戶已認證時加載 locations
+    // 只在用戶已認證時加載 locations 和補貨提醒
     if (isAuthenticated) {
       api.get('/locations')
         .then(r => setLocations(r.data))
         .catch(err => {
           console.error('Failed to load locations:', err)
-          // 如果獲取 locations 失敗，不阻止頁面顯示
+        })
+      
+      // 獲取需要補貨的數量
+      api.get('/restock/needed')
+        .then(r => setRestockCount(r.data.length))
+        .catch(err => {
+          console.error('Failed to load restock count:', err)
         })
     }
-  }, [isAuthenticated])
+  }, [isAuthenticated, location.pathname])
 
   // Close mobile menu on route change
   useEffect(() => {
@@ -61,7 +68,7 @@ export default function App() {
             fontSize: '14px'
           }}>
             <div style={{ color: '#e5e7eb', marginBottom: '4px' }}>用戶: {user.username}</div>
-            <div style={{ color: '#9ca3af', fontSize: '12px' }}>{user.email}</div>
+            <div style={{ color: '#9ca3af', fontSize: '12px' }}>類型: {user.type}</div>
           </div>
         )}
 
@@ -99,6 +106,42 @@ export default function App() {
           }}
         >
           添加產品
+        </Link>
+
+        <Link 
+          to="/restock" 
+          className="nav-link"
+          style={{
+            padding: '12px 16px',
+            backgroundColor: location.pathname === '/restock' ? 'white' : 'transparent',
+            color: location.pathname === '/restock' ? '#3b82f6' : 'white',
+            textDecoration: 'none',
+            borderRadius: '8px',
+            fontWeight: 500,
+            transition: 'all 0.2s',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            marginBottom: '8px'
+          }}
+        >
+          <span>補貨</span>
+          {restockCount > 0 && (
+            <span style={{
+              background: '#ef4444',
+              color: 'white',
+              borderRadius: '50%',
+              width: '20px',
+              height: '20px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '12px',
+              fontWeight: 'bold'
+            }}>
+              !
+            </span>
+          )}
         </Link>
 
         <button

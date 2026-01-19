@@ -4,14 +4,13 @@ import api, { setToken, removeToken } from '../api';
 interface User {
   id: string;
   username: string;
-  email: string;
+  type: string;  // manager, store1, store2, store3, store4, store5
 }
 
 interface AuthContextType {
   user: User | null;
   loading: boolean;
   login: (username: string, password: string) => Promise<void>;
-  register: (username: string, email: string, password: string) => Promise<void>;
   logout: () => void;
   isAuthenticated: boolean;
 }
@@ -60,13 +59,6 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     setUser(user);
   };
 
-  const register = async (username: string, email: string, password: string) => {
-    const response = await api.post('/auth/register', { username, email, password });
-    const { token, user } = response.data;
-    setToken(token);
-    setUser(user);
-  };
-
   const logout = () => {
     removeToken();
     setUser(null);
@@ -78,7 +70,6 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         user,
         loading,
         login,
-        register,
         logout,
         isAuthenticated: !!user,
       }}

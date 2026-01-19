@@ -4,13 +4,11 @@ import { useAuth } from '../contexts/AuthContext';
 import '../styles.css';
 
 export default function Login() {
-  const [isLogin, setIsLogin] = useState(true);
   const [username, setUsername] = useState('');
-  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const { login, register } = useAuth();
+  const { login } = useAuth();
   const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -19,16 +17,7 @@ export default function Login() {
     setLoading(true);
 
     try {
-      if (isLogin) {
-        await login(username, password);
-      } else {
-        if (!email) {
-          setError('請輸入電子郵件');
-          setLoading(false);
-          return;
-        }
-        await register(username, email, password);
-      }
+      await login(username, password);
       navigate('/');
     } catch (err: any) {
       setError(err.response?.data?.error || '操作失敗，請重試');
@@ -55,7 +44,7 @@ export default function Login() {
         maxWidth: '400px'
       }}>
         <h2 style={{ margin: '0 0 24px 0', textAlign: 'center', color: '#111827' }}>
-          {isLogin ? '登入' : '註冊'}
+          登入
         </h2>
 
         {error && (
@@ -83,20 +72,6 @@ export default function Login() {
               placeholder="請輸入用戶名"
             />
           </div>
-
-          {!isLogin && (
-            <div className="label" style={{ marginBottom: '16px' }}>
-              <label style={{ marginBottom: '6px', color: '#374151' }}>電子郵件</label>
-              <input
-                type="email"
-                className="input"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                placeholder="請輸入電子郵件"
-              />
-            </div>
-          )}
 
           <div className="label" style={{ marginBottom: '20px' }}>
             <label style={{ marginBottom: '6px', color: '#374151' }}>密碼</label>
@@ -127,32 +102,10 @@ export default function Login() {
               transition: 'background 0.2s'
             }}
           >
-            {loading ? '處理中...' : (isLogin ? '登入' : '註冊')}
+            {loading ? '處理中...' : '登入'}
           </button>
         </form>
 
-        <div style={{ marginTop: '20px', textAlign: 'center' }}>
-          <button
-            type="button"
-            onClick={() => {
-              setIsLogin(!isLogin);
-              setError('');
-              setUsername('');
-              setEmail('');
-              setPassword('');
-            }}
-            style={{
-              background: 'none',
-              border: 'none',
-              color: '#2563eb',
-              cursor: 'pointer',
-              fontSize: '14px',
-              textDecoration: 'underline'
-            }}
-          >
-            {isLogin ? '還沒有帳號？點擊註冊' : '已有帳號？點擊登入'}
-          </button>
-        </div>
       </div>
     </div>
   );

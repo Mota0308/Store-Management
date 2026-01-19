@@ -6,6 +6,7 @@ import App from './pages/App'
 import AddProduct from './pages/AddProduct'
 import Inventory from './pages/Inventory'
 import Login from './pages/Login'
+import Restock from './pages/Restock'
 import ProtectedRoute from './components/ProtectedRoute'
 import './styles.css'
 
@@ -35,6 +36,14 @@ const router = createBrowserRouter([
         element: (
           <ProtectedRoute>
             <AddProduct />
+          </ProtectedRoute>
+        ) 
+      },
+      { 
+        path: 'restock', 
+        element: (
+          <ProtectedRoute>
+            <Restock />
           </ProtectedRoute>
         ) 
       }

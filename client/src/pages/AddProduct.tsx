@@ -7,6 +7,7 @@ type DraftProduct = {
   productCode: string
   productType: string
   size: string  // 改為單個尺寸
+  points?: number
   imageUrl?: string
 }
 
@@ -19,7 +20,8 @@ export default function AddProduct() {
     name: '',
     productCode: '',
     productType: '',
-    sizes: ''  // 改為字符串輸入
+    sizes: '',  // 改為字符串輸入
+    points: ''  // 積分
   })
   const [queue, setQueue] = useState<DraftProduct[]>([])
 
@@ -84,13 +86,14 @@ export default function AddProduct() {
       productCode: form.productCode,
       productType: form.productType,
       size: size,
+      points: form.points ? parseInt(form.points) || 0 : 0,
       imageUrl: imageUrl
     }))
 
     setQueue(prev => [...prev, ...newProducts])
     
     // 重置表單
-    setForm({ name: '', productCode: '', productType: '', sizes: '' })
+    setForm({ name: '', productCode: '', productType: '', sizes: '', points: '' })
     setImageUrl(undefined)
   }
 
@@ -106,6 +109,7 @@ export default function AddProduct() {
       await api.post('/products', { 
         ...p, 
         sizes: [p.size],  // 轉換為數組格式
+        points: p.points || 0,  // 積分
         locationIds: []   // 不指定門市地點
       })
     }
@@ -191,58 +195,72 @@ export default function AddProduct() {
               產品編號
               <input className="input" name="productCode" value={form.productCode} onChange={onChange} required />
             </label>
-            <label className="label">
-              產品類型
-              <div style={{ position: 'relative' }}>
-                <select className="select" name="productType" value={form.productType} onChange={onChange} required>
-                  <option value="">選擇產品類型</option>
-                  {productTypes.map(type => (
-                    <option key={type._id} value={type.name}>{type.name}</option>
-                  ))}
-                </select>
-                {/* 刪除按鈕 - 只在有選中產品類型時顯示 */}
-                {form.productType && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const selectedType = productTypes.find(t => t.name === form.productType)
-                      if (selectedType) {
-                        handleDeleteType(selectedType._id, selectedType.name)
-                      }
-                    }}
-                    disabled={deletingType === productTypes.find(t => t.name === form.productType)?._id}
-                    style={{
-                      position: 'absolute',
-                      right: '8px',
-                      top: '50%',
-                      transform: 'translateY(-50%)',
-                      background: 'none',
-                      border: 'none',
-                      color: '#ef4444',
-                      cursor: 'pointer',
-                      fontSize: '16px',
-                      fontWeight: 'bold',
-                      padding: '4px',
-                      borderRadius: '4px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      width: '24px',
-                      height: '24px'
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.backgroundColor = '#fef2f2'
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.backgroundColor = 'transparent'
-                    }}
-                    title={`刪除產品類型 "${form.productType}"`}
-                  >
-                    {deletingType === productTypes.find(t => t.name === form.productType)?._id ? '...' : ''}
-                  </button>
-                )}
-              </div>
-            </label>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+              <label className="label">
+                產品類型
+                <div style={{ position: 'relative' }}>
+                  <select className="select" name="productType" value={form.productType} onChange={onChange} required>
+                    <option value="">選擇產品類型</option>
+                    {productTypes.map(type => (
+                      <option key={type._id} value={type.name}>{type.name}</option>
+                    ))}
+                  </select>
+                  {/* 刪除按鈕 - 只在有選中產品類型時顯示 */}
+                  {form.productType && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const selectedType = productTypes.find(t => t.name === form.productType)
+                        if (selectedType) {
+                          handleDeleteType(selectedType._id, selectedType.name)
+                        }
+                      }}
+                      disabled={deletingType === productTypes.find(t => t.name === form.productType)?._id}
+                      style={{
+                        position: 'absolute',
+                        right: '8px',
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        background: 'none',
+                        border: 'none',
+                        color: '#ef4444',
+                        cursor: 'pointer',
+                        fontSize: '16px',
+                        fontWeight: 'bold',
+                        padding: '4px',
+                        borderRadius: '4px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        width: '24px',
+                        height: '24px'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.backgroundColor = '#fef2f2'
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.backgroundColor = 'transparent'
+                      }}
+                      title={`刪除產品類型 "${form.productType}"`}
+                    >
+                      {deletingType === productTypes.find(t => t.name === form.productType)?._id ? '...' : ''}
+                    </button>
+                  )}
+                </div>
+              </label>
+              <label className="label">
+                積分
+                <input 
+                  className="input" 
+                  type="number" 
+                  name="points" 
+                  value={form.points} 
+                  onChange={onChange} 
+                  placeholder="0"
+                  min="0"
+                />
+              </label>
+            </div>
             <label className="label">
               圖片
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
