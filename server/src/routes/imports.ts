@@ -2110,7 +2110,7 @@ router.post('/invoice', authenticate, upload.array('files'), async (req: AuthReq
     if (!location) {
       return res.status(404).json({ error: `找不到門市：${locationName}` });
     }
-    const locationId = location._id.toString();
+    const locationId = String(location._id);
     
     const summary = { 
       files: files.length, 
@@ -2182,7 +2182,7 @@ router.post('/invoice', authenticate, upload.array('files'), async (req: AuthReq
           invoiceItems.push({
             productCode: item.productCode,
             quantity: item.quantity,
-            productId: product._id
+            productId: product._id as mongoose.Types.ObjectId
           });
         }
         
