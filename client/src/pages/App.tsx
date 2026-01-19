@@ -144,6 +144,42 @@ export default function App() {
           )}
         </Link>
 
+        <Link 
+          to="/points-combo" 
+          className="nav-link"
+          style={{
+            padding: '12px 16px',
+            backgroundColor: location.pathname === '/points-combo' ? 'white' : 'transparent',
+            color: location.pathname === '/points-combo' ? '#3b82f6' : 'white',
+            textDecoration: 'none',
+            borderRadius: '8px',
+            fontWeight: 500,
+            transition: 'all 0.2s',
+            display: 'block',
+            marginBottom: '8px'
+          }}
+        >
+          積分組合
+        </Link>
+
+        <Link 
+          to="/points-calculation" 
+          className="nav-link"
+          style={{
+            padding: '12px 16px',
+            backgroundColor: location.pathname === '/points-calculation' ? 'white' : 'transparent',
+            color: location.pathname === '/points-calculation' ? '#3b82f6' : 'white',
+            textDecoration: 'none',
+            borderRadius: '8px',
+            fontWeight: 500,
+            transition: 'all 0.2s',
+            display: 'block',
+            marginBottom: '8px'
+          }}
+        >
+          積分計算
+        </Link>
+
         <button
           onClick={handleLogout}
           style={{

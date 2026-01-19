@@ -7,6 +7,8 @@ import AddProduct from './pages/AddProduct'
 import Inventory from './pages/Inventory'
 import Login from './pages/Login'
 import Restock from './pages/Restock'
+import PointsCombo from './pages/PointsCombo'
+import PointsCalculation from './pages/PointsCalculation'
 import ProtectedRoute from './components/ProtectedRoute'
 import './styles.css'
 
@@ -44,6 +46,22 @@ const router = createBrowserRouter([
         element: (
           <ProtectedRoute>
             <Restock />
+          </ProtectedRoute>
+        ) 
+      },
+      { 
+        path: 'points-combo', 
+        element: (
+          <ProtectedRoute>
+            <PointsCombo />
+          </ProtectedRoute>
+        ) 
+      },
+      { 
+        path: 'points-calculation', 
+        element: (
+          <ProtectedRoute>
+            <PointsCalculation />
           </ProtectedRoute>
         ) 
       }

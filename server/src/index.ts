@@ -13,6 +13,8 @@ import uploadRouter from './routes/upload';
 import productTypesRouter from './routes/productTypes';
 import authRouter from './routes/auth';
 import restockRouter from './routes/restock';
+import pointsComboRouter from './routes/pointsCombo';
+import pointsCalculationRouter from './routes/pointsCalculation';
 import Location from './models/Location';
 
 // 加載環境變量（優先使用系統環境變量，開發環境使用 local.env）
@@ -134,6 +136,8 @@ async function start() {
     app.use('/api/upload', uploadRouter);
     app.use('/api/product-types', productTypesRouter);
     app.use('/api/restock', restockRouter);
+    app.use('/api/points-combo', pointsComboRouter);
+    app.use('/api/points-calculation', pointsCalculationRouter);
 
     // 在生產環境中，所有非API路由都返回index.html（SPA路由）
     if (process.env.NODE_ENV === 'production') {
