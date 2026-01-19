@@ -1,37 +1,36 @@
 import mongoose, { Schema, Document } from 'mongoose';
 
+export type UserType = 'manager' | 'store1' | 'store2' | 'store3' | 'store4' | 'store5';
+
 export interface UserDocument extends Document {
   username: string;
-  email: string;
   password: string;
+  type: UserType;
   createdAt: Date;
   updatedAt: Date;
   comparePassword(candidatePassword: string): boolean;
 }
 
 const UserSchema = new Schema<UserDocument>({
-  username: { 
-    type: String, 
-    required: true, 
-    unique: true, 
+  username: {
+    type: String,
+    required: true,
+    unique: true,
     trim: true,
     minlength: 3,
     maxlength: 30,
-    index: true 
+    index: true
   },
-  email: { 
-    type: String, 
-    required: true, 
-    unique: true, 
-    trim: true,
-    lowercase: true,
-    index: true,
-    match: [/^\S+@\S+\.\S+$/, '請輸入有效的電子郵件地址']
-  },
-  password: { 
-    type: String, 
+  password: {
+    type: String,
     required: true,
-    minlength: 6
+    minlength: 1
+  },
+  type: {
+    type: String,
+    required: true,
+    enum: ['manager', 'store1', 'store2', 'store3', 'store4', 'store5'],
+    index: true
   }
 }, { timestamps: true });
 

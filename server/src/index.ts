@@ -12,6 +12,7 @@ import importRouter from './routes/imports';
 import uploadRouter from './routes/upload';
 import productTypesRouter from './routes/productTypes';
 import authRouter from './routes/auth';
+import restockRouter from './routes/restock';
 import Location from './models/Location';
 
 // 加載環境變量（優先使用系統環境變量，開發環境使用 local.env）
@@ -56,7 +57,7 @@ const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/Storag
 
 async function seedLocations() {
   // 確保所有門市都存在（按照正確順序）
-  const names = ['觀塘', '灣仔', '荔枝角', '元朗', '元朗觀塘倉', '元朗灣仔倉', '元朗荔枝角倉', '屯門', '國内倉'];
+  const names = ['觀塘', '灣仔', '荔枝角', '屯門', '國内倉'];
   for (const name of names) {
     const existing = await Location.findOne({ name });
     if (!existing) {
@@ -132,6 +133,7 @@ async function start() {
     app.use('/api/import', importRouter);
     app.use('/api/upload', uploadRouter);
     app.use('/api/product-types', productTypesRouter);
+    app.use('/api/restock', restockRouter);
 
     // 在生產環境中，所有非API路由都返回index.html（SPA路由）
     if (process.env.NODE_ENV === 'production') {

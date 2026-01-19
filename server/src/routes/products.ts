@@ -7,19 +7,20 @@ const router = Router();
 // Create product
 router.post("/", async (req, res) => {
   try {
-    const { name, productCode, productType, sizes, price, locationIds, imageUrl } = req.body;
+    const { name, productCode, productType, sizes, price, points, locationIds, imageUrl } = req.body;
     if (!name || !productCode || !productType || !sizes) {
       return res.status(400).json({ message: "Missing fields" });
     }
     const inventories = (locationIds || []).map((id: string) => ({ locationId: new mongoose.Types.ObjectId(id), quantity: 0 }));
     // 設置默認價格為0，如果沒有提供價格
     const productPrice = typeof price === "number" ? price : 0;
+    const productPoints = typeof points === "number" ? points : 0;
     
-    console.log("創建商品 - 數據:", { name, productCode, productType, sizes, price: productPrice, inventories });
+    console.log("創建商品 - 數據:", { name, productCode, productType, sizes, price: productPrice, points: productPoints, inventories });
     console.log("MongoDB 連接狀態:", mongoose.connection.readyState);
     console.log("數據庫名稱:", mongoose.connection.db?.databaseName);
     
-    const product = await Product.create({ name, productCode, productType, sizes: Array.isArray(sizes) ? sizes : (sizes ? [sizes] : []), price: productPrice, imageUrl, inventories });
+    const product = await Product.create({ name, productCode, productType, sizes: Array.isArray(sizes) ? sizes : (sizes ? [sizes] : []), price: productPrice, points: productPoints, imageUrl, inventories });
     console.log("商品創建成功:", product._id, product.name);
     
     // 強制刷新連接
@@ -94,10 +95,10 @@ router.get("/:id", async (req, res) => {
 // Update product
 router.put("/:id", async (req, res) => {
   try {
-    const { name, productCode, productType, sizes, price, inventories, imageUrl } = req.body;
+    const { name, productCode, productType, sizes, price, points, inventories, imageUrl } = req.body;
     
     console.log(`更新產品請求 - ID: ${req.params.id}`);
-    console.log(`更新數據:`, { name, productCode, productType, sizes, price, inventories: inventories?.length, imageUrl });
+    console.log(`更新數據:`, { name, productCode, productType, sizes, price, points, inventories: inventories?.length, imageUrl });
     
     // 驗證必要字段
     if (!name || !productCode || !productType) {
@@ -150,7 +151,8 @@ router.put("/:id", async (req, res) => {
         productCode, 
         productType, 
         sizes: Array.isArray(sizes) ? sizes : (sizes ? [sizes] : []), 
-        price: price || 0, 
+        price: price || 0,
+        points: points !== undefined ? points : 0,
         inventories: processedInventories,
         imageUrl: imageUrl || ""
       },

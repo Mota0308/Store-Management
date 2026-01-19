@@ -11,6 +11,7 @@ export interface ProductDocument extends Document {
   productType: string;
   sizes: string[];  // 修复：改回字符串数组
   price: number;
+  points?: number;  // 積分
   imageUrl?: string;
   inventories: LocationInventory[];
   createdAt: Date;
@@ -28,6 +29,7 @@ const ProductSchema = new Schema<ProductDocument>({
   productType: { type: String, required: true, index: true },
   sizes: { type: [String], required: true, default: [], index: true },
   price: { type: Number, required: true },
+  points: { type: Number, default: 0 },
   imageUrl: { type: String },
   inventories: { type: [LocationInventorySchema], default: [] }
 }, { timestamps: true });

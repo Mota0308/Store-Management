@@ -6,7 +6,7 @@ export interface AuthRequest extends Request {
   user?: {
     id: string;
     username: string;
-    email: string;
+    type: string;
   };
 }
 
@@ -37,7 +37,7 @@ export const authenticate = async (
     req.user = {
       id: String(user._id),
       username: user.username,
-      email: user.email
+      type: user.type
     };
 
     next();
