@@ -1,5 +1,4 @@
 const mongoose = require('mongoose');
-const bcrypt = require('bcrypt');
 require('dotenv').config({ path: './local.env' });
 
 // 連接到數據庫
@@ -42,24 +41,9 @@ const UserSchema = new mongoose.Schema({
   }
 }, { timestamps: true });
 
-// 在保存前加密密碼（與 User.ts 模型保持一致）
-UserSchema.pre('save', async function(next) {
-  if (!this.isModified('password')) {
-    return next();
-  }
-  
-  try {
-    const salt = await bcrypt.genSalt(10);
-    this.password = await bcrypt.hash(this.password, salt);
-    next();
-  } catch (error) {
-    next(error);
-  }
-});
-
-// 比較密碼的方法
-UserSchema.methods.comparePassword = async function(candidatePassword) {
-  return bcrypt.compare(candidatePassword, this.password);
+// 比較密碼的方法（直接比較明文）
+UserSchema.methods.comparePassword = function(candidatePassword) {
+  return this.password === candidatePassword;
 };
 
 const User = mongoose.model('User', UserSchema, 'users');
@@ -124,11 +108,11 @@ async function createTestUsers() {
           console.log(`🗑️  刪除舊用戶: ${userData.username}`);
         }
 
-        // 創建用戶（使用 User 模型，會自動通過 pre('save') hook 加密密碼）
+        // 創建用戶（直接使用明文密碼）
         const user = new User({
           username: userData.username,
           email: userData.email,
-          password: userData.password  // 直接使用明文，讓 pre('save') hook 處理加密
+          password: userData.password  // 直接使用明文密碼
         });
 
         await user.save();

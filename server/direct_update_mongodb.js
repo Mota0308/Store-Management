@@ -1,5 +1,4 @@
 const mongoose = require('mongoose');
-const bcrypt = require('bcrypt');
 require('dotenv').config({ path: './local.env' });
 
 const MONGODB_URI = process.env.RAILWAY_MONGODB_URI || 
@@ -102,7 +101,7 @@ async function updateUserDirectly() {
       updatedAt: new Date()
     };
 
-    // 更新密碼
+    // 更新密碼（直接使用明文）
     if (newPassword) {
       if (newPassword.length < 6) {
         console.error('❌ 錯誤: 密碼長度至少需要6個字符');
@@ -110,10 +109,8 @@ async function updateUserDirectly() {
         process.exit(1);
       }
 
-      const salt = await bcrypt.genSalt(10);
-      const hashedPassword = await bcrypt.hash(newPassword, salt);
-      updateData.password = hashedPassword;
-      console.log('✅ 密碼已加密準備更新');
+      updateData.password = newPassword;  // 直接使用明文
+      console.log('✅ 密碼已準備更新（明文）');
     }
 
     // 更新郵箱
@@ -164,8 +161,7 @@ async function updateUserDirectly() {
       console.log(`  用戶名: ${updatedUser.username}`);
       console.log(`  郵箱: ${updatedUser.email}`);
       if (newPassword) {
-        console.log(`  新密碼: ${newPassword}`);
-        console.log(`  密碼哈希: ${updatedUser.password.substring(0, 20)}...`);
+        console.log(`  新密碼: ${newPassword} (明文)`);
       }
       console.log(`  更新時間: ${updatedUser.updatedAt}`);
     } else {

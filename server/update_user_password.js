@@ -1,5 +1,4 @@
 const mongoose = require('mongoose');
-const bcrypt = require('bcrypt');
 require('dotenv').config({ path: './local.env' });
 
 // 連接到數據庫
@@ -41,21 +40,6 @@ const UserSchema = new mongoose.Schema({
     minlength: 6
   }
 }, { timestamps: true });
-
-// 在保存前加密密碼
-UserSchema.pre('save', async function(next) {
-  if (!this.isModified('password')) {
-    return next();
-  }
-  
-  try {
-    const salt = await bcrypt.genSalt(10);
-    this.password = await bcrypt.hash(this.password, salt);
-    next();
-  } catch (error) {
-    next(error);
-  }
-});
 
 const User = mongoose.model('User', UserSchema, 'users');
 
@@ -131,7 +115,7 @@ async function updatePassword() {
 
     console.log(`找到用戶: ${user.username} (${user.email})`);
 
-    // 更新密碼（直接設置明文，pre('save') hook 會自動加密）
+    // 更新密碼（直接設置明文）
     user.password = newPassword;
     await user.save();
 

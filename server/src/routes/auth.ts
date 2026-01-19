@@ -88,8 +88,8 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    // 驗證密碼
-    const isPasswordValid = await user.comparePassword(password);
+    // 驗證密碼（直接比較明文）
+    const isPasswordValid = user.comparePassword(password);
 
     if (!isPasswordValid) {
       console.log(`登入失敗: 密碼錯誤 - ${username}`);
