@@ -13,7 +13,9 @@
     "update-password": "node update_user_password.js",
     "update-password:prod": "node update_user_password.js --production",
     "mongodb:update": "node direct_update_mongodb.js",
-    "mongodb:list": "node direct_update_mongodb.js --list"
+    "mongodb:list": "node direct_update_mongodb.js --list",
+    "diagnose-passwords": "node diagnose_and_fix_passwords.js",
+    "reset-passwords": "node reset_all_test_passwords.js"
   },
   "dependencies": {
     "axios": "^1.12.2",
